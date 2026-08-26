@@ -1,0 +1,133 @@
+"use client";
+
+import { useState } from "react";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "@/lib/firebase";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import Image from "next/image";
+import { Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
+
+export default function LoginPage() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setLoading(true);
+
+    try {
+      const res = await signInWithEmailAndPassword(auth, email, password);
+      const userDoc = await getDoc(doc(db, "users", res.user.uid));
+
+      if (userDoc.exists()) {
+        const role = userDoc.data().role;
+        if (role === "teacher") {
+          router.push("/dashboard/teacher");
+        } else {
+          router.push("/dashboard/student");
+        }
+      }
+    } catch (err) {
+      setError("Email atau password salah.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-emerald-50 via-green-50 to-teal-100">
+      {/* Soft decorative blobs — pure CSS, no images, ringan di mobile */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute -top-24 -left-24 w-72 h-72 bg-emerald-200/40 rounded-full blur-3xl" />
+        <div className="absolute -bottom-24 -right-24 w-72 h-72 bg-teal-200/40 rounded-full blur-3xl" />
+      </div>
+
+      <div className="relative w-full max-w-md bg-white/80 backdrop-blur-sm p-8 rounded-3xl shadow-xl shadow-emerald-900/10 border border-white">
+        <div className="relative w-full aspect-video mb-4">
+          <Image
+            src="/asset/logo.png"
+            alt="Logo"
+            fill
+            className="object-contain"
+            priority
+            sizes="(max-width: 448px) 100vw, 448px"
+          />
+        </div>
+
+        <div className="text-center mb-6">
+          <h2 className="text-2xl font-bold text-emerald-900">Yuk Membaca</h2>
+          <p className="text-sm text-emerald-700/70 mt-1">Masuk untuk melanjutkan perjalanan membacamu</p>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-xl text-sm mb-4">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleLogin} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-emerald-900 mb-1">Email</label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
+              <input
+                type="email"
+                required
+                placeholder="nama@email.com"
+                className="w-full pl-10 pr-3 py-2.5 bg-emerald-50/50 border border-emerald-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-emerald-900 mb-1">Password</label>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
+              <input
+                type={showPassword ? "text" : "password"}
+                required
+                placeholder="••••••••"
+                className="w-full pl-10 pr-10 py-2.5 bg-emerald-50/50 border border-emerald-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-500 hover:text-emerald-700"
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-2.5 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 active:scale-[0.98] transition disabled:opacity-60 disabled:active:scale-100 flex items-center justify-center gap-2"
+          >
+            {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+            {loading ? "Memproses..." : "Masuk"}
+          </button>
+        </form>
+
+        <p className="text-center text-sm text-slate-600 mt-6">
+          Belum punya akun?{" "}
+          <Link href="/register" className="text-emerald-700 font-semibold hover:underline">
+            Daftar
+          </Link>
+        </p>
+      </div>
+    </div>
+  );
+}

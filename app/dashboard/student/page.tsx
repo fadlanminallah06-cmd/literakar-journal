@@ -186,7 +186,7 @@ export default function StudentDashboard() {
     }).length;
   }, [journals]);
 
-  const displayName = userProfile?.name || userProfile?.displayName || "Siswa";
+  const displayName = userProfile?.name || "Siswa";
 
   const handleSaveJournal = async () => {
     setFormError("");

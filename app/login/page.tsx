@@ -52,7 +52,7 @@ export default function LoginPage() {
       <div className="relative w-full max-w-md bg-white/80 backdrop-blur-sm p-8 rounded-3xl shadow-xl shadow-emerald-900/10 border border-white">
         <div className="relative w-full aspect-video mb-4">
           <Image
-            src="/asset/logo.png"
+            src="/asset/logo1.png"
             alt="Logo"
             fill
             className="object-contain"

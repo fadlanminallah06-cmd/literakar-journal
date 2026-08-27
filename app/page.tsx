@@ -26,7 +26,7 @@ export default function HomePage() {
         {/* Logo */}
         <div className="relative w-64 md:w-80 aspect-video mb-6 drop-shadow-lg">
           <Image
-            src="/asset/logo1.png"
+            src="/asset/logo3.png"
             alt="Logo Jurnal Literasi & Karakter Siswa"
             fill
             className="object-contain"

@@ -765,20 +765,22 @@ export default function StudentDashboard() {
           </button>
         </header>
 
-        <nav className="flex flex-wrap gap-2 mb-6 bg-white/80 backdrop-blur-sm p-2 rounded-2xl shadow-sm shadow-emerald-900/5 border border-white w-fit">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setActiveTab(t.key)}
-              className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
+        <nav className="mb-6 w-full overflow-x-auto rounded-2xl bg-white/80 p-2 shadow-sm shadow-emerald-900/5 border border-white">
+          <div className="flex min-w-max gap-2">
+            {tabs.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setActiveTab(t.key)}
+                className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-sm font-semibold transition sm:px-4 ${
                 activeTab === t.key
                   ? "bg-emerald-600 text-white shadow-sm"
                   : "text-emerald-800/70 hover:bg-emerald-50"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </nav>
 
         {/* ---- Tab: Beranda ---- */}
@@ -987,7 +989,7 @@ export default function StudentDashboard() {
             <div>
               <label className="text-sm font-semibold text-emerald-800 mb-2 block">Nilai Karakter yang Ditemukan</label>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                {CHARACTER_OPTIONS.map((c, index) => (
+                {CHARACTER_OPTIONS.map((c) => (
                   <label
                     key={c}
                     className={`flex items-center gap-2 p-2 rounded-xl border text-sm cursor-pointer transition ${
@@ -1002,11 +1004,11 @@ export default function StudentDashboard() {
                       onChange={() => toggleCharacter(c)}
                       className="w-4 h-4 accent-emerald-600"
                     />
-                    {index + 1}. {c}
+                    {c}
                   </label>
                 ))}
                 <label className="flex flex-col gap-2 p-2 rounded-xl border border-emerald-200 text-sm text-emerald-700/70 sm:col-span-2 lg:col-span-3">
-                  <span className="font-medium text-emerald-800">9. Nilai karakter lainnya</span>
+                  <span className="font-medium text-emerald-800">Nilai karakter lainnya</span>
                   <textarea
                     value={customCharacter}
                     onChange={(e) => setCustomCharacter(e.target.value)}

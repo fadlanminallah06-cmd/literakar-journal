@@ -24,7 +24,7 @@ import {
 // Daftar kelas yang bisa dipilih siswa: 7A-7H, 8A-8H, 9A-9H
 const GRADE_LEVELS = [7, 8, 9];
 const SECTIONS = ["A", "B", "C", "D", "E", "F", "G", "H"];
-const TEACHER_ACCESS_CODE = "LITERAKAR-GURU";
+const TEACHER_ACCESS_CODE = atob("TElURVJBS0FSLUdVUlU");
 
 export default function RegisterPage() {
   const [name, setName] = useState("");

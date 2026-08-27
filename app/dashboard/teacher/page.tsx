@@ -884,20 +884,22 @@ export default function TeacherDashboard() {
           </button>
         </header>
 
-        <nav className="flex flex-wrap gap-2 mb-6 bg-white/80 backdrop-blur-sm p-2 rounded-2xl shadow-sm shadow-emerald-900/5 border border-white w-fit">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setActiveTab(t.key)}
-              className={`px-4 py-2 rounded-xl text-sm font-semibold transition ${
+        <nav className="mb-6 w-full overflow-x-auto rounded-2xl bg-white/80 p-2 shadow-sm shadow-emerald-900/5 border border-white">
+          <div className="flex min-w-max gap-2">
+            {tabs.map((t) => (
+              <button
+                key={t.key}
+                onClick={() => setActiveTab(t.key)}
+                className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-sm font-semibold transition sm:px-4 ${
                 activeTab === t.key
                   ? "bg-emerald-600 text-white shadow-sm"
                   : "text-emerald-800/70 hover:bg-emerald-50"
-              }`}
-            >
-              {t.label}
-            </button>
-          ))}
+                }`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
         </nav>
 
         {/* ---- Tab: Rekap Kelas ---- */}

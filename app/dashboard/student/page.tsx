@@ -1,11 +1,21 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useId } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import { collection, query, where, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
 import { useRouter } from "next/navigation";
-import { LogOut, BookOpen, Flame, CalendarCheck, Library } from "lucide-react";
+import {
+  LogOut,
+  BookOpen,
+  Flame,
+  CalendarCheck,
+  Library,
+  Award,
+  LockKeyhole,
+  Medal,
+  Trophy,
+} from "lucide-react";
 
 interface Journal {
   id: string;
@@ -25,9 +35,23 @@ interface Journal {
   createdAt?: any; // Firestore Timestamp
 }
 
-type TabKey = "beranda" | "jurnal" | "riwayat";
+type TabKey = "beranda" | "jurnal" | "riwayat" | "badge" | "pohon";
+type BadgeFilter = "semua" | "terkunci" | "didapat";
 
-const CHARACTER_OPTIONS = ["Kerja Keras", "Pantang Menyerah", "Persahabatan", "Jujur", "Tanggung Jawab"];
+type UserRole = "student" | "teacher" | "admin";
+
+type TreeStage = "small" | "young" | "big";
+
+const CHARACTER_OPTIONS = [
+  "Religius",
+  "Nasionalisme",
+  "Bijaksana",
+  "Kreatif",
+  "Kerja Sama",
+  "Tanggung Jawab",
+  "Pola Hidup Sehat",
+  "Pandai Berkomunikasi",
+];
 
 const GENRE_SUGGESTIONS = ["Fiksi", "Non-Fiksi", "Petualangan", "Fantasi", "Biografi", "Sains", "Sejarah"];
 
@@ -52,6 +76,405 @@ function getStartOfWeek(date: Date): Date {
   d.setHours(0, 0, 0, 0);
   return d;
 }
+
+function getStartOfMonth(date: Date): Date {
+  const start = new Date(date.getFullYear(), date.getMonth(), 1);
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+function formatGender(g?: string): string {
+  if (g === "laki-laki") return "Laki-laki";
+  if (g === "perempuan") return "Perempuan";
+  return "";
+}
+
+function BadgeIcon({ name, earned }: { name: string; earned: boolean }) {
+  const className = `w-8 h-8 ${earned ? "text-white" : "text-slate-400"}`;
+  if (name === "Konsisten 7 Hari") return <Flame className={className} />;
+  if (name === "Pembaca Andal") return <Trophy className={className} />;
+  if (name === "Pembaca Berbuah") return <Medal className={className} />;
+  return <BookOpen className={className} />;
+}
+
+function BadgeCard({
+  title,
+  description,
+  earned,
+}: {
+  title: string;
+  description: string;
+  earned: boolean;
+}) {
+  return (
+    <div className={`flex items-center gap-4 p-4 rounded-2xl border transition ${
+      earned
+        ? "bg-white border-emerald-200 shadow-sm shadow-emerald-900/5"
+        : "bg-slate-50/80 border-slate-200"
+    }`}>
+      <div className={`w-16 h-16 rounded-full flex items-center justify-center shrink-0 ${
+        earned ? "bg-gradient-to-br from-amber-400 to-orange-500" : "bg-slate-200"
+      }`}>
+        <BadgeIcon name={title} earned={earned} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <h3 className={`font-bold ${earned ? "text-emerald-900" : "text-slate-500"}`}>{title}</h3>
+          {!earned && <LockKeyhole className="w-4 h-4 text-slate-400" />}
+          {earned && <Award className="w-4 h-4 text-amber-500" />}
+        </div>
+        <p className={`text-xs mt-1 ${earned ? "text-emerald-700/70" : "text-slate-400"}`}>{description}</p>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Pohon Literasi — ilustrasi SVG organik yang dipakai bersama oleh    */
+/* versi besar (tab Pohon Literasi) dan versi mini (kartu Beranda).    */
+/* ------------------------------------------------------------------ */
+
+const TREE_STAGE_META: Record<
+  TreeStage,
+  { label: string; range: string; mood: string; palette: { a: string; b: string; dark: string } }
+> = {
+  small: {
+    label: "Pohon Kecil",
+    range: "1 - 50 halaman",
+    mood: "🌱",
+    palette: { a: "#bef264", b: "#4ade80", dark: "#22c55e" },
+  },
+  young: {
+    label: "Pohon Muda",
+    range: "51 - 250 halaman",
+    mood: "🙂",
+    palette: { a: "#86efac", b: "#16a34a", dark: "#15803d" },
+  },
+  big: {
+    label: "Pohon Besar",
+    range: "251+ halaman",
+    mood: "😊",
+    palette: { a: "#4ade80", b: "#15803d", dark: "#14532d" },
+  },
+};
+
+function getTreeStage(totalPages: number): TreeStage {
+  if (totalPages >= 251) return "big";
+  if (totalPages >= 51) return "young";
+  return "small";
+}
+
+// Bentuk kanopi organik (blob), dipakai untuk semua tahap — hanya warna,
+// ukuran dan hiasan (kuncup/buah) yang berbeda tiap tahap.
+const CANOPY_BLOB_PATH =
+  "M40,92 C18,90 8,60 30,44 C24,18 56,8 76,24 C92,3 132,4 142,28 C168,22 182,54 160,74 C177,96 154,122 128,116 C118,137 78,141 64,120 C33,131 18,105 40,92 Z";
+
+function TreeCanopy({
+  stage,
+  gradId,
+  showBuds = false,
+  showFruit = false,
+}: {
+  stage: TreeStage;
+  gradId: string;
+  showBuds?: boolean;
+  showFruit?: boolean;
+}) {
+  const palette = TREE_STAGE_META[stage].palette;
+
+  return (
+    <g>
+      <defs>
+        <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stopColor={palette.a} />
+          <stop offset="100%" stopColor={palette.b} />
+        </linearGradient>
+      </defs>
+
+      {/* bayangan lembut di belakang kanopi */}
+      <path d={CANOPY_BLOB_PATH} transform="translate(6,10) scale(0.98)" fill={palette.dark} opacity={0.16} />
+      {/* kanopi utama */}
+      <path d={CANOPY_BLOB_PATH} fill={`url(#${gradId})`} />
+      {/* lapisan dalam untuk kedalaman */}
+      <path d={CANOPY_BLOB_PATH} transform="translate(20,18) scale(0.55)" fill={palette.dark} opacity={0.22} />
+      {/* highlight cahaya */}
+      <ellipse cx="70" cy="35" rx="26" ry="14" fill="#ffffff" opacity={0.25} />
+
+      {showBuds && (
+        <>
+          <circle cx="60" cy="70" r="4" fill="#fef08a" opacity={0.9} />
+          <circle cx="120" cy="55" r="3.5" fill="#fef08a" opacity={0.9} />
+          <circle cx="95" cy="30" r="3" fill="#fef9c3" opacity={0.9} />
+        </>
+      )}
+
+      {showFruit && (
+        <>
+          <circle cx="55" cy="75" r="5" fill="#f97316" />
+          <circle cx="100" cy="95" r="5" fill="#ef4444" />
+          <circle cx="128" cy="60" r="4.5" fill="#f97316" />
+          <circle cx="80" cy="45" r="4" fill="#ef4444" />
+          <circle cx="140" cy="90" r="4" fill="#fb923c" />
+        </>
+      )}
+    </g>
+  );
+}
+
+// Transformasi posisi/skala kanopi relatif terhadap batang, per tahap.
+function canopyTransform(stage: TreeStage, variant: "full" | "mini") {
+  if (variant === "mini") {
+    if (stage === "big") return "translate(-25,-10) scale(1.1)";
+    if (stage === "young") return "translate(-10,25) scale(0.9)";
+    return "translate(10,60) scale(0.6)";
+  }
+  if (stage === "big") return "translate(-30,-15) scale(1.15)";
+  if (stage === "young") return "translate(-15,20) scale(0.95)";
+  return "translate(5,55) scale(0.65)";
+}
+
+function TreeShareStyles({ scope }: { scope: "full" | "mini" }) {
+  // Style ambient (goyang pelan) + animasi tap/daun jatuh untuk versi penuh.
+  if (scope === "mini") {
+    return (
+      <style>{`
+        @keyframes tree-idle-sway-mini { 0%,100% { transform: rotate(-1.5deg); } 50% { transform: rotate(1.5deg); } }
+        .tree-idle-sway-mini { transform-origin: 50% 100%; animation: tree-idle-sway-mini 5s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) { .tree-idle-sway-mini { animation: none !important; } }
+      `}</style>
+    );
+  }
+  return (
+    <style>{`
+      @keyframes tree-idle-sway { 0%,100% { transform: rotate(-1deg); } 50% { transform: rotate(1deg); } }
+      @keyframes tree-tap-sway {
+        0%,100% { transform: rotate(0deg); }
+        20% { transform: rotate(-6deg); }
+        40% { transform: rotate(5deg); }
+        60% { transform: rotate(-3deg); }
+        80% { transform: rotate(2deg); }
+      }
+      @keyframes leaf-fall {
+        0% { transform: translateY(-10px) rotate(0deg); opacity: 0; }
+        10% { opacity: 1; }
+        100% { transform: translateY(160px) rotate(var(--leaf-rot)); opacity: 0; }
+      }
+      .tree-idle-sway { transform-origin: 50% 100%; animation: tree-idle-sway 4.5s ease-in-out infinite; }
+      .tree-tap-sway { transform-origin: 50% 100%; animation: tree-tap-sway 0.9s ease-in-out; }
+      .leaf-particle { animation: leaf-fall linear forwards; }
+      @media (prefers-reduced-motion: reduce) {
+        .tree-idle-sway, .tree-tap-sway, .leaf-particle { animation: none !important; }
+      }
+    `}</style>
+  );
+}
+
+function TreeGrowth({ totalPages }: { totalPages: number }) {
+  const uid = useId();
+  const [isSwaying, setIsSwaying] = useState(false);
+  const [leaves, setLeaves] = useState<
+    { id: number; left: number; delay: number; duration: number; rotate: number; emoji: string }[]
+  >([]);
+
+  const stage = getTreeStage(totalPages);
+  const stageMeta = TREE_STAGE_META[stage];
+
+  const nextTarget = totalPages < 51 ? 51 : totalPages < 251 ? 251 : 500;
+  const remaining = Math.max(0, nextTarget - totalPages);
+
+  const segments: { key: TreeStage; label: string; icon: string; pct: number }[] = [
+    { key: "small", label: "Kecil", icon: "🌱", pct: Math.min(100, (totalPages / 50) * 100) },
+    {
+      key: "young",
+      label: "Muda",
+      icon: "🌿",
+      pct: totalPages <= 50 ? 0 : Math.min(100, ((totalPages - 50) / 200) * 100),
+    },
+    {
+      key: "big",
+      label: "Besar",
+      icon: "🌳",
+      pct: totalPages <= 250 ? 0 : Math.min(100, ((totalPages - 250) / 250) * 100),
+    },
+  ];
+
+  const shakeTree = () => {
+    setIsSwaying(true);
+    window.setTimeout(() => setIsSwaying(false), 900);
+
+    const emojis = ["🍃", "🌿", "🍀"];
+    const burst = Array.from({ length: 9 }).map((_, i) => ({
+      id: Date.now() + i,
+      left: 15 + Math.random() * 70,
+      delay: Math.random() * 0.25,
+      duration: 1.2 + Math.random() * 0.7,
+      rotate: Math.random() * 360,
+      emoji: emojis[Math.floor(Math.random() * emojis.length)],
+    }));
+    setLeaves(burst);
+    window.setTimeout(() => setLeaves([]), 2200);
+  };
+
+  return (
+    <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-sm shadow-emerald-900/5 border border-white">
+      <TreeShareStyles scope="full" />
+
+      <div className="flex items-center gap-3 mb-5">
+        <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+          <Library className="w-5 h-5" />
+        </div>
+        <div>
+          <h2 className="text-lg font-bold text-emerald-900">Pohon Literasi</h2>
+          <p className="text-xs text-emerald-700/60">Setiap halaman yang kamu baca membantu pohonmu tumbuh.</p>
+        </div>
+      </div>
+
+      <div className="relative rounded-2xl bg-gradient-to-b from-sky-100 via-emerald-50 to-lime-100 p-5 text-center overflow-hidden">
+        {/* matahari samar */}
+        <div className="pointer-events-none absolute -top-8 -right-8 w-28 h-28 rounded-full bg-amber-200/50 blur-2xl" />
+        <div className="pointer-events-none absolute top-4 right-6 w-10 h-10 rounded-full bg-gradient-to-br from-yellow-200 to-amber-300 opacity-80" />
+
+        <p className="relative text-xs font-medium text-emerald-700/70">Total halaman yang dibaca</p>
+        <p className="relative text-3xl font-bold text-emerald-900 mt-1">{totalPages} halaman</p>
+
+        <button
+          type="button"
+          onClick={shakeTree}
+          aria-label="Sentuh pohon literasi"
+          className="relative mx-auto mt-3 block w-full max-w-xs h-64 group"
+        >
+          {/* daun berjatuhan saat disentuh */}
+          {leaves.map((leaf) => (
+            <span
+              key={leaf.id}
+              className="leaf-particle absolute text-lg pointer-events-none"
+              style={{
+                left: `${leaf.left}%`,
+                top: "35%",
+                animationDelay: `${leaf.delay}s`,
+                animationDuration: `${leaf.duration}s`,
+                ["--leaf-rot" as any]: `${leaf.rotate}deg`,
+              }}
+            >
+              {leaf.emoji}
+            </span>
+          ))}
+
+          {/* tanah / rumput */}
+          <svg viewBox="0 0 200 40" className="absolute bottom-0 left-1/2 -translate-x-1/2 w-56" aria-hidden="true">
+            <ellipse cx="100" cy="20" rx="95" ry="14" fill="#bbf7d0" opacity={0.7} />
+            <circle cx="60" cy="16" r="3.5" fill="#facc15" opacity={0.7} />
+            <circle cx="140" cy="22" r="3.5" fill="#f9a8d4" opacity={0.6} />
+            <circle cx="30" cy="22" r="2.5" fill="#a7f3d0" opacity={0.8} />
+          </svg>
+
+          {/* pohon */}
+          <svg
+            viewBox="0 0 200 220"
+            className={`absolute bottom-3 left-1/2 -translate-x-1/2 h-full transition-transform duration-300 group-hover:scale-[1.03] ${
+              isSwaying ? "tree-tap-sway" : "tree-idle-sway"
+            }`}
+          >
+            <defs>
+              <linearGradient id={`${uid}-trunk`} x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#92400e" />
+                <stop offset="100%" stopColor="#c2793a" />
+              </linearGradient>
+            </defs>
+
+            {/* batang */}
+            <path d="M92,215 C90,180 90,150 96,120 L104,120 C110,150 110,180 108,215 Z" fill={`url(#${uid}-trunk)`} />
+            <path d="M96,150 C85,145 75,148 68,140" stroke="#92400e" strokeWidth="5" strokeLinecap="round" fill="none" />
+            <path d="M104,145 C115,140 122,142 130,133" stroke="#92400e" strokeWidth="5" strokeLinecap="round" fill="none" />
+
+            {/* kanopi sesuai tahap */}
+            <g transform={canopyTransform(stage, "full")}>
+              <TreeCanopy
+                stage={stage}
+                gradId={`${uid}-canopy`}
+                showBuds={stage === "young"}
+                showFruit={stage === "big"}
+              />
+            </g>
+          </svg>
+
+          <span className="absolute top-2 left-1/2 -translate-x-1/2 text-xl">{stageMeta.mood}</span>
+        </button>
+
+        <p className="relative text-xs text-emerald-700/60 -mt-1">Sentuh pohon untuk membuatnya bergoyang!</p>
+        <h3 className="relative text-xl font-bold text-emerald-900 mt-3">{stageMeta.label}</h3>
+        <p className="relative text-sm font-semibold text-emerald-800">({stageMeta.range})</p>
+
+        {/* progres bertahap: Kecil -> Muda -> Besar */}
+        <div className="relative max-w-md mx-auto mt-5">
+          <div className="flex gap-1.5">
+            {segments.map((seg) => (
+              <div key={seg.key} className="flex-1">
+                <div className="h-2.5 rounded-full bg-emerald-900/10 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ${
+                      seg.key === stage ? "bg-gradient-to-r from-lime-400 to-emerald-600" : "bg-emerald-400/70"
+                    }`}
+                    style={{ width: `${seg.pct}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-between mt-1.5">
+            {segments.map((seg) => (
+              <span
+                key={seg.key}
+                className={`text-[11px] font-medium flex items-center gap-1 ${
+                  seg.key === stage ? "text-emerald-800" : "text-emerald-700/40"
+                }`}
+              >
+                <span>{seg.icon}</span>
+                {seg.label}
+              </span>
+            ))}
+          </div>
+          <p className="text-xs text-emerald-700/60 mt-3">
+            {totalPages >= 500
+              ? "Pohon besar tumbuh subur! Terus membaca untuk menjaganya."
+              : `Menuju tahap berikutnya: ${remaining} halaman lagi`}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TreeProgressIcon({ totalPages }: { totalPages: number }) {
+  const uid = useId();
+  const stage = getTreeStage(totalPages);
+  const stageMeta = TREE_STAGE_META[stage];
+
+  return (
+    <div className="flex items-center gap-3 rounded-2xl bg-gradient-to-br from-emerald-50 to-lime-50 border border-emerald-100 px-4 py-3 shrink-0">
+      <TreeShareStyles scope="mini" />
+      <svg viewBox="0 0 200 200" className="w-14 h-14 tree-idle-sway-mini" aria-hidden="true">
+        <defs>
+          <linearGradient id={`${uid}-trunk-mini`} x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="#92400e" />
+            <stop offset="100%" stopColor="#c2793a" />
+          </linearGradient>
+        </defs>
+        <path d="M94,195 C92,165 92,140 97,115 L103,115 C108,140 108,165 106,195 Z" fill={`url(#${uid}-trunk-mini)`} />
+        <g transform={canopyTransform(stage, "mini")}>
+          <TreeCanopy stage={stage} gradId={`${uid}-canopy-mini`} showBuds={stage === "young"} showFruit={stage === "big"} />
+        </g>
+      </svg>
+      <div>
+        <p className="text-xs text-emerald-700/60">Pohonmu saat ini</p>
+        <p className="text-sm font-bold text-emerald-900">{stageMeta.label}</p>
+        <p className="text-xs text-emerald-700/70">{totalPages} halaman</p>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 
 function StatCard({
   label,
@@ -102,9 +525,11 @@ export default function StudentDashboard() {
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [selectedCharacters, setSelectedCharacters] = useState<Set<string>>(new Set());
+  const [customCharacter, setCustomCharacter] = useState("");
   const [formError, setFormError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [badgeFilter, setBadgeFilter] = useState<BadgeFilter>("semua");
 
   useEffect(() => {
     if (!loading && (!user || userProfile?.role !== "student")) {
@@ -178,15 +603,63 @@ export default function StudentDashboard() {
     return streak;
   }, [journals]);
 
-  const journalsThisWeek = useMemo(() => {
-    const startOfWeek = getStartOfWeek(new Date());
-    return journals.filter((j) => {
-      const d = toDateSafe(j.createdAt);
-      return d ? d >= startOfWeek : false;
-    }).length;
+  const monthlyStats = useMemo(() => {
+    const startOfMonth = getStartOfMonth(new Date());
+    const monthlyJournals = journals.filter((journal) => {
+      const date = toDateSafe(journal.createdAt);
+      return date ? date >= startOfMonth : false;
+    });
+    const monthlyPages = monthlyJournals.reduce((total, journal) => {
+      const pages = Number(journal.endPage) - Number(journal.startPage);
+      return total + (Number.isNaN(pages) || pages < 0 ? 0 : pages);
+    }, 0);
+    const monthlyFinishedBooks = new Set(
+      monthlyJournals
+        .filter((journal) => journal.finished && journal.bookTitle)
+        .map((journal) => journal.bookTitle.trim().toLowerCase())
+    );
+    const monthlyDates = new Set<string>();
+    monthlyJournals.forEach((journal) => {
+      const date = toDateSafe(journal.createdAt);
+      if (date) monthlyDates.add(date.toDateString());
+    });
+
+    let monthlyStreak = 0;
+    const cursor = new Date();
+    cursor.setHours(0, 0, 0, 0);
+    while (cursor >= startOfMonth && monthlyDates.has(cursor.toDateString())) {
+      monthlyStreak += 1;
+      cursor.setDate(cursor.getDate() - 1);
+    }
+
+    return {
+      journals: monthlyJournals.length,
+      pages: monthlyPages,
+      finishedBooks: monthlyFinishedBooks.size,
+      streak: monthlyStreak,
+    };
   }, [journals]);
 
+  const badges = useMemo(() => [
+    { title: "Pembaca Pemula", description: "Baca 1 buku", earned: totalBooksFinished >= 1 },
+    { title: "Pembaca Aktif", description: "Baca 5 buku", earned: totalBooksFinished >= 5 },
+    {
+      title: "Konsisten 7 Hari",
+      description: "Mengirim jurnal 7 hari berturut-turut",
+      earned: readingStreak >= 7,
+    },
+    { title: "Pembaca Andal", description: "Baca 10 buku", earned: totalBooksFinished >= 10 },
+    { title: "Pembaca Berbuah", description: "Membaca 1000 halaman", earned: totalPages >= 1000 },
+  ], [totalBooksFinished, readingStreak, totalPages]);
+
+  const visibleBadges = badges.filter((badge) => {
+    if (badgeFilter === "terkunci") return !badge.earned;
+    if (badgeFilter === "didapat") return badge.earned;
+    return true;
+  });
+
   const displayName = userProfile?.name || "Siswa";
+  const genderLabel = formatGender(userProfile?.gender);
 
   const handleSaveJournal = async () => {
     setFormError("");
@@ -228,7 +701,10 @@ export default function StudentDashboard() {
         startPage,
         endPage,
         summary: form.summary.trim(),
-        characterValues: Array.from(selectedCharacters),
+        characterValues: [
+          ...Array.from(selectedCharacters),
+          ...(customCharacter.trim() ? [customCharacter.trim()] : []),
+        ],
         finished: form.finished,
         status: "pending",
         teacherFeedback: "",
@@ -238,6 +714,7 @@ export default function StudentDashboard() {
       setSuccessMessage("Jurnal berhasil disimpan! Menunggu validasi dari guru.");
       setForm(EMPTY_FORM);
       setSelectedCharacters(new Set());
+      setCustomCharacter("");
       fetchMyJournals();
     } catch (err) {
       setFormError("Gagal menyimpan jurnal. Silakan coba lagi.");
@@ -256,6 +733,8 @@ export default function StudentDashboard() {
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: "beranda", label: "Beranda" },
+    { key: "badge", label: "Badge Saya" },
+    { key: "pohon", label: "Pohon Literasi" },
     { key: "jurnal", label: "Isi Jurnal Membaca" },
     { key: "riwayat", label: "Riwayat Jurnal" },
   ];
@@ -272,7 +751,10 @@ export default function StudentDashboard() {
         <header className="flex justify-between items-center mb-6 bg-white/80 backdrop-blur-sm p-4 rounded-2xl shadow-sm shadow-emerald-900/5 border border-white">
           <div>
             <h1 className="text-xl font-bold text-emerald-900">Dashboard Siswa</h1>
-            <p className="text-sm text-emerald-700/70">Kelas: {userProfile?.classCode}</p>
+            <p className="text-sm text-emerald-700/70">
+              Kelas: {userProfile?.classCode}
+              {genderLabel && <span className="ml-2">· {genderLabel}</span>}
+            </p>
           </div>
           <button
             onClick={logout}
@@ -302,23 +784,26 @@ export default function StudentDashboard() {
         {/* ---- Tab: Beranda ---- */}
         {activeTab === "beranda" && (
           <div className="space-y-6">
-            <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-sm shadow-emerald-900/5 border border-white">
-              <h2 className="text-xl font-bold text-emerald-900">Halo, {displayName} 👋</h2>
-              <p className="text-sm text-emerald-700/70 mt-1">Semangat membaca hari ini!</p>
+            <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-sm shadow-emerald-900/5 border border-white flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-bold text-emerald-900">Halo, {displayName} 👋</h2>
+                <p className="text-sm text-emerald-700/70 mt-1">Semangat membaca hari ini!</p>
+              </div>
+              <TreeProgressIcon totalPages={totalPages} />
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <StatCard label="Total Buku Selesai" value={totalBooksFinished} icon={<Library className="w-4 h-4" />} color="blue" />
-              <StatCard label="Total Halaman" value={totalPages} icon={<BookOpen className="w-4 h-4" />} color="emerald" />
-              <StatCard label="Streak Membaca" value={`${readingStreak} hari`} icon={<Flame className="w-4 h-4" />} color="orange" />
-              <StatCard label="Jurnal Minggu Ini" value={journalsThisWeek} icon={<CalendarCheck className="w-4 h-4" />} color="yellow" />
+              <StatCard label="Buku Selesai Bulan Ini" value={monthlyStats.finishedBooks} icon={<Library className="w-4 h-4" />} color="blue" />
+              <StatCard label="Halaman Bulan Ini" value={monthlyStats.pages} icon={<BookOpen className="w-4 h-4" />} color="emerald" />
+              <StatCard label="Streak Bulan Ini" value={`${monthlyStats.streak} hari`} icon={<Flame className="w-4 h-4" />} color="orange" />
+              <StatCard label="Jurnal Bulan Ini" value={monthlyStats.journals} icon={<CalendarCheck className="w-4 h-4" />} color="yellow" />
             </div>
 
             <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-sm shadow-emerald-900/5 border border-white">
               <h3 className="text-sm font-semibold text-emerald-800/70 mb-3">Jurnal Terbaru</h3>
               {journals.length === 0 ? (
                 <p className="text-emerald-700/60 text-sm">
-                  Kamu belum punya jurnal. Yuk mulai isi jurnal pertamamu di tab "Isi Jurnal Membaca"!
+                  Kamu belum punya jurnal. Yuk mulai isi jurnal pertamamu di tab &quot;Isi Jurnal Membaca&quot;!
                 </p>
               ) : (
                 <div className="space-y-2">
@@ -333,6 +818,54 @@ export default function StudentDashboard() {
             </div>
           </div>
         )}
+
+        {/* ---- Tab: Badge Saya ---- */}
+        {activeTab === "badge" && (
+          <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-sm shadow-emerald-900/5 border border-white space-y-5">
+            <div>
+              <h2 className="text-lg font-bold text-emerald-900">Badge Saya</h2>
+              <p className="text-xs text-emerald-700/60 mt-1">
+                Kumpulkan pencapaian dari kebiasaan membaca dan jurnalmu.
+              </p>
+            </div>
+
+            <div className="flex gap-2 border-b border-emerald-100 pb-3">
+              {([
+                ["semua", "Semua"],
+                ["terkunci", "Terkunci"],
+                ["didapat", "Didapat"],
+              ] as [BadgeFilter, string][]).map(([filter, label]) => (
+                <button
+                  key={filter}
+                  type="button"
+                  onClick={() => setBadgeFilter(filter)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+                    badgeFilter === filter
+                      ? "bg-emerald-600 text-white"
+                      : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {visibleBadges.length === 0 ? (
+              <p className="text-sm text-emerald-700/60 py-4">
+                Belum ada badge pada filter ini.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {visibleBadges.map((badge) => (
+                  <BadgeCard key={badge.title} {...badge} />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ---- Tab: Pohon Literasi ---- */}
+        {activeTab === "pohon" && <TreeGrowth totalPages={totalPages} />}
 
         {/* ---- Tab: Isi Jurnal Membaca ---- */}
         {activeTab === "jurnal" && (
@@ -453,8 +986,8 @@ export default function StudentDashboard() {
             {/* Nilai Karakter */}
             <div>
               <label className="text-sm font-semibold text-emerald-800 mb-2 block">Nilai Karakter yang Ditemukan</label>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                {CHARACTER_OPTIONS.map((c) => (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {CHARACTER_OPTIONS.map((c, index) => (
                   <label
                     key={c}
                     className={`flex items-center gap-2 p-2 rounded-xl border text-sm cursor-pointer transition ${
@@ -469,9 +1002,19 @@ export default function StudentDashboard() {
                       onChange={() => toggleCharacter(c)}
                       className="w-4 h-4 accent-emerald-600"
                     />
-                    {c}
+                    {index + 1}. {c}
                   </label>
                 ))}
+                <label className="flex flex-col gap-2 p-2 rounded-xl border border-emerald-200 text-sm text-emerald-700/70 sm:col-span-2 lg:col-span-3">
+                  <span className="font-medium text-emerald-800">9. Nilai karakter lainnya</span>
+                  <textarea
+                    value={customCharacter}
+                    onChange={(e) => setCustomCharacter(e.target.value)}
+                    placeholder="Tuliskan nilai karakter lain yang kamu temukan..."
+                    rows={2}
+                    className="w-full p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition"
+                  />
+                </label>
               </div>
             </div>
 
@@ -512,7 +1055,7 @@ export default function StudentDashboard() {
                       {formatTanggal(toDateSafe(j.createdAt))}
                       {j.finished ? " · Selesai dibaca" : ""}
                     </p>
-                    <p className="text-sm text-emerald-800/80 italic mb-1">"{j.summary}"</p>
+                    <p className="text-sm text-emerald-800/80 italic mb-1">&quot;{j.summary}&quot;</p>
                     {j.characterValues && j.characterValues.length > 0 && (
                       <p className="text-xs text-emerald-700/60">Nilai karakter: {j.characterValues.join(", ")}</p>
                     )}

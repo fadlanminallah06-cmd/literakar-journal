@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
@@ -28,11 +28,25 @@ export default function LoginPage() {
 
       if (userDoc.exists()) {
         const role = userDoc.data().role;
-        if (role === "teacher") {
+        if (role === "teacher" || role === "admin") {
           router.push("/dashboard/teacher");
+        } else if (role === "student") {
+          if (
+            userDoc.data().requestedRole === "teacher" &&
+            userDoc.data().approvalStatus === "pending"
+          ) {
+            await signOut(auth);
+            setError("Pendaftaran guru masih menunggu persetujuan admin.");
+          } else {
+            router.push("/dashboard/student");
+          }
         } else {
-          router.push("/dashboard/student");
+          await signOut(auth);
+          setError("Profil akun tidak memiliki role yang valid. Hubungi admin.");
         }
+      } else {
+        await signOut(auth);
+        setError("Profil akun tidak ditemukan. Hubungi admin.");
       }
     } catch (err) {
       setError("Email atau password salah.");

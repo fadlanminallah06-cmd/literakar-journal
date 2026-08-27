@@ -14,9 +14,17 @@ import {
   EyeOff,
   KeySquare,
   GraduationCap,
+  ShieldCheck,
   BookOpen,
   Sprout,
+  ChevronDown,
+  Users,
 } from "lucide-react";
+
+// Daftar kelas yang bisa dipilih siswa: 7A-7H, 8A-8H, 9A-9H
+const GRADE_LEVELS = [7, 8, 9];
+const SECTIONS = ["A", "B", "C", "D", "E", "F", "G", "H"];
+const TEACHER_ACCESS_CODE = "LITERAKAR-GURU";
 
 export default function RegisterPage() {
   const [name, setName] = useState("");
@@ -25,6 +33,8 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState<"student" | "teacher">("student");
   const [classCode, setClassCode] = useState("");
+  const [gender, setGender] = useState<"laki-laki" | "perempuan" | "">("");
+  const [teacherCode, setTeacherCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -32,6 +42,22 @@ export default function RegisterPage() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    if (role === "student" && !classCode) {
+      setError("Silakan pilih kelas kamu terlebih dahulu.");
+      return;
+    }
+
+    if (role === "student" && !gender) {
+      setError("Silakan pilih gender kamu terlebih dahulu.");
+      return;
+    }
+
+    if (role === "teacher" && teacherCode.trim().toUpperCase() !== TEACHER_ACCESS_CODE) {
+      setError("Kode rahasia guru tidak valid.");
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -42,15 +68,11 @@ export default function RegisterPage() {
         name,
         email,
         role,
-        classCode: classCode.toUpperCase(),
+        ...(role === "student" ? { classCode, gender } : {}),
         createdAt: new Date(),
       });
 
-      if (role === "teacher") {
-        router.push("/dashboard/teacher");
-      } else {
-        router.push("/dashboard/student");
-      }
+      router.push(role === "teacher" ? "/dashboard/teacher" : "/dashboard/student");
     } catch (err: any) {
       setError(err.message || "Gagal mendaftar.");
     } finally {
@@ -94,14 +116,14 @@ export default function RegisterPage() {
                 Nama Lengkap
               </label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <User className="w-4 h-4 text-emerald-600" />
                 </span>
                 <input
                   type="text"
                   required
                   placeholder="Nama sesuai identitas"
-                  className="w-full pl-10 pr-3 p-2 text-sm bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition"
+                  className="w-full pl-10 pr-3 p-2 text-sm text-slate-800 bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />
@@ -112,14 +134,14 @@ export default function RegisterPage() {
             <div>
               <label className="text-xs text-emerald-700/70 mb-1 block">Email</label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Mail className="w-4 h-4 text-blue-600" />
                 </span>
                 <input
                   type="email"
                   required
                   placeholder="nama@email.com"
-                  className="w-full pl-10 pr-3 p-2 text-sm bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition"
+                  className="w-full pl-10 pr-3 p-2 text-sm text-slate-800 bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
@@ -130,7 +152,7 @@ export default function RegisterPage() {
             <div>
               <label className="text-xs text-emerald-700/70 mb-1 block">Password</label>
               <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center">
+                <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Lock className="w-4 h-4 text-orange-500" />
                 </span>
                 <input
@@ -138,7 +160,7 @@ export default function RegisterPage() {
                   required
                   minLength={6}
                   placeholder="Minimal 6 karakter"
-                  className="w-full pl-10 pr-10 p-2 text-sm bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400 transition"
+                  className="w-full pl-10 pr-10 p-2 text-sm text-slate-800 bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400 transition"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
@@ -175,7 +197,6 @@ export default function RegisterPage() {
                   <BookOpen className="w-5 h-5" />
                   <span className="text-sm font-semibold">Siswa</span>
                 </button>
-
                 <button
                   type="button"
                   onClick={() => setRole("teacher")}
@@ -189,25 +210,106 @@ export default function RegisterPage() {
                   <span className="text-sm font-semibold">Guru</span>
                 </button>
               </div>
+              {role === "teacher" && (
+                <p className="text-xs text-blue-700/70 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 mt-2">
+                  Masukkan kode rahasia dari admin sekolah untuk membuat akun guru.
+                </p>
+              )}
             </div>
 
-            {/* Kode Kelas */}
-            <div>
-              <label className="text-xs text-emerald-700/70 mb-1 block">Kode Kelas</label>
-              <div className="relative">
-                <span className="absolute inset-y-0 left-0 pl-3 flex items-center">
-                  <KeySquare className="w-4 h-4 text-yellow-600" />
-                </span>
-                <input
-                  type="text"
-                  placeholder="Contoh: KLS-7A"
-                  required
-                  className="w-full pl-10 pr-3 p-2 text-sm bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition uppercase placeholder:normal-case"
-                  value={classCode}
-                  onChange={(e) => setClassCode(e.target.value)}
-                />
+            {role === "teacher" && (
+              <div>
+                <label className="text-xs text-emerald-700/70 mb-1 block">Kode Rahasia Guru</label>
+                <div className="relative">
+                  <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-600" />
+                  <input
+                    type="password"
+                    required
+                    value={teacherCode}
+                    onChange={(e) => setTeacherCode(e.target.value)}
+                    placeholder="Masukkan kode rahasia"
+                    className="w-full pl-10 pr-3 p-2 text-sm text-slate-800 bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition"
+                  />
+                </div>
               </div>
-            </div>
+            )}
+
+            {/* Pilih Kelas — hanya untuk siswa */}
+            {role === "student" && (
+              <>
+              <div>
+                <label className="text-xs text-emerald-700/70 mb-1 block">Pilih Kelas</label>
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <KeySquare className="w-4 h-4 text-yellow-600" />
+                  </span>
+                  <select
+                    required
+                    value={classCode}
+                    onChange={(e) => setClassCode(e.target.value)}
+                    className="w-full pl-10 pr-8 p-2 text-sm text-slate-800 bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition appearance-none"
+                  >
+                    <option value="" disabled>
+                      Pilih kelas kamu
+                    </option>
+                    {GRADE_LEVELS.map((grade) => (
+                      <optgroup key={grade} label={`Kelas ${grade}`}>
+                        {SECTIONS.map((section) => {
+                          const code = `${grade}${section}`;
+                          return (
+                            <option key={code} value={code}>
+                              {code}
+                            </option>
+                          );
+                        })}
+                      </optgroup>
+                    ))}
+                  </select>
+                  <span className="pointer-events-none absolute inset-y-0 right-0 pr-3 flex items-center">
+                    <ChevronDown className="w-4 h-4 text-emerald-600" />
+                  </span>
+                </div>
+              </div>
+              </>
+            )}
+
+            {/* Gender — hanya untuk siswa */}
+            {role === "student" && (
+              <>
+              <div>
+                <label className="text-xs text-emerald-700/70 mb-1.5 block">
+                  Gender
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setGender("laki-laki")}
+                    className={`flex items-center justify-center gap-2 rounded-xl border py-2.5 px-2 transition ${
+                      gender === "laki-laki"
+                        ? "bg-emerald-100 border-emerald-300 text-emerald-900"
+                        : "border-emerald-200 text-emerald-700/60 hover:bg-emerald-50"
+                    }`}
+                  >
+                    <Users className="w-4 h-4" />
+                    <span className="text-sm font-semibold">Laki-laki</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setGender("perempuan")}
+                    className={`flex items-center justify-center gap-2 rounded-xl border py-2.5 px-2 transition ${
+                      gender === "perempuan"
+                        ? "bg-pink-100 border-pink-300 text-pink-800"
+                        : "border-emerald-200 text-emerald-700/60 hover:bg-emerald-50"
+                    }`}
+                  >
+                    <Users className="w-4 h-4" />
+                    <span className="text-sm font-semibold">Perempuan</span>
+                  </button>
+                </div>
+              </div>
+              </>
+            )}
 
             <button
               type="submit"

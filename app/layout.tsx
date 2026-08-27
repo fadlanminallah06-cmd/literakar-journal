@@ -1,9 +1,17 @@
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
+import type { Metadata } from "next";
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Jurnal Literasi & Karakter Siswa",
   description: "Platform jurnal membaca digital untuk siswa dan guru",
+  icons: {
+    icon: [
+      { url: "/asset/logo1.png", type: "image/png" },
+    ],
+    shortcut: "/asset/logo1.png",
+    apple: "/asset/logo1.png",
+  },
 };
 
 export default function RootLayout({

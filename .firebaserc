@@ -1,0 +1,8 @@
+{
+  "projects": {
+    "default": "literakar-journal",
+    "literakar-journal": "literakar-journal"
+  },
+  "targets": {},
+  "etags": {}
+}

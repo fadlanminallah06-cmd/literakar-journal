@@ -1,0 +1,80 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function currentUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function hasRole(role) {
+      return isSignedIn() && currentUser().data.role == role;
+    }
+
+    function isStudent() {
+      return hasRole('student');
+    }
+
+    function isTeacher() {
+      return hasRole('teacher');
+    }
+
+    function isAdmin() {
+      return hasRole('admin');
+    }
+
+    function isStaff() {
+      return isTeacher() || isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isStaff() || (isSignedIn() && request.auth.uid == userId);
+
+      // Public registration can create a student or teacher for the authenticated UID.
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.uid == userId
+        && request.resource.data.role in ['student', 'teacher'];
+
+      // Staff can edit profile data but cannot change UID or role.
+      allow update: if isAdmin()
+        || (
+          isTeacher()
+          && resource.data.role == 'student'
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.uid == resource.data.uid
+        )
+        || (
+          isSignedIn()
+          && request.auth.uid == userId
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.uid == resource.data.uid
+        );
+
+      allow delete: if isAdmin() || (isTeacher() && resource.data.role == 'student');
+    }
+
+    match /journals/{journalId} {
+      allow read: if isStaff()
+        || (isStudent() && resource.data.studentId == request.auth.uid);
+
+      allow create: if isStudent()
+        && request.resource.data.studentId == request.auth.uid
+        && request.resource.data.status == 'pending';
+
+      // Teachers validate and annotate; admins may manage any journal field.
+      allow update: if isAdmin()
+        || (
+          isTeacher()
+          && request.resource.data.studentId == resource.data.studentId
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['status', 'teacherFeedback', 'studentName', 'classCode'])
+        );
+
+      allow delete: if isStaff();
+    }
+  }
+}

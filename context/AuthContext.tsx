@@ -5,12 +5,15 @@ import { onAuthStateChanged, User, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 
-interface UserProfile {
+export type UserRole = "student" | "teacher" | "admin";
+
+export interface UserProfile {
   uid: string;
   email: string;
   name: string;
-  role: "student" | "teacher";
+  role: UserRole;
   classCode?: string;
+  gender?: string;
 }
 
 interface AuthContextType {

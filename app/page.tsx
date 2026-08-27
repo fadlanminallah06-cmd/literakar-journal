@@ -11,17 +11,6 @@ export default function HomePage() {
         <div className="absolute -bottom-24 -right-24 w-72 h-72 bg-teal-200/40 rounded-full blur-3xl" />
       </div>
 
-      {/* Logo sekolah — pojok kiri atas */}
-      <div className="absolute top-4 left-4 md:top-6 md:left-6 w-12 h-12 md:w-14 md:h-14 z-10">
-        <Image
-          src="/asset/logo-smpn74.png"
-          alt="Logo SMP Negeri 74 Jakarta"
-          fill
-          className="object-contain"
-          priority
-        />
-      </div>
-
       <div className="relative w-full max-w-2xl flex flex-col items-center">
         {/* Logo */}
         <div className="relative w-64 md:w-80 aspect-video mb-6 drop-shadow-lg">

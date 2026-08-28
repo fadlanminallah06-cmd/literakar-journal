@@ -1072,6 +1072,11 @@ export default function StudentDashboard() {
             )}
           </div>
         )}
+
+        {/* Credit di bagian bawah dashboard */}
+        <p className="text-center text-xs text-emerald-700/50 font-medium tracking-wide mt-8 mb-2">
+          © PPG Bahasa Indonesia UNJ 2026
+        </p>
       </div>
     </div>
   );

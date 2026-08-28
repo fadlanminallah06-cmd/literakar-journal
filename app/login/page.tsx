@@ -196,6 +196,11 @@ export default function LoginPage() {
             Daftar
           </Link>
         </p>
+
+        {/* Credit di bawah link Daftar */}
+        <p className="text-center text-xs text-emerald-700/50 font-medium tracking-wide mt-4">
+          © PPG Bahasa Indonesia UNJ 2026
+        </p>
       </div>
     </div>
   );

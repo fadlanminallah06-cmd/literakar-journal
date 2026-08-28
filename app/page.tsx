@@ -51,7 +51,7 @@ export default function HomePage() {
         </div>
 
         {/* Highlight singkat */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full mb-8">
           <div className="bg-white/80 backdrop-blur-sm p-4 rounded-2xl shadow-sm shadow-emerald-900/5 border border-white flex items-center gap-3 text-left">
             <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
               <BookOpen className="w-4 h-4" />
@@ -69,6 +69,11 @@ export default function HomePage() {
             </p>
           </div>
         </div>
+
+        {/* Credit di bawah highlight */}
+        <p className="text-xs text-emerald-700/50 font-medium tracking-wide">
+          © PPG Bahasa Indonesia UNJ 2026
+        </p>
       </div>
     </main>
   );

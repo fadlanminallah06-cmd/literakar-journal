@@ -1,5 +1,5 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { getAuth } from "firebase/auth";
+import { getAuth, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -14,3 +14,9 @@ const firebaseConfig = {
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+
+// Simpan sesi login di browser (localStorage/IndexedDB) supaya user tetap
+// login walau tab/browser ditutup dan dibuka lagi, sampai logout manual.
+setPersistence(auth, browserLocalPersistence).catch((err) => {
+  console.error("Gagal set auth persistence:", err);
+});

@@ -65,13 +65,25 @@ service cloud.firestore {
         && request.resource.data.studentId == request.auth.uid
         && request.resource.data.status == 'pending';
 
-      // Teachers validate and annotate; admins may manage any journal field.
+      // Teachers validate once and may later synchronize denormalized student data.
       allow update: if isAdmin()
         || (
           isTeacher()
           && request.resource.data.studentId == resource.data.studentId
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['status', 'teacherFeedback', 'studentName', 'classCode'])
+          && (
+            (
+              resource.data.status != 'approved'
+              && request.resource.data.status == 'approved'
+            )
+            || (
+              resource.data.status == 'approved'
+              && request.resource.data.status == resource.data.status
+              && request.resource.data.diff(resource.data).affectedKeys()
+                .hasOnly(['studentName', 'classCode'])
+            )
+          )
         );
 
       allow delete: if isStaff();

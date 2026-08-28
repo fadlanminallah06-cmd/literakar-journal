@@ -43,6 +43,7 @@ interface Journal {
   summary: string;
   status: string;
   teacherFeedback?: string;
+  approvedBy?: string;
   classCode: string;
   finished?: boolean;
   createdAt?: any;
@@ -76,7 +77,6 @@ interface ClassSummary {
   booksFinished: number;
 }
 
-// Data ringkas siswa terdaftar, diambil dari koleksi "users" (role === "student").
 interface RosterStudent {
   uid: string;
   email: string;
@@ -87,7 +87,7 @@ interface RosterStudent {
 
 type TabKey = "ringkasan" | "pendampingan" | "jurnal" | "laporan" | "kelola";
 type ReportView = "kelas" | "siswa";
-type ReportPeriod = "all" | "month" | "range";
+type ReportPeriod = "all" | "month";
 
 function getCurrentMonthInput(): string {
   const date = new Date();
@@ -138,6 +138,196 @@ function getCharacterList(j: Journal): string[] {
   return [];
 }
 
+/* ------------------------------------------------------------------ */
+/* Helper murni (bukan hook) untuk memfilter & meringkas jurnal.       */
+/* ------------------------------------------------------------------ */
+
+function filterJournalsByPeriod(
+  journalsInput: Journal[],
+  period: ReportPeriod,
+  month: string
+): Journal[] {
+  if (period === "all") return journalsInput;
+  if (!month) return journalsInput;
+  return journalsInput.filter((j) => {
+    const d = toDateSafe(j.createdAt);
+    if (!d) return false;
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+    return key === month;
+  });
+}
+
+function buildStudentSummaries(journalsInput: Journal[], allStudents: RosterStudent[]): StudentSummary[] {
+  const map = new Map<string, StudentSummary>();
+
+  const genderByName = new Map<string, string>();
+  allStudents.forEach((stu) => {
+    if (stu.gender) genderByName.set(stu.name, stu.gender);
+  });
+
+  journalsInput.forEach((j) => {
+    const key = j.studentName || "Tanpa Nama";
+    if (!map.has(key)) {
+      map.set(key, {
+        name: key,
+        classCode: j.classCode || "-",
+        gender: (genderByName.get(key) as StudentSummary["gender"]) || "",
+        totalJournals: 0,
+        approvedCount: 0,
+        pendingCount: 0,
+        totalPagesRead: 0,
+        booksFinished: 0,
+        lastSubmission: null,
+        journals: [],
+      });
+    }
+    const s = map.get(key)!;
+    s.totalJournals += 1;
+    if (j.status === "approved") s.approvedCount += 1;
+    else s.pendingCount += 1;
+    const pages = Number(j.endPage) - Number(j.startPage);
+    if (!Number.isNaN(pages) && pages > 0) s.totalPagesRead += pages;
+    if (j.finished) s.booksFinished += 1;
+    const d = toDateSafe(j.createdAt);
+    if (d && (!s.lastSubmission || d > s.lastSubmission)) s.lastSubmission = d;
+    s.journals.push(j);
+  });
+
+  map.forEach((s) => {
+    const titles = new Set<string>();
+    s.journals.forEach((j) => {
+      if (j.finished && j.bookTitle) titles.add(j.bookTitle.trim().toLowerCase());
+    });
+    s.booksFinished = titles.size;
+  });
+
+  allStudents.forEach((stu) => {
+    if (!map.has(stu.name)) {
+      map.set(stu.name, {
+        name: stu.name,
+        classCode: stu.classCode,
+        gender: stu.gender || "",
+        totalJournals: 0,
+        approvedCount: 0,
+        pendingCount: 0,
+        totalPagesRead: 0,
+        booksFinished: 0,
+        lastSubmission: null,
+        journals: [],
+      });
+    } else {
+      const existing = map.get(stu.name)!;
+      if (!existing.gender && stu.gender) {
+        existing.gender = stu.gender;
+      }
+    }
+  });
+
+  return Array.from(map.values()).sort((a, b) => b.totalJournals - a.totalJournals);
+}
+
+function buildClassSummaries(
+  journalsInPeriod: Journal[],
+  allStudents: RosterStudent[],
+  classFilter: string
+): ClassSummary[] {
+  const summaryByClass = new Map<string, ClassSummary>();
+  const studentsByClass = new Map<string, Set<string>>();
+  const activeStudentsByClass = new Map<string, Set<string>>();
+
+  allStudents.forEach((student) => {
+    const classCode = student.classCode || "-";
+    if (!studentsByClass.has(classCode)) studentsByClass.set(classCode, new Set());
+    studentsByClass.get(classCode)!.add(student.uid);
+  });
+
+  journalsInPeriod.forEach((journal) => {
+    const classCode = journal.classCode || "-";
+    if (!summaryByClass.has(classCode)) {
+      summaryByClass.set(classCode, {
+        classCode,
+        totalStudents: 0,
+        activeStudents: 0,
+        totalJournals: 0,
+        approvedCount: 0,
+        pendingCount: 0,
+        totalPagesRead: 0,
+        booksFinished: 0,
+      });
+    }
+    const summary = summaryByClass.get(classCode)!;
+    summary.totalJournals += 1;
+    if (journal.status === "approved") summary.approvedCount += 1;
+    else summary.pendingCount += 1;
+    const pages = Number(journal.endPage) - Number(journal.startPage);
+    if (!Number.isNaN(pages) && pages > 0) summary.totalPagesRead += pages;
+    if (journal.studentName) {
+      if (!activeStudentsByClass.has(classCode)) activeStudentsByClass.set(classCode, new Set());
+      activeStudentsByClass.get(classCode)!.add(journal.studentId || journal.studentName);
+    }
+  });
+
+  const finishedBooksByClass = new Map<string, Set<string>>();
+  journalsInPeriod.forEach((journal) => {
+    if (!journal.finished || !journal.bookTitle) return;
+    const classCode = journal.classCode || "-";
+    if (!finishedBooksByClass.has(classCode)) finishedBooksByClass.set(classCode, new Set());
+    finishedBooksByClass.get(classCode)!.add(journal.bookTitle.trim().toLowerCase());
+  });
+
+  const classCodes = new Set([...studentsByClass.keys(), ...summaryByClass.keys()]);
+  return Array.from(classCodes)
+    .filter((classCode) => classFilter === "all" || classCode === classFilter)
+    .map((classCode) => {
+      const summary = summaryByClass.get(classCode) || {
+        classCode,
+        totalStudents: 0,
+        activeStudents: 0,
+        totalJournals: 0,
+        approvedCount: 0,
+        pendingCount: 0,
+        totalPagesRead: 0,
+        booksFinished: 0,
+      };
+      summary.totalStudents = studentsByClass.get(classCode)?.size || 0;
+      summary.activeStudents = activeStudentsByClass.get(classCode)?.size || 0;
+      summary.booksFinished = finishedBooksByClass.get(classCode)?.size || 0;
+      return summary;
+    })
+    .sort((a, b) => a.classCode.localeCompare(b.classCode));
+}
+
+/** Helper untuk ranking buku & nilai karakter */
+function getTopEntries(map: Map<string, number>, limit = 5): [string, number][] {
+  return Array.from(map.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit);
+}
+
+function getTopBooks(journalsInput: Journal[], limit = 10): [string, number][] {
+  const bookCount = new Map<string, number>();
+  journalsInput.forEach((j) => {
+    if (j.bookTitle?.trim()) {
+      const title = j.bookTitle.trim();
+      bookCount.set(title, (bookCount.get(title) || 0) + 1);
+    }
+  });
+  return getTopEntries(bookCount, limit);
+}
+
+function getTopCharacters(journalsInput: Journal[], limit = 10): [string, number][] {
+  const charCount = new Map<string, number>();
+  journalsInput.forEach((j) => {
+    getCharacterList(j).forEach((c) => {
+      const val = c.trim();
+      if (val) charCount.set(val, (charCount.get(val) || 0) + 1);
+    });
+  });
+  return getTopEntries(charCount, limit);
+}
+
+/* ------------------------------------------------------------------ */
+
 function StatCard({
   label,
   value,
@@ -178,7 +368,6 @@ function DailyProgressChart({ journals }: { journals: Journal[] }) {
   const data = useMemo(() => {
     const map = new Map<string, number>();
     const now = new Date();
-    // last 14 days
     for (let i = 13; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
@@ -216,7 +405,6 @@ function DailyProgressChart({ journals }: { journals: Journal[] }) {
   return (
     <div className="w-full overflow-x-auto">
       <svg viewBox={`0 0 ${w} ${h}`} className="w-full max-w-full h-40">
-        {/* grid lines */}
         {[0, 0.25, 0.5, 0.75, 1].map((t) => {
           const y = pad + innerH - t * innerH;
           return (
@@ -267,12 +455,6 @@ function DailyProgressChart({ journals }: { journals: Journal[] }) {
   );
 }
 
-/**
- * Latar belakang lucu & interaktif bertema "kebun literasi".
- * Bunga, hati, bintang, dan buku mengambang lembut, dan bergeser halus
- * mengikuti posisi kursor (parallax ringan) — dekorasi murni, tidak
- * mengganggu konten & dinonaktifkan otomatis jika reduced-motion aktif.
- */
 function CuteBackground({ mouse }: { mouse: { x: number; y: number } }) {
   const dx = (mouse.x - 0.5) * 26;
   const dy = (mouse.y - 0.5) * 26;
@@ -310,7 +492,6 @@ function CuteBackground({ mouse }: { mouse: { x: number; y: number } }) {
         }
       `}</style>
 
-      {/* gumpalan warna lembut, bergeser halus mengikuti kursor */}
       <div
         className="absolute -top-24 -left-24 w-72 h-72 bg-pink-200/40 rounded-full blur-3xl transition-transform duration-700 ease-out"
         style={{ transform: `translate(${dx * 0.3}px, ${dy * 0.3}px)` }}
@@ -324,7 +505,6 @@ function CuteBackground({ mouse }: { mouse: { x: number; y: number } }) {
         style={{ transform: `translate(${dx * 0.2}px, ${-dy * 0.2}px)` }}
       />
 
-      {/* elemen lucu yang mengambang & bereaksi lembut terhadap kursor */}
       {floaters.map(({ Icon, top, left, size, depth, color, duration, delay }, i) => (
         <div
           key={i}
@@ -362,10 +542,9 @@ export default function TeacherDashboard() {
   const [classFilter, setClassFilter] = useState<string>("all");
   const [reportView, setReportView] = useState<ReportView>("kelas");
   const [reportPeriod, setReportPeriod] = useState<ReportPeriod>("all");
-  const [reportMonth, setReportMonth] = useState("");
-  const [reportStartDate, setReportStartDate] = useState("");
-  const [reportEndDate, setReportEndDate] = useState("");
+  const [reportMonth, setReportMonth] = useState(getCurrentMonthInput());
   const [reportClass, setReportClass] = useState("all");
+  const [reportStudent, setReportStudent] = useState<string>("all");
   const [classSummaryMonth, setClassSummaryMonth] = useState(getCurrentMonthInput());
   const [classSummaryClass, setClassSummaryClass] = useState("all");
   const [editingStudent, setEditingStudent] = useState<RosterStudent | null>(null);
@@ -384,7 +563,6 @@ export default function TeacherDashboard() {
     }
   }, [user, userProfile, loading]);
 
-  // Latar belakang lucu & interaktif: ikuti posisi kursor secara halus
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       setMousePos({
@@ -396,7 +574,6 @@ export default function TeacherDashboard() {
     return () => window.removeEventListener("mousemove", handleMouseMove);
   }, []);
 
-  // Guru memantau SEMUA kelas
   const fetchClassJournals = async () => {
     const querySnapshot = await getDocs(collection(db, "journals"));
     const docs: Journal[] = [];
@@ -404,7 +581,6 @@ export default function TeacherDashboard() {
     setJournals(docs);
   };
 
-  // Ambil roster siswa + gender dari koleksi "users"
   const fetchAllStudents = async () => {
     const q = query(collection(db, "users"), where("role", "==", "student"));
     const querySnapshot = await getDocs(q);
@@ -423,10 +599,14 @@ export default function TeacherDashboard() {
   };
 
   const handleApprove = async (journalId: string) => {
+    const journal = journals.find((item) => item.id === journalId);
+    if (journal?.status === "approved") return;
     const feedback = feedbackInput[journalId] || "";
+    const teacherName = userProfile?.name || "Guru";
     await updateDoc(doc(db, "journals", journalId), {
       status: "approved",
       teacherFeedback: feedback,
+      approvedBy: teacherName,
     });
     fetchClassJournals();
   };
@@ -502,77 +682,11 @@ export default function TeacherDashboard() {
     }
   };
 
-  // ---- Agregasi per siswa (termasuk gender dari roster) ----
-  const studentSummaries: StudentSummary[] = useMemo(() => {
-    const map = new Map<string, StudentSummary>();
-
-    const genderByName = new Map<string, string>();
-    allStudents.forEach((stu) => {
-      if (stu.gender) genderByName.set(stu.name, stu.gender);
-    });
-
-    journals.forEach((j) => {
-      const key = j.studentName || "Tanpa Nama";
-      if (!map.has(key)) {
-        map.set(key, {
-          name: key,
-          classCode: j.classCode || "-",
-          gender: (genderByName.get(key) as StudentSummary["gender"]) || "",
-          totalJournals: 0,
-          approvedCount: 0,
-          pendingCount: 0,
-          totalPagesRead: 0,
-          booksFinished: 0,
-          lastSubmission: null,
-          journals: [],
-        });
-      }
-      const s = map.get(key)!;
-      s.totalJournals += 1;
-      if (j.status === "approved") s.approvedCount += 1;
-      else s.pendingCount += 1;
-      const pages = Number(j.endPage) - Number(j.startPage);
-      if (!Number.isNaN(pages) && pages > 0) s.totalPagesRead += pages;
-      if (j.finished) s.booksFinished += 1;
-      const d = toDateSafe(j.createdAt);
-      if (d && (!s.lastSubmission || d > s.lastSubmission)) s.lastSubmission = d;
-      s.journals.push(j);
-    });
-
-    // Hitung buku selesai unik per siswa
-    map.forEach((s) => {
-      const titles = new Set<string>();
-      s.journals.forEach((j) => {
-        if (j.finished && j.bookTitle) titles.add(j.bookTitle.trim().toLowerCase());
-      });
-      s.booksFinished = titles.size;
-    });
-
-    // Siswa terdaftar yang belum pernah mengirim jurnal + pastikan gender terisi
-    allStudents.forEach((stu) => {
-      if (!map.has(stu.name)) {
-        map.set(stu.name, {
-          name: stu.name,
-          classCode: stu.classCode,
-          gender: stu.gender || "",
-          totalJournals: 0,
-          approvedCount: 0,
-          pendingCount: 0,
-          totalPagesRead: 0,
-          booksFinished: 0,
-          lastSubmission: null,
-          journals: [],
-        });
-      } else {
-        const existing = map.get(stu.name)!;
-        if (!existing.gender && stu.gender) {
-          existing.gender = stu.gender;
-        }
-      }
-    });
-
-    return Array.from(map.values()).sort((a, b) => b.totalJournals - a.totalJournals);
-  }, [journals, allStudents]);
+  // Ringkasan per siswa, sepanjang waktu (dipakai di tab Ringkasan & Pendampingan).
+  const studentSummaries: StudentSummary[] = useMemo(
+    () => buildStudentSummaries(journals, allStudents),
+    [journals, allStudents]
+  );
 
   const availableClasses = useMemo(() => {
     const set = new Set<string>();
@@ -585,79 +699,11 @@ export default function TeacherDashboard() {
     return Array.from(set).sort();
   }, [journals, allStudents]);
 
-  const classSummaries: ClassSummary[] = useMemo(() => {
-    const summaryByClass = new Map<string, ClassSummary>();
-    const studentsByClass = new Map<string, Set<string>>();
-    const activeStudentsByClass = new Map<string, Set<string>>();
-
-    allStudents.forEach((student) => {
-      const classCode = student.classCode || "-";
-      if (!studentsByClass.has(classCode)) studentsByClass.set(classCode, new Set());
-      studentsByClass.get(classCode)!.add(student.uid);
-    });
-
-    const selectedMonthJournals = journals.filter((journal) => {
-      const date = toDateSafe(journal.createdAt);
-      if (!date || !classSummaryMonth) return false;
-      const month = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-      return month === classSummaryMonth;
-    });
-
-    selectedMonthJournals.forEach((journal) => {
-      const classCode = journal.classCode || "-";
-      if (!summaryByClass.has(classCode)) {
-        summaryByClass.set(classCode, {
-          classCode,
-          totalStudents: 0,
-          activeStudents: 0,
-          totalJournals: 0,
-          approvedCount: 0,
-          pendingCount: 0,
-          totalPagesRead: 0,
-          booksFinished: 0,
-        });
-      }
-      const summary = summaryByClass.get(classCode)!;
-      summary.totalJournals += 1;
-      if (journal.status === "approved") summary.approvedCount += 1;
-      else summary.pendingCount += 1;
-      const pages = Number(journal.endPage) - Number(journal.startPage);
-      if (!Number.isNaN(pages) && pages > 0) summary.totalPagesRead += pages;
-      if (journal.studentName) {
-        if (!activeStudentsByClass.has(classCode)) activeStudentsByClass.set(classCode, new Set());
-        activeStudentsByClass.get(classCode)!.add(journal.studentId || journal.studentName);
-      }
-    });
-
-    const finishedBooksByClass = new Map<string, Set<string>>();
-    selectedMonthJournals.forEach((journal) => {
-      if (!journal.finished || !journal.bookTitle) return;
-      const classCode = journal.classCode || "-";
-      if (!finishedBooksByClass.has(classCode)) finishedBooksByClass.set(classCode, new Set());
-      finishedBooksByClass.get(classCode)!.add(journal.bookTitle.trim().toLowerCase());
-    });
-
-    const classCodes = new Set([...studentsByClass.keys(), ...summaryByClass.keys()]);
-    return Array.from(classCodes)
-      .filter((classCode) => classSummaryClass === "all" || classCode === classSummaryClass)
-      .map((classCode) => {
-        const summary = summaryByClass.get(classCode) || {
-          classCode,
-          totalStudents: 0,
-          activeStudents: 0,
-          totalJournals: 0,
-          approvedCount: 0,
-          pendingCount: 0,
-          totalPagesRead: 0,
-          booksFinished: 0,
-        };
-        summary.totalStudents = studentsByClass.get(classCode)?.size || 0;
-        summary.activeStudents = activeStudentsByClass.get(classCode)?.size || 0;
-        summary.booksFinished = finishedBooksByClass.get(classCode)?.size || 0;
-        return summary;
-      })
-      .sort((a, b) => a.classCode.localeCompare(b.classCode));
-  }, [journals, allStudents, classSummaryMonth, classSummaryClass]);
+  // Rangkuman kelas per bulan (tab Ringkasan)
+  const classSummaries: ClassSummary[] = useMemo(
+    () => buildClassSummaries(filterJournalsByPeriod(journals, "month", classSummaryMonth), allStudents, classSummaryClass),
+    [journals, allStudents, classSummaryMonth, classSummaryClass]
+  );
 
   const filteredStudents = useMemo(() => {
     return studentSummaries.filter((s) => {
@@ -684,19 +730,9 @@ export default function TeacherDashboard() {
       return d ? d >= startOfMonth : false;
     }).length;
 
-    const bookCount = new Map<string, number>();
-    const charCount = new Map<string, number>();
-    journals.forEach((j) => {
-      if (j.bookTitle) bookCount.set(j.bookTitle, (bookCount.get(j.bookTitle) || 0) + 1);
-      getCharacterList(j).forEach((c) => charCount.set(c, (charCount.get(c) || 0) + 1));
-    });
-    const topEntry = (m: Map<string, number>): [string, number] | null => {
-      let best: [string, number] | null = null;
-      m.forEach((v, k) => {
-        if (!best || v > best[1]) best = [k, v];
-      });
-      return best;
-    };
+    const topBooks = getTopBooks(journals, 5);
+    const topCharacters = getTopCharacters(journals, 5);
+
     return {
       totalSiswa,
       totalJurnal,
@@ -706,8 +742,10 @@ export default function TeacherDashboard() {
       totalHalaman,
       totalBukuSelesai,
       jurnalBulanIni,
-      bukuTerpopuler: topEntry(bookCount),
-      nilaiKarakterTerbanyak: topEntry(charCount),
+      topBooks,
+      topCharacters,
+      bukuTerpopuler: topBooks[0] || null,
+      nilaiKarakterTerbanyak: topCharacters[0] || null,
     };
   }, [journals, studentSummaries]);
 
@@ -746,22 +784,41 @@ export default function TeacherDashboard() {
     [studentSummaries, selectedStudent]
   );
 
-  const filteredReportJournals = useMemo(() => {
-    return journals.filter((journal) => {
-      if (reportClass !== "all" && journal.classCode !== reportClass) return false;
-      const date = toDateSafe(journal.createdAt);
-      if (reportPeriod === "all" || !date) return reportPeriod === "all";
-      if (reportPeriod === "month") {
-        if (!reportMonth) return true;
-        return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}` === reportMonth;
-      }
-      const start = reportStartDate ? new Date(`${reportStartDate}T00:00:00`) : null;
-      const end = reportEndDate ? new Date(`${reportEndDate}T23:59:59.999`) : null;
-      if (start && date < start) return false;
-      if (end && date > end) return false;
-      return true;
-    });
-  }, [journals, reportClass, reportPeriod, reportMonth, reportStartDate, reportEndDate]);
+  /* ---- Data khusus tab Laporan ---- */
+
+  const reportPeriodJournals = useMemo(
+    () => filterJournalsByPeriod(journals, reportPeriod, reportMonth),
+    [journals, reportPeriod, reportMonth]
+  );
+
+  const reportClassSummaries: ClassSummary[] = useMemo(
+    () => buildClassSummaries(reportPeriodJournals, allStudents, reportClass),
+    [reportPeriodJournals, allStudents, reportClass]
+  );
+
+  const reportStudentSummaries: StudentSummary[] = useMemo(
+    () => buildStudentSummaries(reportPeriodJournals, allStudents),
+    [reportPeriodJournals, allStudents]
+  );
+
+  const reportSelectedStudentSummary: StudentSummary | null = useMemo(
+    () => (reportStudent === "all" ? null : reportStudentSummaries.find((s) => s.name === reportStudent) || null),
+    [reportStudentSummaries, reportStudent]
+  );
+
+  const reportStudentSummariesForExport = useMemo(
+    () =>
+      reportStudent === "all"
+        ? reportStudentSummaries
+        : reportStudentSummaries.filter((s) => s.name === reportStudent),
+    [reportStudentSummaries, reportStudent]
+  );
+
+  // Statistik Buku & Karakter khusus untuk periode laporan
+  const reportTopBooks = useMemo(() => getTopBooks(reportPeriodJournals, 10), [reportPeriodJournals]);
+  const reportTopCharacters = useMemo(() => getTopCharacters(reportPeriodJournals, 10), [reportPeriodJournals]);
+
+  const reportPeriodLabel = reportPeriod === "all" ? "sepanjang waktu" : `bulan ${reportMonth || "-"}`;
 
   const downloadCSV = (headers: string[], rows: (string | number)[][], filename: string) => {
     const csvContent = [headers, ...rows]
@@ -780,52 +837,236 @@ export default function TeacherDashboard() {
 
   const handleExportCSV = () => {
     if (reportView === "siswa") {
+      if (reportStudent !== "all" && reportSelectedStudentSummary) {
+        // Laporan personal: rincian jurnal siswa itu pada periode terpilih.
+        const headers = [
+          "Judul Buku",
+          "Penulis",
+          "Genre",
+          "Halaman",
+          "Nilai Karakter",
+          "Status",
+          "Umpan Balik Guru",
+          "Divalidasi Oleh",
+          "Tanggal",
+        ];
+        const rows = reportSelectedStudentSummary.journals.map((j) => [
+          j.bookTitle,
+          j.author,
+          j.genre || "",
+          `${j.startPage}-${j.endPage}`,
+          getCharacterList(j).join(", "),
+          j.status === "approved" ? "Tervalidasi" : "Menunggu",
+          j.teacherFeedback || "",
+          j.approvedBy || "",
+          formatTanggal(toDateSafe(j.createdAt)),
+        ]);
+        downloadCSV(
+          headers,
+          rows,
+          `laporan-personal-${reportStudent}-${reportPeriod === "all" ? "semua" : reportMonth}-${new Date()
+            .toISOString()
+            .slice(0, 10)}.csv`
+        );
+      } else {
+        const headers = [
+          "Nama Siswa",
+          "Kelas",
+          "Gender",
+          "Total Jurnal",
+          "Tervalidasi",
+          "Menunggu",
+          "Halaman Dibaca",
+          "Buku Selesai",
+        ];
+        const rows = reportStudentSummariesForExport.map((s) => [
+          s.name,
+          s.classCode,
+          formatGender(s.gender),
+          s.totalJournals,
+          s.approvedCount,
+          s.pendingCount,
+          s.totalPagesRead,
+          s.booksFinished,
+        ]);
+        downloadCSV(
+          headers,
+          rows,
+          `laporan-persiswa-semua-${reportPeriod === "all" ? "semua" : reportMonth}-${new Date()
+            .toISOString()
+            .slice(0, 10)}.csv`
+        );
+      }
+    } else {
       const headers = [
-        "Nama Siswa",
         "Kelas",
-        "Gender",
+        "Total Siswa",
+        "Siswa Aktif",
         "Total Jurnal",
         "Tervalidasi",
         "Menunggu",
         "Halaman Dibaca",
         "Buku Selesai",
       ];
-      const rows = studentSummaries.map((s) => [
-        s.name,
+      const rows = reportClassSummaries.map((s) => [
         s.classCode,
-        formatGender(s.gender),
+        s.totalStudents,
+        s.activeStudents,
         s.totalJournals,
         s.approvedCount,
         s.pendingCount,
         s.totalPagesRead,
         s.booksFinished,
       ]);
-      downloadCSV(headers, rows, `laporan-persiswa-semua-kelas-${new Date().toISOString().slice(0, 10)}.csv`);
-    } else {
-      const headers = [
+      downloadCSV(
+        headers,
+        rows,
+        `laporan-perkelas-${reportClass}-${reportPeriod === "all" ? "semua" : reportMonth}-${new Date()
+          .toISOString()
+          .slice(0, 10)}.csv`
+      );
+    }
+  };
+
+  /** Export Buku & Karakter — digabung + nama siswa yang membacanya */
+  const handleExportBooksAndCharacters = () => {
+    // Bangun peta: buku → set nama siswa, karakter → set nama siswa
+    const bookToStudents = new Map<string, Set<string>>();
+    const charToStudents = new Map<string, Set<string>>();
+
+    reportPeriodJournals.forEach((j) => {
+      const studentName = j.studentName?.trim() || "Tanpa Nama";
+
+      if (j.bookTitle?.trim()) {
+        const title = j.bookTitle.trim();
+        if (!bookToStudents.has(title)) bookToStudents.set(title, new Set());
+        bookToStudents.get(title)!.add(studentName);
+      }
+
+      getCharacterList(j).forEach((c) => {
+        const val = c.trim();
+        if (!val) return;
+        if (!charToStudents.has(val)) charToStudents.set(val, new Set());
+        charToStudents.get(val)!.add(studentName);
+      });
+    });
+
+    const lines: string[] = [];
+
+    // Header info
+    lines.push(`"Laporan Buku & Nilai Karakter"`);
+    lines.push(`"Periode","${reportPeriodLabel}"`);
+    lines.push(`"Tanggal unduh","${formatTanggal(new Date())}"`);
+    lines.push(`"Total jurnal dalam periode","${reportPeriodJournals.length}"`);
+    lines.push("");
+
+    // ===== Section Buku =====
+    lines.push(`"=== DAFTAR BUKU TERPOPULER (dengan nama siswa) ==="`);
+    lines.push(
+      ["Peringkat", "Judul Buku", "Jumlah Jurnal", "Jumlah Siswa", "Nama Siswa yang Membaca"]
+        .map((h) => `"${h}"`)
+        .join(",")
+    );
+
+    reportTopBooks.forEach(([title, count], idx) => {
+      const students = Array.from(bookToStudents.get(title) || []).sort((a, b) =>
+        a.localeCompare(b, "id")
+      );
+      lines.push(
+        [
+          idx + 1,
+          title,
+          count,
+          students.length,
+          students.join("; "),
+        ]
+          .map((f) => `"${String(f).replace(/"/g, '""')}"`)
+          .join(",")
+      );
+    });
+
+    lines.push("");
+
+    // ===== Section Nilai Karakter =====
+    lines.push(`"=== DAFTAR NILAI KARAKTER TERBANYAK (dengan nama siswa) ==="`);
+    lines.push(
+      ["Peringkat", "Nilai Karakter", "Jumlah Muncul", "Jumlah Siswa", "Nama Siswa yang Menulis"]
+        .map((h) => `"${h}"`)
+        .join(",")
+    );
+
+    reportTopCharacters.forEach(([val, count], idx) => {
+      const students = Array.from(charToStudents.get(val) || []).sort((a, b) =>
+        a.localeCompare(b, "id")
+      );
+      lines.push(
+        [
+          idx + 1,
+          val,
+          count,
+          students.length,
+          students.join("; "),
+        ]
+          .map((f) => `"${String(f).replace(/"/g, '""')}"`)
+          .join(",")
+      );
+    });
+
+    lines.push("");
+
+    // ===== Section Rincian Jurnal (opsional, digabung) =====
+    lines.push(`"=== RINCIAN JURNAL PERIODE INI (gabungan data) ==="`);
+    lines.push(
+      [
         "Nama Siswa",
+        "Kelas",
         "Judul Buku",
         "Penulis",
         "Genre",
         "Halaman",
         "Nilai Karakter",
         "Status",
-        "Umpan Balik Guru",
         "Tanggal",
-      ];
-      const rows = filteredReportJournals.map((j) => [
-        j.studentName,
-        j.bookTitle,
-        j.author,
-        j.genre || "",
-        `${j.startPage}-${j.endPage}`,
-        getCharacterList(j).join(", "),
-        j.status === "approved" ? "Tervalidasi" : "Menunggu",
-        j.teacherFeedback || "",
-        formatTanggal(toDateSafe(j.createdAt)),
-      ]);
-      downloadCSV(headers, rows, `laporan-perkelas-${reportClass}-${new Date().toISOString().slice(0, 10)}.csv`);
-    }
+      ]
+        .map((h) => `"${h}"`)
+        .join(",")
+    );
+
+    reportPeriodJournals
+      .slice()
+      .sort(
+        (a, b) =>
+          (toDateSafe(b.createdAt)?.getTime() || 0) - (toDateSafe(a.createdAt)?.getTime() || 0)
+      )
+      .forEach((j) => {
+        lines.push(
+          [
+            j.studentName || "",
+            j.classCode || "",
+            j.bookTitle || "",
+            j.author || "",
+            j.genre || "",
+            `${j.startPage}-${j.endPage}`,
+            getCharacterList(j).join(", "),
+            j.status === "approved" ? "Tervalidasi" : "Menunggu",
+            formatTanggal(toDateSafe(j.createdAt)),
+          ]
+            .map((f) => `"${String(f).replace(/"/g, '""')}"`)
+            .join(",")
+        );
+      });
+
+    const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `laporan-buku-dan-karakter-${reportPeriod === "all" ? "semua" : reportMonth}-${new Date()
+      .toISOString()
+      .slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const handlePrint = () => {
@@ -891,9 +1132,9 @@ export default function TeacherDashboard() {
                 key={t.key}
                 onClick={() => setActiveTab(t.key)}
                 className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-sm font-semibold transition sm:px-4 ${
-                activeTab === t.key
-                  ? "bg-emerald-600 text-white shadow-sm"
-                  : "text-emerald-800/70 hover:bg-emerald-50"
+                  activeTab === t.key
+                    ? "bg-emerald-600 text-white shadow-sm"
+                    : "text-emerald-800/70 hover:bg-emerald-50"
                 }`}
               >
                 {t.label}
@@ -959,31 +1200,48 @@ export default function TeacherDashboard() {
               />
             </div>
 
+            {/* Top Buku & Nilai Karakter */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-white/80 backdrop-blur-sm p-5 rounded-2xl shadow-sm shadow-emerald-900/5 border border-white">
-                <h3 className="text-sm font-semibold text-emerald-700/70 mb-2">Buku Terpopuler</h3>
-                <p className="text-lg font-bold text-emerald-900">
-                  {classStats.bukuTerpopuler ? classStats.bukuTerpopuler[0] : "-"}
-                </p>
-                {classStats.bukuTerpopuler && (
-                  <p className="text-xs text-emerald-700/50">
-                    Dibaca dalam {classStats.bukuTerpopuler[1]} jurnal
-                  </p>
+                <h3 className="text-sm font-semibold text-emerald-700/70 mb-3">Top 5 Buku Terpopuler</h3>
+                {classStats.topBooks.length === 0 ? (
+                  <p className="text-sm text-emerald-700/50">Belum ada data buku.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {classStats.topBooks.map(([title, count], idx) => (
+                      <li key={title} className="flex items-center justify-between gap-2 text-sm">
+                        <span className="flex items-center gap-2 min-w-0">
+                          <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold flex items-center justify-center shrink-0">
+                            {idx + 1}
+                          </span>
+                          <span className="font-medium text-emerald-900 truncate">{title}</span>
+                        </span>
+                        <span className="text-xs text-emerald-700/60 shrink-0">{count} jurnal</span>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
               <div className="bg-white/80 backdrop-blur-sm p-5 rounded-2xl shadow-sm shadow-emerald-900/5 border border-white">
-                <h3 className="text-sm font-semibold text-emerald-700/70 mb-2">
-                  Nilai Karakter Terbanyak
+                <h3 className="text-sm font-semibold text-emerald-700/70 mb-3">
+                  Top 5 Nilai Karakter
                 </h3>
-                <p className="text-lg font-bold text-emerald-900">
-                  {classStats.nilaiKarakterTerbanyak
-                    ? classStats.nilaiKarakterTerbanyak[0]
-                    : "-"}
-                </p>
-                {classStats.nilaiKarakterTerbanyak && (
-                  <p className="text-xs text-emerald-700/50">
-                    Muncul di {classStats.nilaiKarakterTerbanyak[1]} jurnal
-                  </p>
+                {classStats.topCharacters.length === 0 ? (
+                  <p className="text-sm text-emerald-700/50">Belum ada data nilai karakter.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {classStats.topCharacters.map(([val, count], idx) => (
+                      <li key={val} className="flex items-center justify-between gap-2 text-sm">
+                        <span className="flex items-center gap-2 min-w-0">
+                          <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-xs font-bold flex items-center justify-center shrink-0">
+                            {idx + 1}
+                          </span>
+                          <span className="font-medium text-emerald-900 truncate">{val}</span>
+                        </span>
+                        <span className="text-xs text-emerald-700/60 shrink-0">{count}x</span>
+                      </li>
+                    ))}
+                  </ul>
                 )}
               </div>
             </div>
@@ -1210,6 +1468,14 @@ export default function TeacherDashboard() {
                         {j.status === "approved" ? "Sudah Divalidasi" : "Belum Divalidasi"}
                       </span>
                     </div>
+
+                    {j.status === "approved" && j.approvedBy && (
+                      <p className="text-xs text-emerald-700/60">
+                        Divalidasi oleh:{" "}
+                        <span className="font-semibold text-emerald-800">{j.approvedBy}</span>
+                      </p>
+                    )}
+
                     <p className="text-sm text-emerald-800/80">
                       <strong>Buku:</strong> {j.bookTitle} ({j.author})
                       {j.genre ? ` · ${j.genre}` : ""} — Hal. {j.startPage}-{j.endPage}
@@ -1219,29 +1485,32 @@ export default function TeacherDashboard() {
                       <strong>Nilai Karakter:</strong> {getCharacterList(j).join(", ") || "-"}
                     </p>
                     <p className="text-sm text-emerald-700/70 italic">&quot;{j.summary}&quot;</p>
-                    <div className="mt-2 flex gap-2">
+                    <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
                       <input
                         type="text"
                         placeholder="Tulis umpan balik / pujian..."
-                        className="flex-1 p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition"
+                        className="min-w-0 w-full flex-1 p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition"
                         value={feedbackInput[j.id] || j.teacherFeedback || ""}
                         onChange={(e) =>
                           setFeedbackInput({ ...feedbackInput, [j.id]: e.target.value })
                         }
                       />
-                      <button
-                        onClick={() => handleApprove(j.id)}
-                        className="px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 active:scale-[0.98] transition"
-                      >
-                        Validasi
-                      </button>
-                      <button
-                        onClick={() => handleDeleteJournal(j.id)}
-                        aria-label={`Hapus jurnal ${j.bookTitle}`}
-                        className="flex items-center justify-center px-3 py-2 text-red-600 border border-red-200 bg-red-50 rounded-xl hover:bg-red-100 transition"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex w-full gap-2 sm:w-auto">
+                        <button
+                          onClick={() => handleApprove(j.id)}
+                          disabled={j.status === "approved"}
+                          className="flex-1 whitespace-nowrap px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 active:scale-[0.98] transition disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:active:scale-100"
+                        >
+                          {j.status === "approved" ? "Sudah Valid" : "Validasi"}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteJournal(j.id)}
+                          aria-label={`Hapus jurnal ${j.bookTitle}`}
+                          className="flex items-center justify-center px-3 py-2 text-red-600 border border-red-200 bg-red-50 rounded-xl hover:bg-red-100 transition"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -1386,19 +1655,49 @@ export default function TeacherDashboard() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-emerald-50/50 border border-emerald-100 rounded-xl p-3">
-              <div>
-                <label className="text-xs text-emerald-700/70 mb-1 block">Kelas laporan</label>
-                <select
-                  value={reportClass}
-                  onChange={(e) => setReportClass(e.target.value)}
-                  className="w-full p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
-                >
-                  <option value="all">Semua kelas</option>
-                  {availableClasses.map((classCode) => (
-                    <option key={classCode} value={classCode}>{classCode}</option>
-                  ))}
-                </select>
-              </div>
+              {reportView === "kelas" && (
+                <div>
+                  <label className="text-xs text-emerald-700/70 mb-1 block">Kelas laporan</label>
+                  <select
+                    value={reportClass}
+                    onChange={(e) => setReportClass(e.target.value)}
+                    className="w-full p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
+                  >
+                    <option value="all">Semua kelas</option>
+                    {availableClasses.map((classCode) => (
+                      <option key={classCode} value={classCode}>{classCode}</option>
+                    ))}
+                  </select>
+                  <p className="text-[11px] text-emerald-700/50 mt-1">
+                    &quot;Semua kelas&quot; menampilkan rekap gabungan tiap kelas yang terdaftar.
+                  </p>
+                </div>
+              )}
+
+              {reportView === "siswa" && (
+                <div>
+                  <label className="text-xs text-emerald-700/70 mb-1 block">Laporan Siswa</label>
+                  <select
+                    value={reportStudent}
+                    onChange={(e) => setReportStudent(e.target.value)}
+                    className="w-full p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
+                  >
+                    <option value="all">Semua siswa</option>
+                    {studentSummaries
+                      .slice()
+                      .sort((a, b) => a.name.localeCompare(b.name, "id"))
+                      .map((s) => (
+                        <option key={s.name} value={s.name}>
+                          {s.name} (Kelas {s.classCode})
+                        </option>
+                      ))}
+                  </select>
+                  <p className="text-[11px] text-emerald-700/50 mt-1">
+                    Pilih satu siswa untuk laporan personal, atau &quot;Semua siswa&quot; untuk tabel ringkasan.
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label className="text-xs text-emerald-700/70 mb-1 block">Periode</label>
                 <select
@@ -1406,11 +1705,11 @@ export default function TeacherDashboard() {
                   onChange={(e) => setReportPeriod(e.target.value as ReportPeriod)}
                   className="w-full p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
                 >
-                  <option value="all">All time</option>
-                  <option value="month">Per bulan</option>
-                  <option value="range">Rentang tanggal</option>
+                  <option value="all">Semua waktu (all time)</option>
+                  <option value="month">Bulanan</option>
                 </select>
               </div>
+
               {reportPeriod === "month" && (
                 <div>
                   <label className="text-xs text-emerald-700/70 mb-1 block">Pilih bulan</label>
@@ -1422,40 +1721,34 @@ export default function TeacherDashboard() {
                   />
                 </div>
               )}
-              {reportPeriod === "range" && (
-                <>
-                  <div>
-                    <label className="text-xs text-emerald-700/70 mb-1 block">Dari tanggal</label>
-                    <input
-                      type="date"
-                      value={reportStartDate}
-                      onChange={(e) => setReportStartDate(e.target.value)}
-                      className="w-full p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-emerald-700/70 mb-1 block">Sampai tanggal</label>
-                    <input
-                      type="date"
-                      value={reportEndDate}
-                      onChange={(e) => setReportEndDate(e.target.value)}
-                      className="w-full p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
-                    />
-                  </div>
-                </>
-              )}
             </div>
+
             <p className="text-xs text-emerald-700/60">
-              Menampilkan {filteredReportJournals.length} jurnal untuk {reportClass === "all" ? "semua kelas" : `kelas ${reportClass}`}.
+              {reportView === "siswa"
+                ? reportStudent === "all"
+                  ? `Menampilkan ${reportStudentSummariesForExport.length} siswa (${reportPeriodLabel}).`
+                  : `Laporan personal ${reportStudent} (${reportPeriodLabel}) · ${
+                      reportSelectedStudentSummary?.totalJournals ?? 0
+                    } jurnal.`
+                : `Menampilkan ${reportClassSummaries.length} kelas untuk ${
+                    reportClass === "all" ? "semua kelas" : `kelas ${reportClass}`
+                  } (${reportPeriodLabel}).`}
             </p>
 
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <button
                 onClick={handleExportCSV}
                 className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 active:scale-[0.98] transition"
               >
                 <Download className="w-4 h-4" />
                 Unduh CSV / Excel
+              </button>
+              <button
+                onClick={handleExportBooksAndCharacters}
+                className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white text-sm font-semibold rounded-xl hover:bg-teal-700 active:scale-[0.98] transition"
+              >
+                <Download className="w-4 h-4" />
+                Unduh Buku & Karakter
               </button>
               <button
                 onClick={handlePrint}
@@ -1466,80 +1759,239 @@ export default function TeacherDashboard() {
               </button>
             </div>
 
+            {/* Section khusus Buku & Nilai Karakter */}
+            <div className="border border-emerald-100 rounded-xl p-4 bg-emerald-50/30">
+              <h3 className="text-sm font-semibold text-emerald-800 mb-3">
+                Buku & Nilai Karakter ({reportPeriodLabel})
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <h4 className="text-xs font-semibold text-emerald-700/70 mb-2">Top 10 Buku</h4>
+                  {reportTopBooks.length === 0 ? (
+                    <p className="text-sm text-emerald-700/50">Belum ada data buku pada periode ini.</p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {reportTopBooks.map(([title, count], idx) => (
+                        <li key={title} className="flex items-center justify-between gap-2 text-sm">
+                          <span className="flex items-center gap-2 min-w-0">
+                            <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold flex items-center justify-center shrink-0">
+                              {idx + 1}
+                            </span>
+                            <span className="font-medium text-emerald-900 truncate">{title}</span>
+                          </span>
+                          <span className="text-xs text-emerald-700/60 shrink-0">{count} jurnal</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <div>
+                  <h4 className="text-xs font-semibold text-emerald-700/70 mb-2">Top 10 Nilai Karakter</h4>
+                  {reportTopCharacters.length === 0 ? (
+                    <p className="text-sm text-emerald-700/50">Belum ada data nilai karakter pada periode ini.</p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {reportTopCharacters.map(([val, count], idx) => (
+                        <li key={val} className="flex items-center justify-between gap-2 text-sm">
+                          <span className="flex items-center gap-2 min-w-0">
+                            <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-xs font-bold flex items-center justify-center shrink-0">
+                              {idx + 1}
+                            </span>
+                            <span className="font-medium text-emerald-900 truncate">{val}</span>
+                          </span>
+                          <span className="text-xs text-emerald-700/60 shrink-0">{count}x</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+              <p className="text-[11px] text-emerald-700/50 mt-3">
+                Klik tombol <strong>Unduh Buku & Karakter</strong> untuk mendapatkan file CSV yang
+                sudah digabung (buku + nilai karakter + nama siswa yang membacanya + rincian jurnal).
+              </p>
+            </div>
+
             <div className="border-t border-emerald-100 pt-4">
               <h3 className="text-sm font-semibold text-emerald-800 mb-2">Pratinjau</h3>
 
+              {/* ---- Pratinjau: Rekapan Per Kelas ---- */}
               {reportView === "kelas" && (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-emerald-700/60 border-b border-emerald-100">
-                        <th className="py-2 pr-2">Nama Siswa</th>
-                        <th className="py-2 pr-2">Judul Buku</th>
-                        <th className="py-2 pr-2">Halaman</th>
-                        <th className="py-2 pr-2">Status</th>
-                        <th className="py-2">Tanggal</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredReportJournals.slice(0, 50).map((j) => (
-                        <tr key={j.id} className="border-b border-emerald-50">
-                          <td className="py-2 pr-2 font-medium text-emerald-900">{j.studentName}</td>
-                          <td className="py-2 pr-2 text-emerald-800/80">{j.bookTitle}</td>
-                          <td className="py-2 pr-2 text-emerald-800/80">
-                            {j.startPage}-{j.endPage}
-                          </td>
-                          <td className="py-2 pr-2 text-emerald-800/80">
-                            {j.status === "approved" ? "Tervalidasi" : "Menunggu"}
-                          </td>
-                          <td className="py-2 text-emerald-800/80">
-                            {formatTanggal(toDateSafe(j.createdAt))}
-                          </td>
+                  {reportClassSummaries.length === 0 ? (
+                    <p className="text-sm text-emerald-700/60">Belum ada data untuk periode ini.</p>
+                  ) : (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-left text-emerald-700/60 border-b border-emerald-100">
+                          <th className="py-2 pr-2">Kelas</th>
+                          <th className="py-2 pr-2">Total Siswa</th>
+                          <th className="py-2 pr-2">Siswa Aktif</th>
+                          <th className="py-2 pr-2">Total Jurnal</th>
+                          <th className="py-2 pr-2">Tervalidasi</th>
+                          <th className="py-2 pr-2">Menunggu</th>
+                          <th className="py-2 pr-2">Halaman</th>
+                          <th className="py-2">Buku Selesai</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {filteredReportJournals.length > 50 && (
-                    <p className="text-xs text-emerald-600 mt-2">
-                      Menampilkan 50 dari {filteredReportJournals.length} baris. Unduh CSV untuk data lengkap.
-                    </p>
+                      </thead>
+                      <tbody>
+                        {reportClassSummaries.map((summary) => (
+                          <tr key={summary.classCode} className="border-b border-emerald-50 last:border-0">
+                            <td className="py-2 pr-2 font-semibold text-emerald-900">{summary.classCode}</td>
+                            <td className="py-2 pr-2 text-emerald-800/80">{summary.totalStudents}</td>
+                            <td className="py-2 pr-2 text-emerald-800/80">{summary.activeStudents}</td>
+                            <td className="py-2 pr-2 text-emerald-800/80">{summary.totalJournals}</td>
+                            <td className="py-2 pr-2 text-emerald-800/80">{summary.approvedCount}</td>
+                            <td className="py-2 pr-2 text-emerald-800/80">{summary.pendingCount}</td>
+                            <td className="py-2 pr-2 text-emerald-800/80">{summary.totalPagesRead}</td>
+                            <td className="py-2 text-emerald-800/80">{summary.booksFinished}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
                   )}
                 </div>
               )}
 
-              {reportView === "siswa" && (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left text-emerald-700/60 border-b border-emerald-100">
-                        <th className="py-2">Nama Siswa</th>
-                        <th className="py-2">Kelas</th>
-                        <th className="py-2">Gender</th>
-                        <th className="py-2">Total Jurnal</th>
-                        <th className="py-2">Tervalidasi</th>
-                        <th className="py-2">Menunggu</th>
-                        <th className="py-2">Halaman</th>
-                        <th className="py-2">Buku Selesai</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {studentSummaries.map((s) => (
-                        <tr key={s.name} className="border-b border-emerald-50 last:border-0">
-                          <td className="py-2 font-medium text-emerald-900">{s.name}</td>
-                          <td className="py-2 text-emerald-800/80">{s.classCode}</td>
-                          <td className="py-2 text-emerald-800/80">{formatGender(s.gender)}</td>
-                          <td className="py-2 text-emerald-800/80">{s.totalJournals}</td>
-                          <td className="py-2 text-emerald-800/80">{s.approvedCount}</td>
-                          <td className="py-2 text-emerald-800/80">{s.pendingCount}</td>
-                          <td className="py-2 text-emerald-800/80">{s.totalPagesRead}</td>
-                          <td className="py-2 text-emerald-800/80">{s.booksFinished}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+              {/* ---- Pratinjau: Rekapan Per Siswa ---- */}
+              {reportView === "siswa" &&
+                (reportStudent === "all" ? (
+                  <div className="overflow-x-auto">
+                    {reportStudentSummariesForExport.length === 0 ? (
+                      <p className="text-sm text-emerald-700/60">Belum ada data untuk periode ini.</p>
+                    ) : (
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-left text-emerald-700/60 border-b border-emerald-100">
+                            <th className="py-2">Nama Siswa</th>
+                            <th className="py-2">Kelas</th>
+                            <th className="py-2">Gender</th>
+                            <th className="py-2">Total Jurnal</th>
+                            <th className="py-2">Tervalidasi</th>
+                            <th className="py-2">Menunggu</th>
+                            <th className="py-2">Halaman</th>
+                            <th className="py-2">Buku Selesai</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {reportStudentSummariesForExport.map((s) => (
+                            <tr key={s.name} className="border-b border-emerald-50 last:border-0">
+                              <td className="py-2 font-medium text-emerald-900">{s.name}</td>
+                              <td className="py-2 text-emerald-800/80">{s.classCode}</td>
+                              <td className="py-2 text-emerald-800/80">{formatGender(s.gender)}</td>
+                              <td className="py-2 text-emerald-800/80">{s.totalJournals}</td>
+                              <td className="py-2 text-emerald-800/80">{s.approvedCount}</td>
+                              <td className="py-2 text-emerald-800/80">{s.pendingCount}</td>
+                              <td className="py-2 text-emerald-800/80">{s.totalPagesRead}</td>
+                              <td className="py-2 text-emerald-800/80">{s.booksFinished}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {!reportSelectedStudentSummary || reportSelectedStudentSummary.totalJournals === 0 ? (
+                      <p className="text-sm text-emerald-700/60">
+                        Belum ada jurnal dari {reportStudent} pada periode ini.
+                      </p>
+                    ) : (
+                      <>
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <div>
+                            <p className="text-base font-bold text-emerald-900">
+                              {reportSelectedStudentSummary.name}
+                            </p>
+                            <p className="text-xs text-emerald-700/60">
+                              Kelas {reportSelectedStudentSummary.classCode}
+                              {reportSelectedStudentSummary.gender
+                                ? ` · ${formatGender(reportSelectedStudentSummary.gender)}`
+                                : ""}
+                            </p>
+                          </div>
+                          <p className="text-xs text-emerald-700/50">
+                            Kirim jurnal terakhir: {formatTanggal(reportSelectedStudentSummary.lastSubmission)}
+                          </p>
+                        </div>
 
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                          <StatCard
+                            label="Total Jurnal"
+                            value={reportSelectedStudentSummary.totalJournals}
+                            icon={<BookOpen className="w-4 h-4" />}
+                            color="emerald"
+                          />
+                          <StatCard
+                            label="Halaman Dibaca"
+                            value={reportSelectedStudentSummary.totalPagesRead}
+                            icon={<Library className="w-4 h-4" />}
+                            color="blue"
+                          />
+                          <StatCard
+                            label="Buku Selesai"
+                            value={reportSelectedStudentSummary.booksFinished}
+                            icon={<CheckCircle2 className="w-4 h-4" />}
+                            color="orange"
+                          />
+                          <StatCard
+                            label="Menunggu Validasi"
+                            value={reportSelectedStudentSummary.pendingCount}
+                            icon={<Clock className="w-4 h-4" />}
+                            color="yellow"
+                          />
+                        </div>
+
+                        <div>
+                          <h4 className="text-xs font-semibold text-emerald-700/70 mb-2">
+                            Rincian Jurnal ({reportPeriodLabel})
+                          </h4>
+                          <div className="space-y-2">
+                            {reportSelectedStudentSummary.journals
+                              .slice()
+                              .sort(
+                                (a, b) =>
+                                  (toDateSafe(b.createdAt)?.getTime() || 0) -
+                                  (toDateSafe(a.createdAt)?.getTime() || 0)
+                              )
+                              .map((j) => (
+                                <div key={j.id} className="border border-emerald-100 p-3 rounded-xl bg-emerald-50/50">
+                                  <div className="flex justify-between items-center mb-1">
+                                    <p className="text-sm font-semibold text-emerald-900">
+                                      {j.bookTitle}{" "}
+                                      <span className="font-normal text-emerald-700/60">({j.author})</span>
+                                    </p>
+                                    <span
+                                      className={`text-xs px-2 py-0.5 rounded-lg font-semibold ${
+                                        j.status === "approved"
+                                          ? "bg-emerald-100 text-emerald-700"
+                                          : "bg-yellow-100 text-yellow-700"
+                                      }`}
+                                    >
+                                      {j.status === "approved" ? "Tervalidasi" : "Menunggu"}
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-emerald-700/60">
+                                    Hal. {j.startPage}-{j.endPage}
+                                    {j.finished ? " · Selesai dibaca" : ""} ·{" "}
+                                    {formatTanggal(toDateSafe(j.createdAt))}
+                                  </p>
+                                  <p className="text-xs text-emerald-700/60 mt-0.5">
+                                    <strong>Nilai Karakter:</strong> {getCharacterList(j).join(", ") || "-"}
+                                  </p>
+                                  {j.teacherFeedback && (
+                                    <p className="text-xs text-emerald-800 mt-1">
+                                      <strong>Umpan balik:</strong> {j.teacherFeedback}
+                                    </p>
+                                  )}
+                                </div>
+                              ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
             </div>
           </div>
         )}
@@ -1674,6 +2126,11 @@ export default function TeacherDashboard() {
                       {j.finished ? " · Selesai dibaca" : ""} · Nilai Karakter:{" "}
                       {getCharacterList(j).join(", ") || "-"}
                     </p>
+                    {j.status === "approved" && j.approvedBy && (
+                      <p className="text-xs text-emerald-700/60 mb-1">
+                        Divalidasi oleh: <span className="font-medium">{j.approvedBy}</span>
+                      </p>
+                    )}
                     <p className="text-xs text-emerald-800/70 italic">&quot;{j.summary}&quot;</p>
                     {j.teacherFeedback && (
                       <p className="text-xs text-emerald-800 mt-1">

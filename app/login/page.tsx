@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { sendPasswordResetEmail, signInWithEmailAndPassword, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
@@ -14,12 +14,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
+  const [resetMessage, setResetMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setResetMessage("");
     setLoading(true);
 
     try {
@@ -52,6 +55,26 @@ export default function LoginPage() {
       setError("Email atau password salah.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    setError("");
+    setResetMessage("");
+
+    if (!email.trim()) {
+      setError("Masukkan email terlebih dahulu untuk mengatur ulang password.");
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      await sendPasswordResetEmail(auth, email.trim());
+      setResetMessage("Tautan reset password sudah dikirim. Periksa kotak masuk email kamu.");
+    } catch {
+      setError("Email tidak ditemukan atau gagal mengirim tautan reset password.");
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -134,6 +157,21 @@ export default function LoginPage() {
             {loading ? "Memproses..." : "Masuk"}
           </button>
         </form>
+
+        <button
+          type="button"
+          onClick={handlePasswordReset}
+          disabled={loading || resetLoading}
+          className="w-full mt-3 text-sm font-semibold text-emerald-700 hover:text-emerald-900 hover:underline disabled:opacity-50"
+        >
+          {resetLoading ? "Mengirim tautan..." : "Lupa kata sandi?"}
+        </button>
+
+        {resetMessage && (
+          <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 mt-3">
+            {resetMessage}
+          </p>
+        )}
 
         <p className="text-center text-sm text-slate-600 mt-6">
           Belum punya akun?{" "}

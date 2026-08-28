@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { createUserWithEmailAndPassword } from "firebase/auth";
-import { doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -25,6 +25,22 @@ import {
 const GRADE_LEVELS = [7, 8, 9];
 const SECTIONS = ["A", "B", "C", "D", "E", "F", "G", "H"];
 const TEACHER_ACCESS_CODE = atob("TElURVJBS0FSLUdVUlU");
+
+// Menerjemahkan kode error Firebase Auth ke pesan berbahasa Indonesia
+function getAuthErrorMessage(code: string): string {
+  switch (code) {
+    case "auth/email-already-in-use":
+      return "Email ini sudah terdaftar. Silakan masuk atau gunakan email lain.";
+    case "auth/invalid-email":
+      return "Format email tidak valid.";
+    case "auth/weak-password":
+      return "Password terlalu lemah. Gunakan minimal 6 karakter.";
+    case "auth/network-request-failed":
+      return "Koneksi bermasalah. Periksa internet kamu dan coba lagi.";
+    default:
+      return "Gagal mendaftar. Silakan coba lagi.";
+  }
+}
 
 export default function RegisterPage() {
   const [name, setName] = useState("");
@@ -60,21 +76,43 @@ export default function RegisterPage() {
 
     setLoading(true);
 
-    try {
-      const res = await createUserWithEmailAndPassword(auth, email, password);
+    let createdUser = null;
 
-      await setDoc(doc(db, "users", res.user.uid), {
-        uid: res.user.uid,
-        name,
-        email,
-        role,
-        ...(role === "student" ? { classCode, gender } : {}),
-        createdAt: new Date(),
-      });
+    try {
+      // 1. Buat akun di Firebase Authentication
+      const res = await createUserWithEmailAndPassword(
+        auth,
+        email.trim(),
+        password
+      );
+      createdUser = res.user;
+
+      // 2. Buat profil di Firestore
+      try {
+        await setDoc(doc(db, "users", createdUser.uid), {
+          uid: createdUser.uid,
+          name: name.trim(),
+          email: email.trim(),
+          role,
+          ...(role === "student" ? { classCode, gender } : {}),
+          createdAt: serverTimestamp(),
+        });
+      } catch (firestoreErr) {
+        // PENTING: kalau gagal simpan profil, hapus lagi akun Auth-nya
+        // supaya tidak ada akun "zombie" (bisa login tapi tanpa profil).
+        await createdUser.delete().catch(() => {});
+        throw new Error(
+          "Gagal menyimpan profil akun. Silakan coba daftar ulang."
+        );
+      }
 
       router.push(role === "teacher" ? "/dashboard/teacher" : "/dashboard/student");
     } catch (err: any) {
-      setError(err.message || "Gagal mendaftar.");
+      if (err?.code) {
+        setError(getAuthErrorMessage(err.code));
+      } else {
+        setError(err?.message || "Gagal mendaftar.");
+      }
     } finally {
       setLoading(false);
     }
@@ -236,7 +274,6 @@ export default function RegisterPage() {
 
             {/* Pilih Kelas — hanya untuk siswa */}
             {role === "student" && (
-              <>
               <div>
                 <label className="text-xs text-emerald-700/70 mb-1 block">Pilih Kelas</label>
                 <div className="relative">
@@ -270,12 +307,10 @@ export default function RegisterPage() {
                   </span>
                 </div>
               </div>
-              </>
             )}
 
             {/* Gender — hanya untuk siswa */}
             {role === "student" && (
-              <>
               <div>
                 <label className="text-xs text-emerald-700/70 mb-1.5 block">
                   Gender
@@ -308,7 +343,6 @@ export default function RegisterPage() {
                   </button>
                 </div>
               </div>
-              </>
             )}
 
             <button

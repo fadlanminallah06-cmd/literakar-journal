@@ -27,7 +27,23 @@ export default function LoginPage() {
 
     try {
       const res = await signInWithEmailAndPassword(auth, email, password);
-      const userDoc = await getDoc(doc(db, "users", res.user.uid));
+
+      let userDoc;
+      try {
+        userDoc = await getDoc(doc(db, "users", res.user.uid));
+      } catch (profileErr: any) {
+        // Login Auth berhasil, tapi baca profil Firestore gagal
+        // (misal permission-denied karena dokumen belum ada, atau rules bermasalah).
+        await signOut(auth);
+        if (profileErr?.code === "permission-denied") {
+          setError(
+            "Profil akun bermasalah (akses ditolak). Hubungi admin untuk memperbaiki akun ini."
+          );
+        } else {
+          setError("Gagal memuat profil akun. Silakan coba lagi.");
+        }
+        return;
+      }
 
       if (userDoc.exists()) {
         const role = userDoc.data().role;
@@ -48,8 +64,9 @@ export default function LoginPage() {
           setError("Profil akun tidak memiliki role yang valid. Hubungi admin.");
         }
       } else {
+        // Akun Auth ada tapi dokumen Firestore-nya tidak ada (akun "zombie").
         await signOut(auth);
-        setError("Profil akun tidak ditemukan. Hubungi admin.");
+        setError("Profil akun tidak ditemukan. Hubungi admin untuk mendaftarkan ulang profil kamu.");
       }
     } catch (err) {
       setError("Email atau password salah.");

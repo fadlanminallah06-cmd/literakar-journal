@@ -1,9 +1,15 @@
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
+
     function isSignedIn() {
       return request.auth != null;
+    }
+
+    // Aman terhadap dokumen yang belum/tidak ada — tidak akan throw error.
+    function currentUserExists() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
     function currentUser() {
@@ -11,7 +17,7 @@ service cloud.firestore {
     }
 
     function hasRole(role) {
-      return isSignedIn() && currentUser().data.role == role;
+      return currentUserExists() && currentUser().data.role == role;
     }
 
     function isStudent() {
@@ -31,7 +37,8 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow read: if isStaff() || (isSignedIn() && request.auth.uid == userId);
+      // Self-read dicek DULUAN (tidak butuh get() tambahan), baru staff-check.
+      allow read: if (isSignedIn() && request.auth.uid == userId) || isStaff();
 
       // Public registration can create a student or teacher for the authenticated UID.
       allow create: if isSignedIn()
@@ -65,25 +72,13 @@ service cloud.firestore {
         && request.resource.data.studentId == request.auth.uid
         && request.resource.data.status == 'pending';
 
-      // Teachers validate once and may later synchronize denormalized student data.
+      // Teachers validate and annotate; admins may manage any journal field.
       allow update: if isAdmin()
         || (
           isTeacher()
           && request.resource.data.studentId == resource.data.studentId
           && request.resource.data.diff(resource.data).affectedKeys()
             .hasOnly(['status', 'teacherFeedback', 'studentName', 'classCode'])
-          && (
-            (
-              resource.data.status != 'approved'
-              && request.resource.data.status == 'approved'
-            )
-            || (
-              resource.data.status == 'approved'
-              && request.resource.data.status == resource.data.status
-              && request.resource.data.diff(resource.data).affectedKeys()
-                .hasOnly(['studentName', 'classCode'])
-            )
-          )
         );
 
       allow delete: if isStaff();

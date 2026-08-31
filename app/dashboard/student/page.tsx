@@ -1030,8 +1030,8 @@ export default function StudentDashboard() {
   const [addProgressSaving, setAddProgressSaving] = useState(false);
 
   // Fitur #9: target membaca harian personal (disimpan per-siswa di perangkat ini)
-  const [dailyGoal, setDailyGoal] = useState<number>(15);
-  const [goalDraft, setGoalDraft] = useState<string>("15");
+  const [dailyGoal, setDailyGoal] = useState<number>(50);
+  const [goalDraft, setGoalDraft] = useState<string>("50");
   const [targetLocked, setTargetLocked] = useState<boolean>(true);
 
   // Fitur: modal perayaan maskot Literakar saat target harian tercapai (sekali per hari)
@@ -1149,7 +1149,7 @@ export default function StudentDashboard() {
         const goalFromStorage = savedGoal ? Number(savedGoal) : NaN;
         const normalizedGoal = Number.isFinite(goalFromStorage)
           ? Math.min(50, Math.max(1, goalFromStorage))
-          : 15;
+          : 50;
         const shouldLock = savedLocked === "1";
 
         setDailyGoal(normalizedGoal);
@@ -1212,7 +1212,7 @@ export default function StudentDashboard() {
   };
 
   const saveDailyGoal = () => {
-    const value = Math.min(50, Math.max(1, Number(goalDraft) || 15));
+    const value = Math.min(50, Math.max(1, Number(goalDraft) || 50));
     setDailyGoal(value);
     setGoalDraft(String(value));
     setTargetLocked(true);

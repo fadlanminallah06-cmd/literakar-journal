@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
 import {
@@ -29,7 +30,6 @@ import {
   X,
   Search,
   CalendarCheck,
-  UserCircle2,
   Pencil,
   Trash2,
   Flower2,
@@ -1411,8 +1411,8 @@ export default function TeacherDashboard() {
         <header className="sticky top-2 z-30 w-full flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6 bg-white/90 backdrop-blur-md p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl shadow-[0_4px_24px_-8px_rgba(6,95,70,0.18)] ring-1 ring-white">
           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
             <div className="relative shrink-0">
-              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-md ring-4 ring-emerald-100">
-                <UserCircle2 className="w-8 h-8 sm:w-9 sm:h-9 text-white" strokeWidth={1.5} />
+              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-white/10 flex items-center justify-center shadow-md ring-4 ring-emerald-100 overflow-hidden">
+                <Image src="/asset/literakarmascot.png" alt="Literakar Mascot" width={48} height={48} className="w-10 h-10 sm:w-12 sm:h-12 object-cover" />
               </div>
               <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-emerald-500 ring-2 ring-white" />
             </div>

@@ -24,6 +24,7 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-body);
+  overflow-x: hidden;
 }
 
 button,
@@ -41,6 +42,38 @@ select {
 
 button {
   text-transform: uppercase;
+}
+
+@media (max-width: 640px) {
+  h1,
+  h2,
+  h3,
+  h4 {
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  p,
+  label {
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+  }
+
+  button {
+    line-height: 1.35;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  input,
+  select {
+    min-height: 2.5rem;
+    line-height: 1.4;
+  }
+
+  textarea {
+    line-height: 1.55;
+  }
 }
 
 input::placeholder,

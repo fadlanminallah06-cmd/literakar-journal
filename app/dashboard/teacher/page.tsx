@@ -132,6 +132,7 @@ interface LeaderboardEntry {
 type TabKey = "ringkasan" | "leaderboard" | "pendampingan" | "jurnal" | "laporan" | "kelola";
 type ReportView = "kelas" | "siswa";
 type ReportPeriod = "all" | "month";
+type LeaderboardSubTab = "semua" | "kelas";
 
 function getCurrentMonthInput(): string {
   const date = new Date();
@@ -731,6 +732,8 @@ export default function TeacherDashboard() {
   const [journalActionLoading, setJournalActionLoading] = useState<string | null>(null);
   // id jurnal yang sedang dihapus -> mencegah klik ganda dan memberi feedback visual
   const [deleteJournalLoading, setDeleteJournalLoading] = useState<string | null>(null);
+  const [leaderboardSubTab, setLeaderboardSubTab] = useState<LeaderboardSubTab>("semua");
+  const [selectedLeaderboardClass, setSelectedLeaderboardClass] = useState("");
 
   const fetchClassJournals = useCallback(async () => {
     const journalQuery = query(collection(db, "journals"), orderBy("createdAt", "desc"));
@@ -997,6 +1000,17 @@ export default function TeacherDashboard() {
   }, [journals, studentSummaries]);
 
   const leaderboard = useMemo(() => buildLeaderboard(journals), [journals]);
+  const leaderboardClasses = useMemo(
+    () => Array.from(new Set(leaderboard.map((entry) => entry.classCode).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [leaderboard]
+  );
+  const effectiveLeaderboardClass = selectedLeaderboardClass && leaderboardClasses.includes(selectedLeaderboardClass)
+    ? selectedLeaderboardClass
+    : leaderboardClasses[0] || "";
+  const classLeaderboard = useMemo(
+    () => buildLeaderboard(journals.filter((journal) => journal.classCode === effectiveLeaderboardClass), Number.MAX_SAFE_INTEGER),
+    [journals, effectiveLeaderboardClass]
+  );
 
   const studentsNeedingAttention: FlaggedStudent[] = useMemo(() => {
     if (studentSummaries.length === 0) return [];
@@ -1546,11 +1560,46 @@ export default function TeacherDashboard() {
               </p>
             </div>
 
-            {leaderboard.length === 0 ? (
+            <div className="flex gap-2 mb-4 p-1 rounded-xl bg-emerald-900/5 w-full sm:w-fit">
+              {(["semua", "kelas"] as LeaderboardSubTab[]).map((view) => (
+                <button
+                  key={view}
+                  type="button"
+                  onClick={() => setLeaderboardSubTab(view)}
+                  className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-semibold transition ${
+                    leaderboardSubTab === view
+                      ? "bg-emerald-600 text-white shadow-sm"
+                      : "text-emerald-800/70 hover:bg-emerald-50"
+                  }`}
+                >
+                  {view === "semua" ? "Semua Siswa" : "Per Kelas"}
+                </button>
+              ))}
+            </div>
+
+            {leaderboardSubTab === "kelas" && leaderboardClasses.length > 0 && (
+              <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-2">
+                <label htmlFor="teacher-leaderboard-class" className="text-xs font-semibold text-emerald-700/70">
+                  Pilih Kelas
+                </label>
+                <select
+                  id="teacher-leaderboard-class"
+                  value={effectiveLeaderboardClass}
+                  onChange={(event) => setSelectedLeaderboardClass(event.target.value)}
+                  className="w-full sm:w-48 px-3 py-2 text-sm bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
+                >
+                  {leaderboardClasses.map((classCode) => (
+                    <option key={classCode} value={classCode}>Kelas {classCode}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {(leaderboardSubTab === "semua" ? leaderboard : classLeaderboard).length === 0 ? (
               <p className="text-sm text-emerald-700/60">Belum ada data jurnal siswa.</p>
             ) : (
               <div className="space-y-2">
-                {leaderboard.map((entry, index) => (
+                {(leaderboardSubTab === "semua" ? leaderboard : classLeaderboard).map((entry, index) => (
                   <div
                     key={entry.studentId}
                     className="flex items-center gap-3 p-3 rounded-xl border border-emerald-100 bg-emerald-50/50"

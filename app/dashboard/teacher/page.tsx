@@ -1403,12 +1403,12 @@ export default function TeacherDashboard() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-green-50 to-teal-100 relative print:bg-white print:p-0">
+    <div className="min-h-screen w-full overflow-x-hidden bg-gradient-to-br from-emerald-50 via-green-50 to-teal-100 relative print:bg-white print:p-0">
       <CuteBackground mouse={mousePos} />
 
-      <div className="relative max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 print:hidden">
+      <div className="relative w-full max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 box-border print:hidden">
         {/* ---- Header ---- */}
-        <header className="sticky top-2 z-30 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6 bg-white/90 backdrop-blur-md p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl shadow-[0_4px_24px_-8px_rgba(6,95,70,0.18)] ring-1 ring-white">
+        <header className="sticky top-2 z-30 w-full flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6 bg-white/90 backdrop-blur-md p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl shadow-[0_4px_24px_-8px_rgba(6,95,70,0.18)] ring-1 ring-white">
           <div className="flex items-center gap-3 sm:gap-4 min-w-0">
             <div className="relative shrink-0">
               <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center shadow-md ring-4 ring-emerald-100">
@@ -1416,11 +1416,11 @@ export default function TeacherDashboard() {
               </div>
               <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-emerald-500 ring-2 ring-white" />
             </div>
-            <div className="min-w-0">
-              <h1 className="text-base sm:text-xl font-bold text-emerald-900 truncate">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-[15px] sm:text-xl font-bold text-emerald-900 leading-tight break-words sm:truncate">
                 Selamat Datang Guru, {teacherName}!
               </h1>
-              <p className="text-[11px] sm:text-xs text-emerald-700/60 mt-0.5">
+              <p className="text-[11px] sm:text-xs text-emerald-700/60 mt-0.5 leading-relaxed">
                 Semoga Hari Ini Lancar Yaa!
                 {availableClasses.length > 0 ? ` · ${availableClasses.length} kelas aktif` : ""}
               </p>
@@ -1435,7 +1435,7 @@ export default function TeacherDashboard() {
           </button>
         </header>
 
-        <nav className="mb-5 sm:mb-6 w-full overflow-x-auto rounded-2xl bg-white/80 backdrop-blur-sm p-1.5 shadow-sm shadow-emerald-900/5 border border-white [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <nav className="mb-5 sm:mb-6 w-full max-w-full overflow-x-auto rounded-2xl bg-white/80 backdrop-blur-sm p-1.5 shadow-sm shadow-emerald-900/5 border border-white [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <div className="flex min-w-max gap-1.5">
             {tabs.map((t) => (
               <button

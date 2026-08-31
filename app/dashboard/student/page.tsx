@@ -1770,18 +1770,24 @@ export default function StudentDashboard() {
         timestamp: new Date(),
       };
 
-      // Update journal dengan progress log yang ditambah
+      // Update journal dengan progress log yang ditambah.
+      // Untuk jurnal yang sudah approved tapi belum selesai, kita simpan sebagai log lanjutan
+      // tanpa langsung mengubah hitungan utama sampai guru memvalidasi ulang / menutup buku.
       const updatedProgressLog = [...(journal.progressLog || []), newProgressEntry];
+      const isApprovedUnfinished = !journal.finished && normalizeStatus(journal.status) === "approved";
 
-      // Perbarui endPage dan summary di journal (cumulative)
       const updatedPayload = {
-        startPage: journal.startPage,
-        endPage: Math.max(journal.endPage, endPage),
-        summary: addProgressForm.summary.trim(),
         progressLog: updatedProgressLog,
-        status: "pending",
-        teacherFeedback: "",
         updatedAt: serverTimestamp(),
+        ...(isApprovedUnfinished
+          ? {}
+          : {
+              startPage: journal.startPage,
+              endPage: Math.max(journal.endPage, endPage),
+              summary: addProgressForm.summary.trim(),
+              status: "pending",
+              teacherFeedback: "",
+            }),
       };
 
       await updateDoc(doc(db, "journals", addProgressTo), updatedPayload);
@@ -2709,8 +2715,8 @@ export default function StudentDashboard() {
                       )}
 
                       <div className="mt-3 flex flex-wrap justify-end gap-2">
-                        {/* Add Progress — siswa bisa tambah progress selama belum selesai & belum approved */}
-                        {!j.finished && j.status !== "approved" && (
+                        {/* Add Progress — siswa bisa lanjut membaca selama buku belum selesai, termasuk yang sudah divalidasi guru */}
+                        {!j.finished && (
                           <button
                             type="button"
                             onClick={() => setAddProgressTo(j.id)}
@@ -2753,9 +2759,12 @@ export default function StudentDashboard() {
               <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
                 <div className={`max-w-md w-full p-5 sm:p-6 rounded-3xl shadow-2xl max-h-[90vh] overflow-y-auto ${darkMode ? "bg-slate-800 border-slate-700" : "bg-white border-white"} border`}>
                   <h3 className={`text-lg font-bold tracking-tight mb-1 ${theme.headingText}`}>Lanjut Membaca</h3>
-                  <p className={`text-xs mb-4 ${theme.mutedText}`}>
+                  <p className={`text-xs mb-2 ${theme.mutedText}`}>
                     Catat progres membacamu hari ini untuk buku &quot;{journals.find((j) => j.id === addProgressTo)?.bookTitle}&quot;
                   </p>
+                  <div className={`mb-4 rounded-xl border px-3 py-2 text-[11px] ${darkMode ? "border-amber-700/50 bg-amber-900/20 text-amber-200" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
+                    Catatan lanjutan ini bersifat log membaca. Progres akan dihitung setelah guru memvalidasi buku yang belum selesai.
+                  </div>
 
                   {addProgressError && (
                     <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2 mb-3">

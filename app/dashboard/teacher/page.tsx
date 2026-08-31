@@ -1648,14 +1648,14 @@ export default function TeacherDashboard() {
             ) : (
               <div className="space-y-3">
                 {studentsNeedingAttention.map((s) => (
-                  <div key={s.name} className="border border-orange-200 bg-orange-50 p-4 rounded-xl">
-                    <div className="flex justify-between items-start gap-4">
+                  <div key={s.name} className="border border-orange-200 bg-orange-50 p-3 sm:p-4 rounded-xl">
+                    <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:justify-between sm:items-start sm:gap-4">
                       <div className="flex gap-3">
                         <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
                           <AlertTriangle className="w-4 h-4" />
                         </div>
-                        <div>
-                          <p className="font-bold text-slate-800">
+                        <div className="min-w-0">
+                          <p className="font-bold text-slate-800 break-words">
                             {s.name}{" "}
                             <span className="font-normal text-slate-500 text-xs">
                               · Kelas {s.classCode}
@@ -1671,7 +1671,7 @@ export default function TeacherDashboard() {
                       </div>
                       <button
                         onClick={() => setSelectedStudent(s.name)}
-                        className="px-3 py-1.5 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700 transition whitespace-nowrap"
+                        className="w-full sm:w-auto shrink-0 px-3 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700 transition"
                       >
                         Lihat Detail
                       </button>
@@ -1700,7 +1700,7 @@ export default function TeacherDashboard() {
             {journals.length === 0 ? (
               <p className="text-emerald-700/60 text-sm">Belum ada jurnal dari siswa manapun.</p>
             ) : (
-              <div className="space-y-6">
+              <div className="space-y-4 sm:space-y-6">
                 {[...journals]
                   .sort(
                     (a, b) =>
@@ -1713,12 +1713,12 @@ export default function TeacherDashboard() {
                   return (
                     <div
                       key={j.id}
-                      className="border border-emerald-100 p-4 rounded-xl bg-emerald-50/50 flex flex-col gap-2"
+                      className="border border-emerald-100 p-3 sm:p-4 rounded-xl bg-emerald-50/50 flex flex-col gap-2.5"
                     >
-                      <div className="flex justify-between items-center">
+                      <div className="flex flex-col items-start gap-2 sm:flex-row sm:justify-between sm:items-center">
                         <button
                           onClick={() => setSelectedStudent(j.studentName)}
-                          className="font-bold text-emerald-900 hover:underline"
+                          className="max-w-full text-left font-bold text-emerald-900 hover:underline break-words"
                         >
                           {j.studentName}
                           {j.classCode && (
@@ -1757,50 +1757,43 @@ export default function TeacherDashboard() {
                         </p>
                       )}
 
-                      {statusInfo.key === "approved" && j.approvedBy && (
-                        <p className="text-xs text-emerald-700/60">
-                          Divalidasi oleh:{" "}
-                          <span className="font-semibold text-emerald-800">{j.approvedBy}</span>
-                        </p>
-                      )}
-
                       {statusInfo.key === "revision" && (
                         <p className="text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1.5">
                           <strong>Alasan revisi:</strong> {j.teacherFeedback || "-"}
                         </p>
                       )}
 
-                      <p className="text-sm text-emerald-800/80">
+                      <p className="text-xs sm:text-sm text-emerald-800/80 break-words">
                         <strong>Buku:</strong> {j.bookTitle} ({j.author})
                         {j.genre ? ` · ${j.genre}` : ""} — Hal. {j.startPage}-{j.endPage}
                         {j.finished ? " · ✅ Selesai dibaca" : ""}
                       </p>
-                      <p className="text-sm text-emerald-800/80">
+                      <p className="text-xs sm:text-sm text-emerald-800/80 break-words">
                         <strong>Nilai Karakter:</strong> {getCharacterList(j).join(", ") || "-"}
                       </p>
-                      <p className="text-sm text-emerald-700/70 italic">&quot;{j.summary}&quot;</p>
+                      <p className="text-xs sm:text-sm text-emerald-700/70 italic break-words">&quot;{j.summary}&quot;</p>
                       <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
                         <input
                           type="text"
-                          placeholder="Tulis umpan balik / alasan revisi..."
+                          placeholder="Umpan balik / alasan revisi..."
                           className="min-w-0 w-full flex-1 p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition"
                           value={feedbackInput[j.id] ?? j.teacherFeedback ?? ""}
                           onChange={(e) =>
                             setFeedbackInput({ ...feedbackInput, [j.id]: e.target.value })
                           }
                         />
-                        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+                        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
                           <button
                             onClick={() => void handleApprove(j.id)}
                             disabled={statusInfo.key === "approved" || isBusy || deleteJournalLoading === j.id}
-                            className="flex-1 whitespace-nowrap px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 active:scale-[0.98] transition disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:active:scale-100"
+                            className="min-w-0 px-2 py-2 bg-emerald-600 text-white text-xs sm:text-sm font-semibold rounded-xl hover:bg-emerald-700 active:scale-[0.98] transition disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:active:scale-100"
                           >
                             {isBusy ? "Memproses..." : statusInfo.key === "approved" ? "Sudah Valid" : "Validasi"}
                           </button>
                           <button
                             onClick={() => void handleUpdateJournalStatus(j.id, "revision")}
                             disabled={statusInfo.key === "revision" || isBusy}
-                            className="flex-1 whitespace-nowrap px-4 py-2 bg-orange-500 text-white text-sm font-semibold rounded-xl hover:bg-orange-600 active:scale-[0.98] transition disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:active:scale-100"
+                            className="min-w-0 px-2 py-2 bg-orange-500 text-white text-xs sm:text-sm font-semibold rounded-xl hover:bg-orange-600 active:scale-[0.98] transition disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:active:scale-100"
                           >
                             Perlu Revisi
                           </button>
@@ -1808,7 +1801,7 @@ export default function TeacherDashboard() {
                             <button
                               onClick={() => void handleCancelApproval(j.id)}
                               disabled={isBusy}
-                              className="flex items-center justify-center gap-1.5 whitespace-nowrap px-3 py-2 border border-emerald-300 text-emerald-700 bg-white text-sm font-semibold rounded-xl hover:bg-emerald-50 active:scale-[0.98] transition disabled:opacity-50"
+                              className="flex min-w-0 items-center justify-center gap-1.5 px-2 py-2 border border-emerald-300 text-emerald-700 bg-white text-xs sm:text-sm font-semibold rounded-xl hover:bg-emerald-50 active:scale-[0.98] transition disabled:opacity-50"
                             >
                               <Undo2 className="w-4 h-4" />
                               Batalkan Validasi

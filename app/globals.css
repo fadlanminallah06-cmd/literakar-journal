@@ -41,16 +41,56 @@ select {
 }
 
 button {
-  text-transform: uppercase;
+  text-transform: capitalize;
 }
 
 @media (max-width: 640px) {
+  body {
+    font-size: 15px;
+  }
+
   h1,
   h2,
   h3,
   h4 {
     line-height: 1.25;
     overflow-wrap: anywhere;
+  }
+
+  h1 {
+    font-size: 1.5rem;
+  }
+
+  h2 {
+    font-size: 1.25rem;
+  }
+
+  h3 {
+    font-size: 1.05rem;
+  }
+
+  h4 {
+    font-size: 0.95rem;
+  }
+
+  .text-xs {
+    font-size: 0.8125rem;
+  }
+
+  .text-sm {
+    font-size: 0.9375rem;
+  }
+
+  .p-6 {
+    padding: 1rem;
+  }
+
+  .p-5 {
+    padding: 1rem;
+  }
+
+  .p-4 {
+    padding: 0.875rem;
   }
 
   p,
@@ -60,6 +100,7 @@ button {
   }
 
   button {
+    min-height: 2.5rem;
     line-height: 1.35;
     white-space: normal;
     overflow-wrap: anywhere;
@@ -69,10 +110,12 @@ button {
   select {
     min-height: 2.5rem;
     line-height: 1.4;
+    font-size: 0.9375rem;
   }
 
   textarea {
     line-height: 1.55;
+    font-size: 0.9375rem;
   }
 }
 

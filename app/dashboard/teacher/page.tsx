@@ -2550,19 +2550,19 @@ export default function TeacherDashboard() {
                 Geser ke kanan untuk melihat semua kolom.
               </p>
               <div className="overflow-x-auto rounded-xl ring-1 ring-emerald-100">
-                <table className="w-full min-w-[1200px] text-xs">
+                <table className="w-full min-w-[1200px] text-xs text-slate-700">
                   <thead>
-                    <tr className="text-left text-emerald-700/70 border-b border-emerald-100 bg-emerald-50/70">
+                    <tr className="text-left text-slate-700 border-b border-emerald-100 bg-emerald-50/70">
                       {DETAILED_HEADERS.map((header) => (
-                        <th key={header} className="py-2 pr-3 pl-2 align-top first:pl-3">{header}</th>
+                        <th key={header} className="py-2 pr-3 pl-2 align-top first:pl-3 text-slate-700">{header}</th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody>
+                  <tbody className="text-slate-700">
                     {printableRows.map((row, rowIndex) => (
-                      <tr key={`${String(row[0])}-${rowIndex}`} className="border-b border-emerald-50 odd:bg-white even:bg-emerald-50/30">
+                      <tr key={`${String(row[0])}-${rowIndex}`} className="border-b border-emerald-50 odd:bg-white even:bg-emerald-50/30 text-slate-700">
                         {row.map((field, fieldIndex) => (
-                          <td key={`${rowIndex}-${fieldIndex}`} className="py-2 pr-3 pl-2 align-top first:pl-3">{field}</td>
+                          <td key={`${rowIndex}-${fieldIndex}`} className="py-2 pr-3 pl-2 align-top first:pl-3 text-slate-700">{field}</td>
                         ))}
                       </tr>
                     ))}

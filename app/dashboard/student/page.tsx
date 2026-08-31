@@ -1148,7 +1148,7 @@ export default function StudentDashboard() {
         const savedLocked = localStorage.getItem(`literasi_daily_goal_locked_${user.uid}`);
         const goalFromStorage = savedGoal ? Number(savedGoal) : NaN;
         const normalizedGoal = Number.isFinite(goalFromStorage)
-          ? Math.min(15, Math.max(1, goalFromStorage))
+          ? Math.min(50, Math.max(1, goalFromStorage))
           : 15;
         const shouldLock = savedLocked === "1";
 
@@ -1212,7 +1212,7 @@ export default function StudentDashboard() {
   };
 
   const saveDailyGoal = () => {
-    const value = Math.min(15, Math.max(1, Number(goalDraft) || 15));
+    const value = Math.min(50, Math.max(1, Number(goalDraft) || 15));
     setDailyGoal(value);
     setGoalDraft(String(value));
     setTargetLocked(true);
@@ -2047,7 +2047,7 @@ export default function StudentDashboard() {
                   <input
                     type="number"
                     min={1}
-                    max={15}
+                    max={50}
                     value={goalDraft}
                     onChange={(e) => setGoalDraft(e.target.value)}
                     disabled={targetLocked}

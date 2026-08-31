@@ -66,7 +66,7 @@ service cloud.firestore {
 
     match /journals/{journalId} {
       allow read: if isStaff()
-        || (isStudent() && resource.data.studentId == request.auth.uid);
+        || isStudent();
 
       allow create: if isStudent()
         && request.resource.data.studentId == request.auth.uid
@@ -78,7 +78,20 @@ service cloud.firestore {
           isTeacher()
           && request.resource.data.studentId == resource.data.studentId
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['status', 'teacherFeedback', 'studentName', 'classCode'])
+            .hasOnly(['status', 'teacherFeedback', 'studentName', 'classCode', 'approvedBy', 'updatedAt', 'progressLog'])
+        )
+        || (
+          isStudent()
+          && resource.data.studentId == request.auth.uid
+          && resource.data.status in ['pending', 'revision']
+          && request.resource.data.studentId == resource.data.studentId
+          && request.resource.data.status == 'pending'
+          && request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly([
+              'bookTitle', 'author', 'genre', 'startPage', 'endPage', 'summary',
+              'characterValues', 'finished', 'status', 'teacherFeedback',
+              'progressLog', 'updatedAt'
+            ])
         );
 
       allow delete: if isStaff();

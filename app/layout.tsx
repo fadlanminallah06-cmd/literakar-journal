@@ -1,6 +1,13 @@
 import "./globals.css";
 import { AuthProvider } from "@/context/AuthContext";
 import type { Metadata } from "next";
+import { Josefin_Sans } from "next/font/google";
+
+const josefinSans = Josefin_Sans({
+  subsets: ["latin"],
+  variable: "--font-josefin-sans",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Jurnal Literasi & Karakter Siswa",
@@ -21,7 +28,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="id">
-      <body className="bg-slate-50 text-slate-900 antialiased">
+      <body className={`${josefinSans.variable} bg-slate-50 text-slate-900 antialiased`}>
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

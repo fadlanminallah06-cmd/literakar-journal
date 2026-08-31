@@ -1,9 +1,19 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
-import { collection, query, where, getDocs, doc, updateDoc, deleteDoc } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  getDocs,
+  doc,
+  updateDoc,
+  deleteDoc,
+  serverTimestamp,
+} from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import {
   LogOut,
@@ -27,6 +37,7 @@ import {
   Sparkles,
   Star,
   Sun,
+  Crown,
   Undo2,
 } from "lucide-react";
 
@@ -41,6 +52,14 @@ import {
  * existing di Firestore.
  */
 type JournalStatus = "pending" | "revision" | "approved";
+
+interface ProgressEntry {
+  id: string;
+  startPage: number;
+  endPage: number;
+  summary: string;
+  timestamp: Date | string | number | { toDate?: () => Date } | null;
+}
 
 interface Journal {
   id: string;
@@ -57,9 +76,11 @@ interface Journal {
   status: string;
   teacherFeedback?: string;
   approvedBy?: string;
+  progressLog?: ProgressEntry[];
   classCode: string;
   finished?: boolean;
-  createdAt?: any;
+  createdAt?: Date | string | number | { toDate?: () => Date } | null;
+  updatedAt?: Date | string | number | { toDate?: () => Date } | null;
 }
 
 interface StudentSummary {
@@ -100,7 +121,15 @@ interface RosterStudent {
   gender?: "laki-laki" | "perempuan" | "";
 }
 
-type TabKey = "ringkasan" | "pendampingan" | "jurnal" | "laporan" | "kelola";
+interface LeaderboardEntry {
+  studentId: string;
+  studentName: string;
+  classCode: string;
+  journalCount: number;
+  booksFinished: number;
+}
+
+type TabKey = "ringkasan" | "leaderboard" | "pendampingan" | "jurnal" | "laporan" | "kelola";
 type ReportView = "kelas" | "siswa";
 type ReportPeriod = "all" | "month";
 
@@ -113,12 +142,15 @@ const INACTIVITY_DAYS = 7;
 const LOW_ACTIVITY_RATIO = 0.5;
 const PENDING_BACKLOG_THRESHOLD = 3;
 
-function toDateSafe(value: any): Date | null {
-  if (!value) return null;
-  if (typeof value.toDate === "function") return value.toDate();
+function toDateSafe(value: Date | string | number | { toDate?: () => Date } | null | undefined): Date | null {
+  if (value == null) return null;
   if (value instanceof Date) return value;
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? null : d;
+  if (typeof value === "object" && typeof value.toDate === "function") return value.toDate();
+  if (typeof value === "string" || typeof value === "number") {
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  return null;
 }
 
 function formatTanggal(d: Date | null): string {
@@ -130,15 +162,6 @@ function formatGender(g?: string): string {
   if (g === "laki-laki") return "Laki-laki";
   if (g === "perempuan") return "Perempuan";
   return "-";
-}
-
-function getStartOfWeek(date: Date): Date {
-  const d = new Date(date);
-  const day = d.getDay();
-  const diff = (day === 0 ? -6 : 1) - day;
-  d.setDate(d.getDate() + diff);
-  d.setHours(0, 0, 0, 0);
-  return d;
 }
 
 function getStartOfMonth(date: Date): Date {
@@ -415,7 +438,8 @@ const DETAILED_HEADERS = [
   "Status Validasi",
   "Umpan Balik / Alasan Revisi Guru",
   "Divalidasi Oleh",
-  "Tanggal",
+  "Tanggal Upload",
+  "Terakhir Diperbarui",
 ];
 
 function buildDetailedRows(students: StudentSummary[]): (string | number)[][] {
@@ -440,6 +464,7 @@ function buildDetailedRows(students: StudentSummary[]): (string | number)[][] {
         "-",
         "-",
         "-",
+        "-",
       ]);
       return;
     }
@@ -448,7 +473,8 @@ function buildDetailedRows(students: StudentSummary[]): (string | number)[][] {
       .slice()
       .sort(
         (a, b) =>
-          (toDateSafe(b.createdAt)?.getTime() || 0) - (toDateSafe(a.createdAt)?.getTime() || 0)
+          (toDateSafe(b.updatedAt ?? b.createdAt)?.getTime() || 0) -
+          (toDateSafe(a.updatedAt ?? a.createdAt)?.getTime() || 0)
       )
       .forEach((j) => {
         rows.push([
@@ -466,6 +492,7 @@ function buildDetailedRows(students: StudentSummary[]): (string | number)[][] {
           j.teacherFeedback || "-",
           j.approvedBy || "-",
           formatTanggal(toDateSafe(j.createdAt)),
+          formatTanggal(toDateSafe(j.updatedAt || j.createdAt)),
         ]);
       });
   });
@@ -702,35 +729,23 @@ export default function TeacherDashboard() {
   const [mousePos, setMousePos] = useState({ x: 0.5, y: 0.5 });
   // id jurnal yang sedang diproses (approve/revisi/batalkan) -> mencegah klik ganda
   const [journalActionLoading, setJournalActionLoading] = useState<string | null>(null);
+  // id jurnal yang sedang dihapus -> mencegah klik ganda dan memberi feedback visual
+  const [deleteJournalLoading, setDeleteJournalLoading] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!loading && (!user || !["teacher", "admin"].includes(userProfile?.role || ""))) {
-      router.push("/login");
-    } else if (user && ["teacher", "admin"].includes(userProfile?.role || "")) {
-      fetchClassJournals();
-      fetchAllStudents();
-    }
-  }, [user, userProfile, loading]);
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      setMousePos({
-        x: e.clientX / window.innerWidth,
-        y: e.clientY / window.innerHeight,
-      });
-    };
-    window.addEventListener("mousemove", handleMouseMove);
-    return () => window.removeEventListener("mousemove", handleMouseMove);
-  }, []);
-
-  const fetchClassJournals = async () => {
-    const querySnapshot = await getDocs(collection(db, "journals"));
+  const fetchClassJournals = useCallback(async () => {
+    const journalQuery = query(collection(db, "journals"), orderBy("createdAt", "desc"));
+    const querySnapshot = await getDocs(journalQuery);
     const docs: Journal[] = [];
     querySnapshot.forEach((d) => docs.push({ id: d.id, ...d.data() } as Journal));
+    docs.sort(
+      (a, b) =>
+        (toDateSafe(b.updatedAt ?? b.createdAt)?.getTime() ?? 0) -
+        (toDateSafe(a.updatedAt ?? a.createdAt)?.getTime() ?? 0)
+    );
     setJournals(docs);
-  };
+  }, []);
 
-  const fetchAllStudents = async () => {
+  const fetchAllStudents = useCallback(async () => {
     const q = query(collection(db, "users"), where("role", "==", "student"));
     const querySnapshot = await getDocs(q);
     const list: RosterStudent[] = [];
@@ -745,7 +760,32 @@ export default function TeacherDashboard() {
       });
     });
     setAllStudents(list);
-  };
+  }, []);
+
+  const loadDashboardData = useCallback(async () => {
+    await Promise.all([fetchClassJournals(), fetchAllStudents()]);
+  }, [fetchClassJournals, fetchAllStudents]);
+
+  useEffect(() => {
+    if (!loading && (!user || !["teacher", "admin"].includes(userProfile?.role || ""))) {
+      router.push("/login");
+    } else if (user && ["teacher", "admin"].includes(userProfile?.role || "")) {
+      // Firestore data fetch is intentional external synchronization; the async callback updates local state after data arrives.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      void loadDashboardData();
+    }
+  }, [user, userProfile, loading, router, loadDashboardData]);
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      setMousePos({
+        x: e.clientX / window.innerWidth,
+        y: e.clientY / window.innerHeight,
+      });
+    };
+    window.addEventListener("mousemove", handleMouseMove);
+    return () => window.removeEventListener("mousemove", handleMouseMove);
+  }, []);
 
   /**
    * Mengganti status sebuah jurnal ke "approved" | "revision" | "pending".
@@ -753,12 +793,21 @@ export default function TeacherDashboard() {
    * - "revision"  -> WAJIB ada alasan di kolom umpan balik (feedbackInput).
    * - "pending"   -> dipakai untuk "Batalkan Validasi" (approvedBy dikosongkan).
    */
+  const handleApprove = async (journalId: string) => {
+    try {
+      await handleUpdateJournalStatus(journalId, "approved");
+    } catch {
+      setManagementError("Validasi jurnal gagal diperbarui. Periksa koneksi/izin dan coba lagi.");
+    }
+  };
+
   const handleUpdateJournalStatus = async (journalId: string, newStatus: JournalStatus) => {
     const journal = journals.find((item) => item.id === journalId);
     if (!journal) return;
 
     const currentStatus = getStatusInfo(journal.status).key;
     if (currentStatus === newStatus) return;
+    if (journalActionLoading === journalId || deleteJournalLoading === journalId) return;
 
     const feedback = (feedbackInput[journalId] ?? journal.teacherFeedback ?? "").trim();
 
@@ -771,10 +820,16 @@ export default function TeacherDashboard() {
 
     setManagementError("");
     const teacherName = userProfile?.name || "Guru";
-    const updatePayload: Record<string, any> = {
+    const updatePayload: {
+      status: JournalStatus;
+      teacherFeedback: string;
+      approvedBy: string;
+      updatedAt: ReturnType<typeof serverTimestamp>;
+    } = {
       status: newStatus,
       teacherFeedback: feedback,
       approvedBy: newStatus === "approved" ? teacherName : "",
+      updatedAt: serverTimestamp(),
     };
 
     setJournalActionLoading(journalId);
@@ -783,6 +838,7 @@ export default function TeacherDashboard() {
       await fetchClassJournals();
     } catch {
       setManagementError("Status jurnal gagal diperbarui. Periksa koneksi/izin dan coba lagi.");
+      return;
     } finally {
       setJournalActionLoading(null);
     }
@@ -792,17 +848,22 @@ export default function TeacherDashboard() {
     if (!window.confirm("Batalkan validasi jurnal ini? Statusnya akan kembali menjadi Menunggu.")) {
       return;
     }
-    handleUpdateJournalStatus(journalId, "pending");
+    void handleUpdateJournalStatus(journalId, "pending");
   };
 
   const handleDeleteJournal = async (journalId: string) => {
     if (!window.confirm("Hapus jurnal ini secara permanen?")) return;
+    if (deleteJournalLoading === journalId || journalActionLoading === journalId) return;
+
     setManagementError("");
+    setDeleteJournalLoading(journalId);
     try {
       await deleteDoc(doc(db, "journals", journalId));
       setJournals((current) => current.filter((journal) => journal.id !== journalId));
     } catch {
       setManagementError("Jurnal gagal dihapus. Periksa izin Firebase dan coba lagi.");
+    } finally {
+      setDeleteJournalLoading(null);
     }
   };
 
@@ -935,6 +996,8 @@ export default function TeacherDashboard() {
     };
   }, [journals, studentSummaries]);
 
+  const leaderboard = useMemo(() => buildLeaderboard(journals), [journals]);
+
   const studentsNeedingAttention: FlaggedStudent[] = useMemo(() => {
     if (studentSummaries.length === 0) return [];
     const avg = classStats.rataRata;
@@ -988,7 +1051,12 @@ export default function TeacherDashboard() {
   // di roster (allStudents), bukan cuma yang punya jurnal, jadi jumlahnya
   // selalu sinkron dengan total siswa aktif di website.
   const reportStudentSummaries: StudentSummary[] = useMemo(
-    () => buildStudentSummaries(reportPeriodJournals, allStudents),
+    () =>
+      buildStudentSummaries(reportPeriodJournals, allStudents).sort(
+        (a, b) =>
+          (b.lastSubmission?.getTime() ?? 0) - (a.lastSubmission?.getTime() ?? 0) ||
+          a.name.localeCompare(b.name, "id")
+      ),
     [reportPeriodJournals, allStudents]
   );
 
@@ -1014,6 +1082,14 @@ export default function TeacherDashboard() {
         ? reportStudentSummaries
         : reportStudentSummaries.filter((s) => s.classCode === reportClass),
     [reportStudentSummaries, reportClass]
+  );
+
+  const printableStudents = reportView === "siswa"
+    ? reportStudentSummariesForExport
+    : reportClassStudentSummaries;
+  const printableRows = useMemo(
+    () => buildDetailedRows(printableStudents),
+    [printableStudents]
   );
 
   // Statistik Buku & Karakter khusus untuk periode laporan (berdasarkan
@@ -1076,21 +1152,53 @@ export default function TeacherDashboard() {
 
   /** Export khusus daftar Buku & Nilai Karakter pada periode terpilih */
   const handleExportBooksAndCharacters = () => {
-    const bookHeaders = ["Peringkat", "Judul Buku", "Jumlah Siswa Membaca"];
-    const bookRows = reportTopBooks.map(([title, count], idx) => [idx + 1, title, count]);
+    const bookHeaders = ["Peringkat", "Judul Buku", "Nama Siswa", "Jumlah Siswa Membaca", "Tanggal Upload", "Divalidasi Oleh"];
+    const bookRows = reportTopBooks.map(([title, count], idx) => {
+      const matchingJournals = reportPeriodJournals.filter(
+        (journal) => journal.bookTitle.trim().toLowerCase() === title.trim().toLowerCase()
+      );
+      const studentNames = Array.from(
+        new Set(matchingJournals.map((journal) => journal.studentName || "Tanpa Nama"))
+      ).sort((a, b) => a.localeCompare(b, "id"));
+      const relevantJournal = matchingJournals[0];
+      return [
+        idx + 1,
+        title,
+        studentNames.join("; ") || "-",
+        count,
+        formatTanggal(toDateSafe(relevantJournal?.createdAt)),
+        relevantJournal?.approvedBy || "-",
+      ];
+    });
 
-    const charHeaders = ["Peringkat", "Nilai Karakter", "Jumlah Siswa Menyebutkan"];
-    const charRows = reportTopCharacters.map(([val, count], idx) => [idx + 1, val, count]);
+    const charHeaders = ["Peringkat", "Nilai Karakter", "Nama Siswa", "Jumlah Siswa Menyebutkan", "Tanggal Upload", "Divalidasi Oleh"];
+    const charRows = reportTopCharacters.map(([val, count], idx) => {
+      const matchingJournals = reportPeriodJournals.filter((journal) =>
+        getCharacterList(journal).some((character) => character.trim().toLowerCase() === val.trim().toLowerCase())
+      );
+      const studentNames = Array.from(
+        new Set(matchingJournals.map((journal) => journal.studentName || "Tanpa Nama"))
+      ).sort((a, b) => a.localeCompare(b, "id"));
+      const relevantJournal = matchingJournals[0];
+      return [
+        idx + 1,
+        val,
+        studentNames.join("; ") || "-",
+        count,
+        formatTanggal(toDateSafe(relevantJournal?.createdAt)),
+        relevantJournal?.approvedBy || "-",
+      ];
+    });
 
     // Gabungkan jadi satu file dengan separator section
     const lines: string[] = [];
     lines.push("=== DAFTAR BUKU TERPOPULER (BERDASARKAN JUMLAH SISWA) ===");
     lines.push(bookHeaders.map((h) => `"${h}"`).join(","));
-    bookRows.forEach((r) => lines.push(r.map((f) => `"${String(f).replace(/"/g, '""')}"`).join(",")));
+    bookRows.forEach((r) => lines.push(r.map((f) => `"${String(f ?? "").replace(/"/g, '""')}"`).join(",")));
     lines.push("");
     lines.push("=== DAFTAR NILAI KARAKTER TERBANYAK (BERDASARKAN JUMLAH SISWA) ===");
     lines.push(charHeaders.map((h) => `"${h}"`).join(","));
-    charRows.forEach((r) => lines.push(r.map((f) => `"${String(f).replace(/"/g, '""')}"`).join(",")));
+    charRows.forEach((r) => lines.push(r.map((f) => `"${String(f ?? "").replace(/"/g, '""')}"`).join(",")));
 
     const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -1120,6 +1228,7 @@ export default function TeacherDashboard() {
   const teacherName = userProfile?.name || "Guru";
   const tabs: { key: TabKey; label: string }[] = [
     { key: "ringkasan", label: "Rekap Seluruh Siswa" },
+    { key: "leaderboard", label: "Leaderboard" },
     {
       key: "pendampingan",
       label: `Perlu Pendampingan${studentsNeedingAttention.length ? ` (${studentsNeedingAttention.length})` : ""}`,
@@ -1167,7 +1276,7 @@ export default function TeacherDashboard() {
               <button
                 key={t.key}
                 onClick={() => setActiveTab(t.key)}
-                className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-sm font-semibold transition sm:px-4 ${
+                className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-sm font-semibold uppercase tracking-wide transition sm:px-4 ${
                   activeTab === t.key
                     ? "bg-emerald-600 text-white shadow-sm"
                     : "text-emerald-800/70 hover:bg-emerald-50"
@@ -1427,6 +1536,51 @@ export default function TeacherDashboard() {
           </div>
         )}
 
+        {/* ---- Tab: Leaderboard ---- */}
+        {activeTab === "leaderboard" && (
+          <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-sm shadow-emerald-900/5 border border-white">
+            <div className="mb-4">
+              <h2 className="text-lg font-bold text-emerald-900">Leaderboard Pembaca Terajin</h2>
+              <p className="text-xs text-emerald-700/60 mt-1">
+                Ranking ini menggunakan data jurnal yang sama dengan leaderboard dashboard siswa.
+              </p>
+            </div>
+
+            {leaderboard.length === 0 ? (
+              <p className="text-sm text-emerald-700/60">Belum ada data jurnal siswa.</p>
+            ) : (
+              <div className="space-y-2">
+                {leaderboard.map((entry, index) => (
+                  <div
+                    key={entry.studentId}
+                    className="flex items-center gap-3 p-3 rounded-xl border border-emerald-100 bg-emerald-50/50"
+                  >
+                    <div className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center font-bold text-sm ${
+                      index === 0
+                        ? "bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-500 text-white"
+                        : index === 1
+                        ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white"
+                        : index === 2
+                        ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white"
+                        : "bg-emerald-200 text-emerald-800"
+                    }`}>
+                      {index < 3 ? <Crown className="w-4 h-4" /> : index + 1}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-emerald-900 truncate">{entry.studentName}</p>
+                      <p className="text-xs text-emerald-700/60">Kelas {entry.classCode}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-emerald-900">{entry.journalCount} jurnal</p>
+                      <p className="text-xs text-emerald-700/60">{entry.booksFinished} buku selesai</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ---- Tab: Perlu Pendampingan ---- */}
         {activeTab === "pendampingan" && (
           <div className="bg-white/80 backdrop-blur-sm p-6 rounded-2xl shadow-sm shadow-emerald-900/5 border border-white">
@@ -1498,7 +1652,13 @@ export default function TeacherDashboard() {
               <p className="text-emerald-700/60 text-sm">Belum ada jurnal dari siswa manapun.</p>
             ) : (
               <div className="space-y-6">
-                {journals.map((j) => {
+                {[...journals]
+                  .sort(
+                    (a, b) =>
+                      (toDateSafe(b.updatedAt ?? b.createdAt)?.getTime() ?? 0) -
+                      (toDateSafe(a.updatedAt ?? a.createdAt)?.getTime() ?? 0)
+                  )
+                  .map((j) => {
                   const statusInfo = getStatusInfo(j.status);
                   const isBusy = journalActionLoading === j.id;
                   return (
@@ -1524,6 +1684,29 @@ export default function TeacherDashboard() {
                           {statusInfo.badge}
                         </span>
                       </div>
+
+                      <div className="grid gap-1 text-xs text-emerald-700/70 sm:grid-cols-2">
+                        <p>
+                          <strong>Upload:</strong> {formatTanggal(toDateSafe(j.createdAt))}
+                        </p>
+                        <p>
+                          <strong>Validator:</strong>{" "}
+                          {j.approvedBy ? (
+                            <span className="font-semibold text-emerald-800">{j.approvedBy}</span>
+                          ) : (
+                            <span className="text-slate-500">Belum divalidasi</span>
+                          )}
+                        </p>
+                      </div>
+
+                      {(statusInfo.key === "approved" || statusInfo.key === "revision") && (
+                        <p className="text-xs text-emerald-700/60">
+                          <strong>Terakhir diubah:</strong>{" "}
+                          <span className="font-semibold text-emerald-800">
+                            {formatTanggal(toDateSafe(j.updatedAt || j.createdAt))}
+                          </span>
+                        </p>
+                      )}
 
                       {statusInfo.key === "approved" && j.approvedBy && (
                         <p className="text-xs text-emerald-700/60">
@@ -1559,14 +1742,14 @@ export default function TeacherDashboard() {
                         />
                         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
                           <button
-                            onClick={() => handleUpdateJournalStatus(j.id, "approved")}
-                            disabled={statusInfo.key === "approved" || isBusy}
+                            onClick={() => void handleApprove(j.id)}
+                            disabled={statusInfo.key === "approved" || isBusy || deleteJournalLoading === j.id}
                             className="flex-1 whitespace-nowrap px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 active:scale-[0.98] transition disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:active:scale-100"
                           >
-                            {statusInfo.key === "approved" ? "Sudah Valid" : "Validasi"}
+                            {isBusy ? "Memproses..." : statusInfo.key === "approved" ? "Sudah Valid" : "Validasi"}
                           </button>
                           <button
-                            onClick={() => handleUpdateJournalStatus(j.id, "revision")}
+                            onClick={() => void handleUpdateJournalStatus(j.id, "revision")}
                             disabled={statusInfo.key === "revision" || isBusy}
                             className="flex-1 whitespace-nowrap px-4 py-2 bg-orange-500 text-white text-sm font-semibold rounded-xl hover:bg-orange-600 active:scale-[0.98] transition disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:active:scale-100"
                           >
@@ -1574,7 +1757,7 @@ export default function TeacherDashboard() {
                           </button>
                           {statusInfo.key === "approved" && (
                             <button
-                              onClick={() => handleCancelApproval(j.id)}
+                              onClick={() => void handleCancelApproval(j.id)}
                               disabled={isBusy}
                               className="flex items-center justify-center gap-1.5 whitespace-nowrap px-3 py-2 border border-emerald-300 text-emerald-700 bg-white text-sm font-semibold rounded-xl hover:bg-emerald-50 active:scale-[0.98] transition disabled:opacity-50"
                             >
@@ -1583,11 +1766,12 @@ export default function TeacherDashboard() {
                             </button>
                           )}
                           <button
-                            onClick={() => handleDeleteJournal(j.id)}
+                            onClick={() => void handleDeleteJournal(j.id)}
+                            disabled={deleteJournalLoading === j.id || journalActionLoading === j.id}
                             aria-label={`Hapus jurnal ${j.bookTitle}`}
-                            className="flex items-center justify-center px-3 py-2 text-red-600 border border-red-200 bg-red-50 rounded-xl hover:bg-red-100 transition"
+                            className="flex items-center justify-center px-3 py-2 text-red-600 border border-red-200 bg-red-50 rounded-xl hover:bg-red-100 transition disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-red-50"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            {deleteJournalLoading === j.id ? "..." : <Trash2 className="w-4 h-4" />}
                           </button>
                         </div>
                       </div>
@@ -1688,7 +1872,7 @@ export default function TeacherDashboard() {
                           Ubah
                         </button>
                         <button
-                          onClick={() => handleDeleteStudent(student)}
+                          onClick={() => void handleDeleteStudent(student)}
                           disabled={managementLoading}
                           aria-label={`Hapus data ${student.name}`}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-red-600 border border-red-200 bg-red-50 rounded-lg text-xs font-semibold hover:bg-red-100 disabled:opacity-50 transition"
@@ -2073,6 +2257,24 @@ export default function TeacherDashboard() {
                                     <p className="text-xs text-emerald-700/60 mt-0.5">
                                       <strong>Nilai Karakter:</strong> {getCharacterList(j).join(", ") || "-"}
                                     </p>
+                                    <p className="text-xs text-emerald-700/60 mt-0.5">
+                                      <strong>Upload:</strong> {formatTanggal(toDateSafe(j.createdAt))}
+                                    </p>
+                                    {j.approvedBy ? (
+                                      <p className="text-xs text-emerald-700/60 mt-0.5">
+                                        <strong>Validator:</strong> <span className="font-medium">{j.approvedBy}</span>
+                                      </p>
+                                    ) : (
+                                      <p className="text-xs text-emerald-700/60 mt-0.5">
+                                        <strong>Validator:</strong> Belum divalidasi
+                                      </p>
+                                    )}
+                                    {(j.updatedAt || j.createdAt) && (
+                                      <p className="text-xs text-emerald-700/60 mt-0.5">
+                                        <strong>Terakhir diperbarui:</strong>{" "}
+                                        {formatTanggal(toDateSafe(j.updatedAt || j.createdAt))}
+                                      </p>
+                                    )}
                                     {j.teacherFeedback && (
                                       <p className="text-xs text-emerald-800 mt-1">
                                         <strong>
@@ -2091,40 +2293,61 @@ export default function TeacherDashboard() {
                   </div>
                 ))}
             </div>
+
+            <div className="border-t border-emerald-100 pt-4">
+              <h3 className="text-sm font-semibold text-emerald-800 mb-2">
+                Pratinjau Detail Rekapan
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[1200px] text-xs">
+                  <thead>
+                    <tr className="text-left text-emerald-700/60 border-b border-emerald-100">
+                      {DETAILED_HEADERS.map((header) => (
+                        <th key={header} className="py-2 pr-3 align-top">{header}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {printableRows.map((row, rowIndex) => (
+                      <tr key={`${String(row[0])}-${rowIndex}`} className="border-b border-emerald-50">
+                        {row.map((field, fieldIndex) => (
+                          <td key={`${rowIndex}-${fieldIndex}`} className="py-2 pr-3 align-top">{field}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         )}
       </div>
 
       {/* ---- Versi cetak ---- */}
-      <div className="hidden print:block p-8 text-black">
-        <h1 className="text-xl font-bold mb-1">Laporan Semua Kelas</h1>
-        <p className="text-sm mb-4">Dicetak pada {formatTanggal(new Date())}</p>
-        <table className="w-full text-sm border-collapse">
+      <div className="hidden print:block p-6 text-black">
+        <h1 className="text-xl font-bold mb-1">
+          {reportView === "siswa" ? "Laporan Per Siswa" : "Laporan Per Kelas"}
+        </h1>
+        <p className="text-sm mb-1">
+          {reportView === "siswa"
+            ? reportStudent === "all" ? "Semua siswa" : `Siswa: ${reportStudent}`
+            : reportClass === "all" ? "Semua kelas" : `Kelas: ${reportClass}`}
+        </p>
+        <p className="text-sm mb-4">Periode: {reportPeriodLabel} · Dicetak pada {formatTanggal(new Date())}</p>
+        <table className="w-full text-[9px] border-collapse">
           <thead>
             <tr className="text-left border-b border-black">
-              <th className="py-1 pr-2">Nama Siswa</th>
-              <th className="py-1 pr-2">Kelas</th>
-              <th className="py-1 pr-2">Gender</th>
-              <th className="py-1 pr-2">Total Jurnal</th>
-              <th className="py-1 pr-2">Tervalidasi</th>
-              <th className="py-1 pr-2">Perlu Revisi</th>
-              <th className="py-1 pr-2">Menunggu</th>
-              <th className="py-1 pr-2">Halaman Dibaca</th>
-              <th className="py-1 pr-2">Buku Selesai</th>
+              {DETAILED_HEADERS.map((header) => (
+                <th key={header} className="py-1 pr-2 align-top">{header}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {studentSummaries.map((s) => (
-              <tr key={s.name} className="border-b border-slate-300">
-                <td className="py-1 pr-2">{s.name}</td>
-                <td className="py-1 pr-2">{s.classCode}</td>
-                <td className="py-1 pr-2">{formatGender(s.gender)}</td>
-                <td className="py-1 pr-2">{s.totalJournals}</td>
-                <td className="py-1 pr-2">{s.approvedCount}</td>
-                <td className="py-1 pr-2">{s.revisionCount}</td>
-                <td className="py-1 pr-2">{s.pendingCount}</td>
-                <td className="py-1 pr-2">{s.totalPagesRead}</td>
-                <td className="py-1 pr-2">{s.booksFinished}</td>
+            {printableRows.map((row, rowIndex) => (
+              <tr key={`${String(row[0])}-${rowIndex}`} className="border-b border-slate-300">
+                {row.map((field, fieldIndex) => (
+                  <td key={`${rowIndex}-${fieldIndex}`} className="py-1 pr-2 align-top">{field}</td>
+                ))}
               </tr>
             ))}
           </tbody>
@@ -2230,6 +2453,45 @@ export default function TeacherDashboard() {
                         </p>
                       )}
                       <p className="text-xs text-emerald-800/70 italic">&quot;{j.summary}&quot;</p>
+                      {j.approvedBy ? (
+                        <p className="text-xs text-emerald-700/60 mt-1">
+                          <strong>Validator:</strong> <span className="font-medium">{j.approvedBy}</span>
+                        </p>
+                      ) : (
+                        <p className="text-xs text-emerald-700/60 mt-1">
+                          <strong>Validator:</strong> Belum divalidasi
+                        </p>
+                      )}
+
+                      {/* Progress Log — tampil riwayat membaca bertahap jika ada */}
+                      {j.progressLog && j.progressLog.length > 0 && (
+                        <div className="mt-2 text-xs rounded-lg bg-blue-50 border border-blue-200 p-2">
+                          <strong className="block text-blue-900 mb-1">📚 Log Progres Membaca:</strong>
+                          <div className="space-y-1">
+                            {j.progressLog
+                              .slice()
+                              .sort(
+                                (a, b) =>
+                                  (toDateSafe(b.timestamp)?.getTime() ?? 0) -
+                                  (toDateSafe(a.timestamp)?.getTime() ?? 0)
+                              )
+                              .map((progress, idx) => (
+                                <div key={progress.id} className="text-blue-800">
+                                  <span className="font-medium">#{j.progressLog!.length - idx}.</span> Hal.{" "}
+                                  {progress.startPage}-{progress.endPage} ({progress.endPage - progress.startPage} hal.)
+                                  {progress.timestamp && (
+                                    <span className="text-blue-700 ml-1">
+                                      • {formatTanggal(toDateSafe(progress.timestamp))}
+                                    </span>
+                                  )}
+                                  <br />
+                                  <span className="italic text-blue-700">&quot;{progress.summary}&quot;</span>
+                                </div>
+                              ))}
+                          </div>
+                        </div>
+                      )}
+
                       {j.teacherFeedback && (
                         <p className="text-xs text-emerald-800 mt-1">
                           <strong>{statusInfo.key === "revision" ? "Alasan revisi" : "Umpan balik"}:</strong>{" "}
@@ -2246,4 +2508,37 @@ export default function TeacherDashboard() {
       )}
     </div>
   );
+}
+
+function buildLeaderboard(journalsInput: Journal[], limit = 10): LeaderboardEntry[] {
+  const statsByStudent = new Map<
+    string,
+    { studentName: string; classCode: string; journalCount: number; finishedTitles: Set<string> }
+  >();
+
+  journalsInput.forEach((journal) => {
+    if (!journal.studentId) return;
+    const stats = statsByStudent.get(journal.studentId) || {
+      studentName: journal.studentName || "Siswa",
+      classCode: journal.classCode || "-",
+      journalCount: 0,
+      finishedTitles: new Set<string>(),
+    };
+    stats.journalCount += 1;
+    if (journal.finished && journal.bookTitle) {
+      stats.finishedTitles.add(journal.bookTitle.trim().toLowerCase());
+    }
+    statsByStudent.set(journal.studentId, stats);
+  });
+
+  return Array.from(statsByStudent.entries())
+    .map(([studentId, stats]) => ({
+      studentId,
+      studentName: stats.studentName,
+      classCode: stats.classCode,
+      journalCount: stats.journalCount,
+      booksFinished: stats.finishedTitles.size,
+    }))
+    .sort((a, b) => b.journalCount - a.journalCount || b.booksFinished - a.booksFinished)
+    .slice(0, limit);
 }

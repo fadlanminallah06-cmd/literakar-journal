@@ -52,13 +52,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         profileTimeout = null;
       }
 
+      let resolved = false;
+
       if (!currentUser) {
+        resolved = true;
         setUserProfile(null);
         setLoading(false);
         return;
       }
-
-      let resolved = false;
 
       // PENTING: pakai onSnapshot (listener real-time), bukan getDoc
       // sekali baca. Ini menghindari race condition dengan setDoc yang
@@ -68,29 +69,30 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       unsubProfile = onSnapshot(
         doc(db, "users", currentUser.uid),
         (snap) => {
+          resolved = true;
+          if (profileTimeout) clearTimeout(profileTimeout);
+
           if (snap.exists()) {
-            resolved = true;
-            if (profileTimeout) clearTimeout(profileTimeout);
             setUserProfile(snap.data() as UserProfile);
-            setLoading(false);
+          } else {
+            setUserProfile(null);
           }
-          // Kalau belum exists: JANGAN langsung set loading(false) di sini.
-          // Beri kesempatan snapshot berikutnya (setelah setDoc selesai)
-          // untuk masuk secara otomatis.
+          setLoading(false);
         },
         () => {
           // Error (misal permission-denied)
           resolved = true;
+          if (profileTimeout) clearTimeout(profileTimeout);
           setUserProfile(null);
           setLoading(false);
         }
       );
 
-      // Fallback: kalau dalam 5 detik dokumen tetap tidak muncul,
-      // berarti bukan race condition tapi memang akun zombie/tidak
-      // punya profil — berhenti menunggu supaya tidak loading selamanya.
+      // Fallback: kalau dalam 5 detik dokumen belum masuk, jangan terpaku
+      // di loading selamanya karena profil mungkin belum siap atau memang tidak ada.
       profileTimeout = setTimeout(() => {
         if (!resolved) {
+          resolved = true;
           setUserProfile(null);
           setLoading(false);
         }

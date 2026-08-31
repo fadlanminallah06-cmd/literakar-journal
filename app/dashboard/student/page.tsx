@@ -41,6 +41,11 @@ import {
   Compass,
   Heart,
   Sunrise,
+  Home,
+  NotebookPen,
+  History,
+  TreeDeciduous,
+  ChevronRight,
 } from "lucide-react";
 
 interface ProgressEntry {
@@ -214,7 +219,7 @@ const TIER_STYLES: Record<BadgeTier, { earnedBg: string; label: string }> = {
 };
 
 function BadgeIcon({ icon, earned }: { icon: string; earned: boolean }) {
-  const className = `w-8 h-8 ${earned ? "text-white" : "text-slate-400"}`;
+  const className = `w-7 h-7 sm:w-8 sm:h-8 ${earned ? "text-white" : "text-slate-400"}`;
   switch (icon) {
     case "library":
       return <Library className={className} />;
@@ -276,33 +281,33 @@ function BadgeCard({
 
   return (
     <div
-      className={`relative flex items-center gap-4 p-4 rounded-2xl border transition ${
+      className={`relative flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-2xl border transition-all duration-200 hover:-translate-y-0.5 ${
         earned
           ? dark
-            ? "bg-slate-800 border-emerald-700 shadow-sm shadow-black/20"
-            : "bg-white border-emerald-200 shadow-sm shadow-emerald-900/5"
+            ? "bg-slate-800 border-emerald-700/70 shadow-md shadow-black/20"
+            : "bg-white border-emerald-200 shadow-md shadow-emerald-900/[0.06]"
           : dark
-          ? "bg-slate-800/50 border-slate-700"
-          : "bg-slate-50/80 border-slate-200"
+          ? "bg-slate-800/40 border-slate-700/70"
+          : "bg-slate-50/80 border-slate-200/80"
       }`}
     >
       {isNew && (
-        <span className="absolute -top-2 -right-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500 text-white shadow-sm animate-bounce">
+        <span className="absolute -top-2 -right-2 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-500 text-white shadow-sm shadow-orange-900/20 animate-bounce">
           Baru!
         </span>
       )}
       <div
-        className={`w-16 h-16 rounded-full flex items-center justify-center shrink-0 ${
-          earned ? tierStyle.earnedBg : "bg-slate-200"
+        className={`w-12 h-12 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center shrink-0 ${
+          earned ? tierStyle.earnedBg + " shadow-inner shadow-black/10" : dark ? "bg-slate-700/70" : "bg-slate-200/80"
         }`}
       >
         <BadgeIcon icon={icon} earned={earned} />
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2 flex-wrap">
-          <h3 className={`font-bold ${earned ? (dark ? "text-emerald-100" : "text-emerald-900") : "text-slate-500"}`}>{title}</h3>
-          {!earned && <LockKeyhole className="w-4 h-4 text-slate-400" />}
-          {earned && <Award className="w-4 h-4 text-amber-500" />}
+          <h3 className={`text-sm sm:text-base font-bold ${earned ? (dark ? "text-emerald-100" : "text-emerald-900") : "text-slate-500"}`}>{title}</h3>
+          {!earned && <LockKeyhole className="w-3.5 h-3.5 text-slate-400" />}
+          {earned && <Award className="w-3.5 h-3.5 text-amber-500" />}
           {earned && (
             <span
               className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
@@ -519,32 +524,32 @@ function TreeGrowth({ totalPages, dark }: { totalPages: number; dark: boolean })
   };
 
   return (
-    <div className={`p-6 rounded-2xl shadow-sm border ${dark ? "bg-slate-800/80 border-slate-700 shadow-black/20" : "bg-white/80 backdrop-blur-sm shadow-emerald-900/5 border-white"}`}>
+    <div className={`p-4 sm:p-6 rounded-3xl shadow-md border ${dark ? "bg-slate-800/80 border-slate-700 shadow-black/20" : "bg-white/90 backdrop-blur-sm shadow-emerald-900/[0.06] border-white"}`}>
       <TreeShareStyles scope="full" />
 
       <div className="flex items-center gap-3 mb-5">
-        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${dark ? "bg-emerald-900/60 text-emerald-300" : "bg-emerald-100 text-emerald-700"}`}>
+        <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center shrink-0 ${dark ? "bg-emerald-900/60 text-emerald-300" : "bg-emerald-100 text-emerald-700"}`}>
           <Library className="w-5 h-5" />
         </div>
-        <div>
-          <h2 className={`text-lg font-bold ${dark ? "text-emerald-100" : "text-emerald-900"}`}>Pohon Literasi</h2>
+        <div className="min-w-0">
+          <h2 className={`text-base sm:text-lg font-bold tracking-tight ${dark ? "text-emerald-100" : "text-emerald-900"}`}>Pohon Literasi</h2>
           <p className={`text-xs ${dark ? "text-emerald-300/60" : "text-emerald-700/60"}`}>Setiap halaman yang kamu baca membantu pohonmu tumbuh.</p>
         </div>
       </div>
 
-      <div className="relative rounded-2xl bg-gradient-to-b from-sky-100 via-emerald-50 to-lime-100 p-5 text-center overflow-hidden">
+      <div className="relative rounded-2xl bg-gradient-to-b from-sky-100 via-emerald-50 to-lime-100 p-4 sm:p-5 text-center overflow-hidden ring-1 ring-black/5">
         {/* matahari samar */}
         <div className="pointer-events-none absolute -top-8 -right-8 w-28 h-28 rounded-full bg-amber-200/50 blur-2xl" />
         <div className="pointer-events-none absolute top-4 right-6 w-10 h-10 rounded-full bg-gradient-to-br from-yellow-200 to-amber-300 opacity-80" />
 
         <p className="relative text-xs font-medium text-emerald-700/70">Total halaman yang dibaca</p>
-        <p className="relative text-3xl font-bold text-emerald-900 mt-1">{totalPages} halaman</p>
+        <p className="relative text-2xl sm:text-3xl font-bold text-emerald-900 mt-1 tracking-tight">{totalPages} halaman</p>
 
         <button
           type="button"
           onClick={shakeTree}
           aria-label="Sentuh pohon literasi"
-          className="relative mx-auto mt-3 block w-full max-w-xs h-64 group"
+          className="relative mx-auto mt-3 block w-full max-w-xs h-52 sm:h-64 group focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-2xl"
         >
           {/* daun berjatuhan saat disentuh */}
           {leaves.map((leaf) => (
@@ -566,7 +571,7 @@ function TreeGrowth({ totalPages, dark }: { totalPages: number; dark: boolean })
           ))}
 
           {/* tanah / rumput */}
-          <svg viewBox="0 0 200 40" className="absolute bottom-0 left-1/2 -translate-x-1/2 w-56" aria-hidden="true">
+          <svg viewBox="0 0 200 40" className="absolute bottom-0 left-1/2 -translate-x-1/2 w-48 sm:w-56" aria-hidden="true">
             <ellipse cx="100" cy="20" rx="95" ry="14" fill="#bbf7d0" opacity={0.7} />
             <circle cx="60" cy="16" r="3.5" fill="#facc15" opacity={0.7} />
             <circle cx="140" cy="22" r="3.5" fill="#f9a8d4" opacity={0.6} />
@@ -607,7 +612,7 @@ function TreeGrowth({ totalPages, dark }: { totalPages: number; dark: boolean })
         </button>
 
         <p className="relative text-xs text-emerald-700/60 -mt-1">Sentuh pohon untuk membuatnya bergoyang!</p>
-        <h3 className="relative text-xl font-bold text-emerald-900 mt-3">{stageMeta.label}</h3>
+        <h3 className="relative text-lg sm:text-xl font-bold text-emerald-900 mt-3 tracking-tight">{stageMeta.label}</h3>
         <p className="relative text-sm font-semibold text-emerald-800">({stageMeta.range})</p>
 
         {/* progres bertahap: Kecil -> Muda -> Besar */}
@@ -630,12 +635,12 @@ function TreeGrowth({ totalPages, dark }: { totalPages: number; dark: boolean })
             {segments.map((seg) => (
               <span
                 key={seg.key}
-                className={`text-[11px] font-medium flex items-center gap-1 ${
+                className={`text-[10px] sm:text-[11px] font-medium flex items-center gap-1 ${
                   seg.key === stage ? "text-emerald-800" : "text-emerald-700/40"
                 }`}
               >
                 <span>{seg.icon}</span>
-                {seg.label}
+                <span className="hidden xs:inline">{seg.label}</span>
               </span>
             ))}
           </div>
@@ -656,9 +661,9 @@ function TreeProgressIcon({ totalPages, dark }: { totalPages: number; dark: bool
   const stageMeta = TREE_STAGE_META[stage];
 
   return (
-    <div className={`flex items-center gap-3 rounded-2xl border px-4 py-3 shrink-0 ${dark ? "bg-gradient-to-br from-slate-800 to-slate-800 border-emerald-800" : "bg-gradient-to-br from-emerald-50 to-lime-50 border-emerald-100"}`}>
+    <div className={`flex items-center gap-3 rounded-2xl border px-3 sm:px-4 py-2.5 sm:py-3 shrink-0 w-full sm:w-auto ${dark ? "bg-gradient-to-br from-slate-800 to-slate-800 border-emerald-800" : "bg-gradient-to-br from-emerald-50 to-lime-50 border-emerald-100"}`}>
       <TreeShareStyles scope="mini" />
-      <svg viewBox="0 0 200 200" className="w-14 h-14 tree-idle-sway-mini" aria-hidden="true">
+      <svg viewBox="0 0 200 200" className="w-12 h-12 sm:w-14 sm:h-14 tree-idle-sway-mini shrink-0" aria-hidden="true">
         <defs>
           <linearGradient id={`${uid}-trunk-mini`} x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="#92400e" />
@@ -670,9 +675,9 @@ function TreeProgressIcon({ totalPages, dark }: { totalPages: number; dark: bool
           <TreeCanopy stage={stage} gradId={`${uid}-canopy-mini`} showBuds={stage === "young"} showFruit={stage === "big"} />
         </g>
       </svg>
-      <div>
+      <div className="min-w-0">
         <p className={`text-xs ${dark ? "text-emerald-300/60" : "text-emerald-700/60"}`}>Pohonmu saat ini</p>
-        <p className={`text-sm font-bold ${dark ? "text-emerald-100" : "text-emerald-900"}`}>{stageMeta.label}</p>
+        <p className={`text-sm font-bold truncate ${dark ? "text-emerald-100" : "text-emerald-900"}`}>{stageMeta.label}</p>
         <p className={`text-xs ${dark ? "text-emerald-300/70" : "text-emerald-700/70"}`}>{totalPages} halaman</p>
       </div>
     </div>
@@ -703,12 +708,12 @@ function StatCard({
   const c = colorMap[color];
 
   return (
-    <div className={`p-4 rounded-2xl shadow-sm border flex flex-col gap-2 ${dark ? "bg-slate-800/80 border-slate-700 shadow-black/20" : "bg-white/80 backdrop-blur-sm shadow-emerald-900/5 border-emerald-100"}`}>
-      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${dark ? c.bgDark + " " + c.textDark : c.bg + " " + c.text}`}>
+    <div className={`p-3 sm:p-4 rounded-2xl shadow-md border flex flex-col gap-1.5 sm:gap-2 transition-transform duration-200 hover:-translate-y-0.5 ${dark ? "bg-slate-800/80 border-slate-700 shadow-black/20" : "bg-white/90 backdrop-blur-sm shadow-emerald-900/[0.06] border-emerald-100/80"}`}>
+      <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center ${dark ? c.bgDark + " " + c.textDark : c.bg + " " + c.text}`}>
         {icon}
       </div>
-      <span className={`text-2xl font-bold ${dark ? "text-emerald-100" : "text-emerald-900"}`}>{value}</span>
-      <span className={`text-xs font-medium ${dark ? "text-emerald-300/70" : "text-emerald-700/70"}`}>{label}</span>
+      <span className={`text-xl sm:text-2xl font-bold tracking-tight ${dark ? "text-emerald-100" : "text-emerald-900"}`}>{value}</span>
+      <span className={`text-[11px] sm:text-xs font-medium leading-snug ${dark ? "text-emerald-300/70" : "text-emerald-700/70"}`}>{label}</span>
     </div>
   );
 }
@@ -757,12 +762,12 @@ function MyProgressChart({ journals, dark }: { journals: Journal[]; dark: boolea
   const labelColor = dark ? "#6ee7b7" : "#047857";
 
   return (
-    <div className={`p-5 rounded-2xl shadow-sm border ${dark ? "bg-slate-800/80 border-slate-700 shadow-black/20" : "bg-white/80 backdrop-blur-sm shadow-emerald-900/5 border-white"}`}>
+    <div className={`p-4 sm:p-5 rounded-2xl shadow-md border ${dark ? "bg-slate-800/80 border-slate-700 shadow-black/20" : "bg-white/90 backdrop-blur-sm shadow-emerald-900/[0.06] border-white"}`}>
       <h3 className={`text-sm font-semibold mb-2 ${dark ? "text-emerald-200/80" : "text-emerald-800/70"}`}>
         Progres Membacamu (14 hari terakhir)
       </h3>
       <div className="w-full overflow-x-auto">
-        <svg viewBox={`0 0 ${w} ${h}`} className="w-full max-w-full h-40">
+        <svg viewBox={`0 0 ${w} ${h}`} className="w-full min-w-[420px] sm:min-w-0 max-w-full h-36 sm:h-40">
           {[0, 0.25, 0.5, 0.75, 1].map((t) => {
             const y = pad + innerH - t * innerH;
             return <line key={t} x1={pad} y1={y} x2={w - pad} y2={y} stroke={gridColor} strokeWidth="1" />;
@@ -797,7 +802,7 @@ function MyProgressChart({ journals, dark }: { journals: Journal[]; dark: boolea
 
 function LiterakarMascot() {
   return (
-    <svg viewBox="0 0 200 220" className="w-36 h-40 mx-auto mascot-pop">
+    <svg viewBox="0 0 200 220" className="w-28 h-32 sm:w-36 sm:h-40 mx-auto mascot-pop">
       <defs>
         <linearGradient id="literakar-leaf" x1="0%" y1="0%" x2="100%" y2="100%">
           <stop offset="0%" stopColor="#86efac" />
@@ -933,7 +938,7 @@ function GoalCelebrationModal({
     >
       <MascotCelebrationStyles />
       <div
-        className={`celebration-card relative w-full max-w-sm rounded-3xl p-6 text-center overflow-hidden shadow-2xl border ${
+        className={`celebration-card relative w-full max-w-sm rounded-3xl p-5 sm:p-6 text-center overflow-hidden shadow-2xl border max-h-[90vh] overflow-y-auto ${
           dark ? "bg-slate-800 border-emerald-700" : "bg-white border-emerald-100"
         }`}
         onClick={(e) => e.stopPropagation()}
@@ -962,7 +967,7 @@ function GoalCelebrationModal({
         <div className="relative">
           <LiterakarMascot />
 
-          <h3 className={`text-xl font-extrabold mt-2 ${dark ? "text-emerald-100" : "text-emerald-900"}`}>
+          <h3 className={`text-lg sm:text-xl font-extrabold mt-2 tracking-tight ${dark ? "text-emerald-100" : "text-emerald-900"}`}>
             Horeee, Target Tercapai! 🎉
           </h3>
           <p className={`text-sm mt-2 ${dark ? "text-emerald-300/80" : "text-emerald-700/80"}`}>
@@ -972,7 +977,7 @@ function GoalCelebrationModal({
           <button
             type="button"
             onClick={onClose}
-            className="mt-5 px-6 py-2.5 bg-emerald-600 text-white text-sm font-bold rounded-xl hover:bg-emerald-700 active:scale-[0.98] transition"
+            className="mt-5 px-6 py-2.5 bg-emerald-600 text-white text-sm font-bold rounded-xl shadow-sm shadow-emerald-900/20 hover:bg-emerald-700 active:scale-[0.98] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2"
           >
             Lanjut Membaca!
           </button>
@@ -1274,6 +1279,14 @@ export default function StudentDashboard() {
     }, 0);
   }, [journals]);
 
+  const approvedTotalPages = useMemo(() => {
+    return journals.reduce((acc, journal) => {
+      if (normalizeStatus(journal.status) !== "approved") return acc;
+      const pages = Number(journal.endPage) - Number(journal.startPage);
+      return acc + (Number.isNaN(pages) || pages < 0 ? 0 : pages);
+    }, 0);
+  }, [journals]);
+
   const totalBooksFinished = useMemo(() => {
     const finishedTitles = new Set<string>();
     journals.forEach((j) => {
@@ -1370,10 +1383,12 @@ export default function StudentDashboard() {
     return journals.some((j) => toDateSafe(j.createdAt)?.toDateString() === todayStr);
   }, [journals]);
 
-  // Fitur #9: total halaman yang sudah dibaca HARI INI, dibandingkan dengan target harian.
+  // Fitur #9: total halaman yang sudah divalidasi HARI INI, dibandingkan dengan target harian.
+  // Hanya jurnal yang statusnya "approved" yang menghitung target membaca dan reward.
   const todayPages = useMemo(() => {
     const todayStr = new Date().toDateString();
     return journals.reduce((acc, j) => {
+      if (normalizeStatus(j.status) !== "approved") return acc;
       const d = toDateSafe(j.createdAt);
       if (!d || d.toDateString() !== todayStr) return acc;
       const pages = Number(j.endPage) - Number(j.startPage);
@@ -1386,6 +1401,7 @@ export default function StudentDashboard() {
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayKey = yesterday.toDateString();
     return journals.reduce((acc, j) => {
+      if (normalizeStatus(j.status) !== "approved") return acc;
       const d = toDateSafe(j.createdAt);
       if (!d || d.toDateString() !== yesterdayKey) return acc;
       const pages = Number(j.endPage) - Number(j.startPage);
@@ -1763,6 +1779,8 @@ export default function StudentDashboard() {
         endPage: Math.max(journal.endPage, endPage),
         summary: addProgressForm.summary.trim(),
         progressLog: updatedProgressLog,
+        status: "pending",
+        teacherFeedback: "",
         updatedAt: serverTimestamp(),
       };
 
@@ -1817,17 +1835,17 @@ export default function StudentDashboard() {
     );
   }
 
-  const tabs: { key: TabKey; label: string; badgeCount?: number }[] = [
-    { key: "beranda", label: "Beranda" },
-    { key: "badge", label: "Badge Saya" },
-    { key: "pohon", label: "Pohon Literasi" },
-    { key: "leaderboard", label: "Leaderboard" },
-    { key: "jurnal", label: "Isi Jurnal Membaca" },
-    { key: "riwayat", label: "Riwayat Jurnal", badgeCount: revisionCount },
+  const tabs: { key: TabKey; label: string; icon: React.ReactNode; badgeCount?: number }[] = [
+    { key: "beranda", label: "Beranda", icon: <Home className="w-4 h-4" /> },
+    { key: "badge", label: "Badge Saya", icon: <Award className="w-4 h-4" /> },
+    { key: "pohon", label: "Pohon Literasi", icon: <TreeDeciduous className="w-4 h-4" /> },
+    { key: "leaderboard", label: "Leaderboard", icon: <Trophy className="w-4 h-4" /> },
+    { key: "jurnal", label: "Isi Jurnal Membaca", icon: <NotebookPen className="w-4 h-4" /> },
+    { key: "riwayat", label: "Riwayat Jurnal", icon: <History className="w-4 h-4" />, badgeCount: revisionCount },
   ];
 
   return (
-    <div className={`min-h-screen p-4 md:p-6 relative ${theme.pageBg}`}>
+    <div className={`min-h-screen p-3 sm:p-4 md:p-6 relative ${theme.pageBg}`}>
       {/* Modal perayaan Literakar saat target harian tercapai */}
       <GoalCelebrationModal
         show={showGoalCelebration}
@@ -1844,20 +1862,25 @@ export default function StudentDashboard() {
       </div>
 
       <div className="relative max-w-5xl mx-auto">
-        <header className={`flex justify-between items-center mb-6 p-4 rounded-2xl shadow-sm border backdrop-blur-sm ${theme.panel}`}>
-          <div>
-            <h1 className={`text-xl font-bold ${theme.headingText}`}>Dashboard Siswa</h1>
-            <p className={`text-sm ${theme.bodyText}`}>
-              Kelas: {userProfile?.classCode}
-              {genderLabel && <span className="ml-2">· {genderLabel}</span>}
-            </p>
+        <header className={`flex flex-wrap justify-between items-center gap-3 mb-4 sm:mb-6 p-3 sm:p-4 rounded-2xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className={`hidden sm:flex w-11 h-11 rounded-2xl items-center justify-center shrink-0 ${darkMode ? "bg-emerald-900/60 text-emerald-300" : "bg-emerald-100 text-emerald-700"}`}>
+              <BookOpen className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <h1 className={`text-base sm:text-xl font-bold tracking-tight truncate ${theme.headingText}`}>Dashboard Siswa</h1>
+              <p className={`text-xs sm:text-sm ${theme.bodyText}`}>
+                Kelas: {userProfile?.classCode}
+                {genderLabel && <span className="ml-2">· {genderLabel}</span>}
+              </p>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             {/* Fitur #10: tombol mode gelap */}
             <button
               onClick={toggleDarkMode}
               aria-label={darkMode ? "Aktifkan mode terang" : "Aktifkan mode gelap"}
-              className={`flex items-center justify-center w-10 h-10 rounded-xl border transition active:scale-[0.98] ${
+              className={`flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl border transition active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
                 darkMode
                   ? "bg-slate-700 border-slate-600 text-amber-300 hover:bg-slate-600"
                   : "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
@@ -1867,24 +1890,25 @@ export default function StudentDashboard() {
             </button>
             <button
               onClick={logout}
-              className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl text-sm font-semibold hover:bg-red-100 active:scale-[0.98] transition"
+              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl text-sm font-semibold hover:bg-red-100 active:scale-[0.98] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
             >
               <LogOut className="w-4 h-4" />
-              Keluar
+              <span className="hidden sm:inline">Keluar</span>
             </button>
           </div>
         </header>
 
-        <nav className={`mb-6 w-full overflow-x-auto rounded-2xl p-2 shadow-sm border backdrop-blur-sm ${theme.panel}`}>
-          <div className="flex min-w-max gap-2">
+        <nav className={`mb-4 sm:mb-6 w-full overflow-x-auto rounded-2xl p-1.5 shadow-md border backdrop-blur-sm ${theme.panel}`}>
+          <div className="flex min-w-max gap-1">
             {tabs.map((t) => (
               <button
                 key={t.key}
                 onClick={() => setActiveTab(t.key)}
-                className={`shrink-0 whitespace-nowrap px-3 py-2 rounded-xl text-sm font-semibold uppercase tracking-wide transition sm:px-4 flex items-center gap-1.5 ${
+                className={`shrink-0 whitespace-nowrap px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-150 flex items-center gap-1.5 sm:gap-2 ${
                   activeTab === t.key ? theme.navActive : theme.navInactive
                 }`}
               >
+                {t.icon}
                 {t.label}
                 {!!t.badgeCount && (
                   <span
@@ -1902,22 +1926,22 @@ export default function StudentDashboard() {
 
         {/* ---- Tab: Beranda ---- */}
         {activeTab === "beranda" && (
-          <div className="space-y-6">
-            <div className={`p-6 rounded-2xl shadow-sm border backdrop-blur-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 ${theme.panel}`}>
+          <div className="space-y-4 sm:space-y-6">
+            <div className={`p-4 sm:p-6 rounded-3xl shadow-md border backdrop-blur-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 ${theme.panel}`}>
               <div>
-                <h2 className={`text-xl font-bold ${theme.headingText}`}>Halo, {displayName} 👋</h2>
+                <h2 className={`text-lg sm:text-xl font-bold tracking-tight ${theme.headingText}`}>Halo, {displayName} 👋</h2>
                 <p className={`text-sm mt-1 ${theme.bodyText}`}>Semangat membaca hari ini!</p>
               </div>
-              <TreeProgressIcon totalPages={totalPages} dark={darkMode} />
+              <TreeProgressIcon totalPages={approvedTotalPages} dark={darkMode} />
             </div>
 
             {/* Indikator: peringkat siswa di kelasnya sendiri, berdasarkan leaderboard */}
             {myClassRank && (
-              <div className={`p-4 rounded-2xl shadow-sm border backdrop-blur-sm flex items-center gap-3 ${theme.panel}`}>
+              <div className={`p-3.5 sm:p-4 rounded-2xl shadow-md border backdrop-blur-sm flex items-center gap-3 ${theme.panel}`}>
                 <div
-                  className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${
+                  className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 ${
                     myClassRank.rank <= 3
-                      ? "bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-500 text-white"
+                      ? "bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-500 text-white shadow-inner shadow-black/10"
                       : darkMode
                       ? "bg-slate-700 text-emerald-200"
                       : "bg-emerald-100 text-emerald-700"
@@ -1926,10 +1950,10 @@ export default function StudentDashboard() {
                   <Crown className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold ${theme.headingText}`}>
+                  <p className={`text-xs sm:text-sm font-semibold ${theme.headingText}`}>
                     Peringkat kamu di kelas: <span className="text-amber-500">#{myClassRank.rank}</span> dari {myClassRank.total} siswa
                   </p>
-                  <p className={`text-xs mt-0.5 ${theme.mutedText}`}>
+                  <p className={`text-[11px] sm:text-xs mt-0.5 ${theme.mutedText}`}>
                     Berdasarkan jumlah jurnal terbanyak di Kelas {userProfile?.classCode}
                   </p>
                 </div>
@@ -1939,17 +1963,18 @@ export default function StudentDashboard() {
                     setActiveTab("leaderboard");
                     setLeaderboardSubTab("kelas");
                   }}
-                  className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.98] transition"
+                  className="shrink-0 flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.98] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                 >
-                  Lihat
+                  <span className="hidden xs:inline">Lihat</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
             )}
 
-            {/* Fitur #4: reminder streak — muncul kalau siswa belum isi jurnal hari ini */}
-            {!hasJournalToday && (
+            {/* Fitur #4: reminder streak — muncul kalau siswa belum isi jurnal hari ini dan belum mencapai target hari ini */}
+            {!dailyGoalReached && !hasJournalToday && (
               <div
-                className={`p-4 rounded-2xl border flex items-center gap-3 ${
+                className={`p-3.5 sm:p-4 rounded-2xl border flex flex-wrap sm:flex-nowrap items-center gap-3 ${
                   readingStreak > 0
                     ? darkMode
                       ? "bg-orange-900/30 border-orange-800 text-orange-200"
@@ -1961,7 +1986,7 @@ export default function StudentDashboard() {
               >
                 {readingStreak > 0 ? <Flame className="w-5 h-5 shrink-0" /> : <Sparkles className="w-5 h-5 shrink-0" />}
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold">
+                  <p className="text-xs sm:text-sm font-semibold">
                     {readingStreak > 0
                       ? `Streak ${readingStreak} harimu akan terputus kalau belum isi jurnal hari ini!`
                       : "Yuk mulai streak membaca hari ini!"}
@@ -1969,8 +1994,8 @@ export default function StudentDashboard() {
                 </div>
                 <button
                   onClick={() => setActiveTab("jurnal")}
-                  className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold transition active:scale-[0.98] ${
-                    readingStreak > 0 ? "bg-orange-500 text-white hover:bg-orange-600" : "bg-emerald-600 text-white hover:bg-emerald-700"
+                  className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold transition active:scale-[0.98] focus:outline-none focus-visible:ring-2 w-full sm:w-auto ${
+                    readingStreak > 0 ? "bg-orange-500 text-white hover:bg-orange-600 focus-visible:ring-orange-400" : "bg-emerald-600 text-white hover:bg-emerald-700 focus-visible:ring-emerald-400"
                   }`}
                 >
                   Isi Jurnal
@@ -1978,7 +2003,7 @@ export default function StudentDashboard() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
               <StatCard label="Buku Selesai Bulan Ini" value={monthlyStats.finishedBooks} icon={<Library className="w-4 h-4" />} color="blue" dark={darkMode} />
               <StatCard label="Halaman Bulan Ini" value={monthlyStats.pages} icon={<BookOpen className="w-4 h-4" />} color="emerald" dark={darkMode} />
               <StatCard label="Streak Bulan Ini" value={`${monthlyStats.streak} hari`} icon={<Flame className="w-4 h-4" />} color="orange" dark={darkMode} />
@@ -1986,14 +2011,14 @@ export default function StudentDashboard() {
             </div>
 
             {/* Fitur #9: target membaca harian personal */}
-            <div className={`p-6 rounded-2xl shadow-sm border backdrop-blur-sm ${theme.panel}`}>
+            <div className={`p-4 sm:p-6 rounded-3xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
               <div className="flex items-center justify-between gap-2 mb-3">
                 <div className="flex items-center gap-2">
                   <Target className={`w-4 h-4 ${darkMode ? "text-emerald-300" : "text-emerald-700"}`} />
                   <h3 className={`text-sm font-semibold ${theme.headingText}`}>Target Membaca Harian</h3>
                 </div>
                 <span
-                  className={`text-[10px] px-2 py-1 rounded-full font-semibold ${
+                  className={`text-[10px] px-2 py-1 rounded-full font-semibold shrink-0 ${
                     targetLocked
                       ? darkMode
                         ? "bg-emerald-900/50 text-emerald-200 border border-emerald-700"
@@ -2007,12 +2032,12 @@ export default function StudentDashboard() {
                 </span>
               </div>
 
-              <div className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-2 text-xs text-emerald-800">
+              <div className={`mb-3 rounded-xl border px-3 py-2 text-xs ${darkMode ? "border-emerald-800 bg-emerald-900/20 text-emerald-200" : "border-emerald-200 bg-emerald-50/80 text-emerald-800"}`}>
                 Target harian kamu adalah <strong>{dailyGoal} halaman per hari</strong>. Kamu bisa menjaga konsistensi membaca setiap hari untuk naik level.
               </div>
 
               <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <input
                     type="number"
                     min={1}
@@ -2020,51 +2045,25 @@ export default function StudentDashboard() {
                     value={goalDraft}
                     onChange={(e) => setGoalDraft(e.target.value)}
                     disabled={targetLocked}
-                    className={`w-24 p-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input} ${targetLocked ? "opacity-60 cursor-not-allowed" : ""}`}
+                    className={`w-20 sm:w-24 p-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input} ${targetLocked ? "opacity-60 cursor-not-allowed" : ""}`}
                   />
                   <span className={`text-xs ${theme.bodyText}`}>halaman / hari</span>
                   <button
                     onClick={saveDailyGoal}
                     disabled={targetLocked}
-                    className="px-3 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-xl hover:bg-emerald-700 active:scale-[0.98] transition disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:hover:bg-slate-300"
+                    className="px-3 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-xl hover:bg-emerald-700 active:scale-[0.98] transition disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:hover:bg-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                   >
                     Simpan Target
                   </button>
                 </div>
               </div>
 
-              {yesterdayGoalMissed && (
+              {!dailyGoalReached && yesterdayGoalMissed && (
                 <div className="mt-3 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-800">
                   <div className="flex items-start gap-2">
                     <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
                     <span>
                       Target kemarin belum selesai: <strong>{yesterdayPages} / {dailyGoal}</strong> halaman. Ayo baca lagi hari ini agar streak tetap kuat!
-                    </span>
-                  </div>
-                </div>
-              )}
-
-              {dailyGoalReached && (
-                <div className="relative mt-3 overflow-hidden rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-100 via-yellow-100 to-orange-100 px-3 py-3 text-xs text-amber-900 shadow-sm">
-                  <div className="pointer-events-none absolute inset-0 overflow-hidden">
-                    {Array.from({ length: 12 }).map((_, idx) => (
-                      <span
-                        key={idx}
-                        className="absolute bottom-0 text-xl animate-[float-up_2.4s_ease-in-out_infinite]"
-                        style={{
-                          left: `${(idx * 11) % 100}%`,
-                          animationDelay: `${(idx % 6) * 0.25}s`,
-                          opacity: 0.8,
-                        }}
-                      >
-                        {idx % 2 === 0 ? "✨" : "🎉"}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="relative flex items-center gap-2">
-                    <span className="text-xl animate-bounce">🎉</span>
-                    <span>
-                      Target hari ini sudah tercapai! Kamu berhasil membaca <strong>{todayPages} / {dailyGoal}</strong> halaman. Reward kecil untuk semangatmu!
                     </span>
                   </div>
                 </div>
@@ -2087,7 +2086,7 @@ export default function StudentDashboard() {
             {/* Fitur #5: grafik progres membaca pribadi */}
             <MyProgressChart journals={journals} dark={darkMode} />
 
-            <div className={`p-6 rounded-2xl shadow-sm border backdrop-blur-sm ${theme.panel}`}>
+            <div className={`p-4 sm:p-6 rounded-3xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
               <h3 className={`text-sm font-semibold mb-3 ${darkMode ? "text-emerald-300/80" : "text-emerald-800/70"}`}>Jurnal Terbaru</h3>
               {journals.length === 0 ? (
                 <p className={`text-sm ${theme.bodyText}`}>
@@ -2096,9 +2095,9 @@ export default function StudentDashboard() {
               ) : (
                 <div className="space-y-2">
                   {journals.slice(0, 3).map((j) => (
-                    <div key={j.id} className={`flex justify-between items-center p-3 rounded-xl ${theme.panelSoft}`}>
-                      <span className={`text-sm font-semibold ${theme.headingText}`}>{j.bookTitle}</span>
-                      <span className={`text-xs ${theme.mutedText}`}>{formatTanggal(toDateSafe(j.createdAt))}</span>
+                    <div key={j.id} className={`flex justify-between items-center gap-2 p-3 rounded-xl transition-colors ${theme.panelSoft}`}>
+                      <span className={`text-sm font-semibold truncate ${theme.headingText}`}>{j.bookTitle}</span>
+                      <span className={`text-xs shrink-0 ${theme.mutedText}`}>{formatTanggal(toDateSafe(j.createdAt))}</span>
                     </div>
                   ))}
                 </div>
@@ -2109,16 +2108,16 @@ export default function StudentDashboard() {
 
         {/* ---- Tab: Badge Saya ---- */}
         {activeTab === "badge" && (
-          <div className={`p-6 rounded-2xl shadow-sm border backdrop-blur-sm space-y-5 ${theme.panel}`}>
+          <div className={`p-4 sm:p-6 rounded-3xl shadow-md border backdrop-blur-sm space-y-5 ${theme.panel}`}>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
-                <h2 className={`text-lg font-bold ${theme.headingText}`}>Badge Saya</h2>
+                <h2 className={`text-lg font-bold tracking-tight ${theme.headingText}`}>Badge Saya</h2>
                 <p className={`text-xs mt-1 ${theme.mutedText}`}>
                   Kumpulkan pencapaian dari kebiasaan membaca dan jurnalmu.
                 </p>
               </div>
               <div
-                className={`shrink-0 px-4 py-2 rounded-2xl border text-center ${
+                className={`shrink-0 px-4 py-2 rounded-2xl border text-center self-start sm:self-auto ${
                   darkMode ? "bg-slate-700/50 border-slate-600" : "bg-emerald-50 border-emerald-200"
                 }`}
               >
@@ -2139,13 +2138,13 @@ export default function StudentDashboard() {
             {/* Badge terdekat — memotivasi siswa dengan menunjukkan pencapaian yang paling dekat */}
             {nearestBadge && (
               <div
-                className={`p-4 rounded-2xl border flex items-center gap-3 ${
+                className={`p-3.5 sm:p-4 rounded-2xl border flex items-center gap-3 ${
                   darkMode ? "bg-orange-900/20 border-orange-800" : "bg-orange-50 border-orange-200"
                 }`}
               >
                 <Target className={`w-5 h-5 shrink-0 ${darkMode ? "text-orange-300" : "text-orange-600"}`} />
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm font-semibold ${darkMode ? "text-orange-200" : "text-orange-800"}`}>
+                  <p className={`text-xs sm:text-sm font-semibold ${darkMode ? "text-orange-200" : "text-orange-800"}`}>
                     Sedikit lagi! Badge &quot;{nearestBadge.title}&quot; ({nearestBadge.current}/{nearestBadge.target})
                   </p>
                   <div className={`h-1.5 rounded-full overflow-hidden mt-1.5 ${darkMode ? "bg-slate-700" : "bg-orange-900/10"}`}>
@@ -2158,7 +2157,7 @@ export default function StudentDashboard() {
               </div>
             )}
 
-            <div className={`flex gap-2 border-b pb-3 ${darkMode ? "border-slate-700" : "border-emerald-100"}`}>
+            <div className={`flex gap-2 border-b pb-3 overflow-x-auto ${darkMode ? "border-slate-700" : "border-emerald-100"}`}>
               {([
                 ["semua", "Semua"],
                 ["terkunci", "Terkunci"],
@@ -2168,7 +2167,7 @@ export default function StudentDashboard() {
                   key={filter}
                   type="button"
                   onClick={() => setBadgeFilter(filter)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition ${
+                  className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
                     badgeFilter === filter
                       ? "bg-emerald-600 text-white"
                       : darkMode
@@ -2218,15 +2217,15 @@ export default function StudentDashboard() {
         )}
 
         {/* ---- Tab: Pohon Literasi ---- */}
-        {activeTab === "pohon" && <TreeGrowth totalPages={totalPages} dark={darkMode} />}
+        {activeTab === "pohon" && <TreeGrowth totalPages={approvedTotalPages} dark={darkMode} />}
 
         {/* ---- Tab: Leaderboard ---- */}
         {activeTab === "leaderboard" && (
-          <div className={`p-6 rounded-2xl shadow-sm border backdrop-blur-sm ${theme.panel}`}>
+          <div className={`p-4 sm:p-6 rounded-3xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
               <div>
-                <h2 className={`text-lg font-bold flex items-center gap-2 ${theme.headingText}`}>
-                  <Trophy className="w-5 h-5 text-amber-500" />
+                <h2 className={`text-base sm:text-lg font-bold tracking-tight flex items-center gap-2 ${theme.headingText}`}>
+                  <Trophy className="w-5 h-5 text-amber-500 shrink-0" />
                   Leaderboard Pembaca Terajin
                 </h2>
                 <p className={`text-xs mt-1 ${theme.mutedText}`}>
@@ -2239,7 +2238,7 @@ export default function StudentDashboard() {
                 type="button"
                 onClick={() => void fetchLeaderboard()}
                 disabled={leaderboardLoading}
-                className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold transition disabled:opacity-50 ${
+                className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold transition disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 self-start sm:self-auto ${
                   darkMode ? "bg-slate-700 text-emerald-200 hover:bg-slate-600" : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
                 }`}
               >
@@ -2276,7 +2275,7 @@ export default function StudentDashboard() {
                 {classCodesAvailable.length === 0 ? (
                   <p className={`text-sm ${theme.bodyText}`}>Belum ada data kelas untuk ditampilkan.</p>
                 ) : (
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-col xs:flex-row xs:items-center gap-2">
                     <label className={`text-xs font-semibold shrink-0 ${theme.bodyText}`}>Pilih Kelas:</label>
                     <select
                       value={effectiveSelectedClassCode}
@@ -2311,7 +2310,7 @@ export default function StudentDashboard() {
                     return (
                       <div
                         key={entry.studentId}
-                        className={`flex items-center gap-3 p-3 rounded-xl border ${
+                        className={`flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-xl border transition-colors ${
                           isMe
                             ? darkMode
                               ? "bg-emerald-900/40 border-emerald-600"
@@ -2322,13 +2321,13 @@ export default function StudentDashboard() {
                         }`}
                       >
                         <div
-                          className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center font-bold text-sm ${
+                          className={`w-8 h-8 sm:w-9 sm:h-9 shrink-0 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm ${
                             rank === 1
-                              ? "bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-500 text-white"
+                              ? "bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-500 text-white shadow-inner shadow-black/10"
                               : rank === 2
-                              ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white"
+                              ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white shadow-inner shadow-black/10"
                               : rank === 3
-                              ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white"
+                              ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-inner shadow-black/10"
                               : darkMode
                               ? "bg-slate-600 text-emerald-100"
                               : "bg-emerald-200 text-emerald-800"
@@ -2337,15 +2336,15 @@ export default function StudentDashboard() {
                           {rank <= 3 ? <Crown className="w-4 h-4" /> : rank}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className={`text-sm font-bold truncate ${theme.headingText}`}>
+                          <p className={`text-xs sm:text-sm font-bold truncate ${theme.headingText}`}>
                             {entry.studentName}
                             {isMe && <span className="ml-1.5 text-xs font-normal text-emerald-500">(Kamu)</span>}
                           </p>
                           <p className={`text-xs ${theme.mutedText}`}>Kelas {entry.classCode}</p>
                         </div>
                         <div className="text-right shrink-0">
-                          <p className={`text-sm font-bold ${theme.headingText}`}>{entry.journalCount} jurnal</p>
-                          <p className={`text-xs ${theme.mutedText}`}>{entry.booksFinished} buku selesai</p>
+                          <p className={`text-xs sm:text-sm font-bold ${theme.headingText}`}>{entry.journalCount} jurnal</p>
+                          <p className={`text-[10px] sm:text-xs ${theme.mutedText}`}>{entry.booksFinished} buku selesai</p>
                         </div>
                       </div>
                     );
@@ -2362,7 +2361,7 @@ export default function StudentDashboard() {
                   return (
                     <div
                       key={entry.studentId}
-                      className={`flex items-center gap-3 p-3 rounded-xl border ${
+                      className={`flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-xl border transition-colors ${
                         isMe
                           ? darkMode
                             ? "bg-emerald-900/40 border-emerald-600"
@@ -2373,13 +2372,13 @@ export default function StudentDashboard() {
                       }`}
                     >
                       <div
-                        className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center font-bold text-sm ${
+                        className={`w-8 h-8 sm:w-9 sm:h-9 shrink-0 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm ${
                           rank === 1
-                            ? "bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-500 text-white"
+                            ? "bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-500 text-white shadow-inner shadow-black/10"
                             : rank === 2
-                            ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white"
+                            ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white shadow-inner shadow-black/10"
                             : rank === 3
-                            ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white"
+                            ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-inner shadow-black/10"
                             : darkMode
                             ? "bg-slate-600 text-emerald-100"
                             : "bg-emerald-200 text-emerald-800"
@@ -2388,14 +2387,14 @@ export default function StudentDashboard() {
                         {rank <= 3 ? <Crown className="w-4 h-4" /> : rank}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className={`text-sm font-bold truncate ${theme.headingText}`}>
+                        <p className={`text-xs sm:text-sm font-bold truncate ${theme.headingText}`}>
                           {entry.studentName}
                           {isMe && <span className="ml-1.5 text-xs font-normal text-emerald-500">(Kamu)</span>}
                         </p>
                       </div>
                       <div className="text-right shrink-0">
-                        <p className={`text-sm font-bold ${theme.headingText}`}>{entry.journalCount} jurnal</p>
-                        <p className={`text-xs ${theme.mutedText}`}>{entry.booksFinished} buku selesai</p>
+                        <p className={`text-xs sm:text-sm font-bold ${theme.headingText}`}>{entry.journalCount} jurnal</p>
+                        <p className={`text-[10px] sm:text-xs ${theme.mutedText}`}>{entry.booksFinished} buku selesai</p>
                       </div>
                     </div>
                   );
@@ -2407,9 +2406,9 @@ export default function StudentDashboard() {
 
         {/* ---- Tab: Isi Jurnal Membaca ---- */}
         {activeTab === "jurnal" && (
-          <div className={`p-6 rounded-2xl shadow-sm border backdrop-blur-sm space-y-6 ${theme.panel}`}>
+          <div className={`p-4 sm:p-6 rounded-3xl shadow-md border backdrop-blur-sm space-y-6 ${theme.panel}`}>
             <div>
-              <h2 className={`text-lg font-bold ${theme.headingText}`}>
+              <h2 className={`text-lg font-bold tracking-tight ${theme.headingText}`}>
                 {editingJournalId ? "Edit & Kirim Ulang Jurnal" : "Isi Jurnal Membaca"}
               </h2>
               <p className={`text-xs mt-1 ${theme.mutedText}`}>
@@ -2439,7 +2438,7 @@ export default function StudentDashboard() {
                     value={form.bookTitle}
                     onChange={(e) => setForm({ ...form, bookTitle: e.target.value })}
                     placeholder="cth. Laskar Pelangi"
-                    className={`w-full p-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input}`}
+                    className={`w-full p-2.5 sm:p-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input}`}
                   />
                 </div>
                 <div>
@@ -2449,7 +2448,7 @@ export default function StudentDashboard() {
                     value={form.author}
                     onChange={(e) => setForm({ ...form, author: e.target.value })}
                     placeholder="cth. Andrea Hirata"
-                    className={`w-full p-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input}`}
+                    className={`w-full p-2.5 sm:p-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input}`}
                   />
                 </div>
                 <div>
@@ -2460,7 +2459,7 @@ export default function StudentDashboard() {
                     value={form.genre}
                     onChange={(e) => setForm({ ...form, genre: e.target.value })}
                     placeholder="cth. Fiksi"
-                    className={`w-full p-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input}`}
+                    className={`w-full p-2.5 sm:p-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input}`}
                   />
                   <datalist id="genre-options">
                     {GENRE_SUGGESTIONS.map((g) => (
@@ -2483,7 +2482,7 @@ export default function StudentDashboard() {
                     value={form.startPage}
                     onChange={(e) => setForm({ ...form, startPage: e.target.value })}
                     placeholder="cth. 1"
-                    className={`w-full p-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input}`}
+                    className={`w-full p-2.5 sm:p-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input}`}
                   />
                 </div>
                 <div>
@@ -2494,10 +2493,10 @@ export default function StudentDashboard() {
                     value={form.endPage}
                     onChange={(e) => setForm({ ...form, endPage: e.target.value })}
                     placeholder="cth. 20"
-                    className={`w-full p-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input}`}
+                    className={`w-full p-2.5 sm:p-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input}`}
                   />
                 </div>
-                <p className={`text-xs pb-2 ${theme.mutedText}`}>
+                <p className={`text-xs pb-2 col-span-2 md:col-span-1 ${theme.mutedText}`}>
                   {pagesReadPreview > 0 ? `${pagesReadPreview} halaman dibaca` : ""}
                 </p>
               </div>
@@ -2515,7 +2514,7 @@ export default function StudentDashboard() {
                   type="checkbox"
                   checked={form.finished}
                   onChange={(e) => setForm({ ...form, finished: e.target.checked })}
-                  className="w-4 h-4 accent-emerald-600"
+                  className="w-4 h-4 accent-emerald-600 shrink-0"
                 />
                 Buku ini sudah selesai dibaca
               </label>
@@ -2548,7 +2547,7 @@ export default function StudentDashboard() {
                 {CHARACTER_OPTIONS.map((c) => (
                   <label
                     key={c}
-                    className={`flex items-center gap-2 p-2 rounded-xl border text-sm cursor-pointer transition ${
+                    className={`flex items-center gap-2 p-2.5 sm:p-2 rounded-xl border text-sm cursor-pointer transition ${
                       selectedCharacters.has(c)
                         ? darkMode
                           ? "bg-emerald-900/50 border-emerald-700 text-emerald-100"
@@ -2562,12 +2561,12 @@ export default function StudentDashboard() {
                       type="checkbox"
                       checked={selectedCharacters.has(c)}
                       onChange={() => toggleCharacter(c)}
-                      className="w-4 h-4 accent-emerald-600"
+                      className="w-4 h-4 accent-emerald-600 shrink-0"
                     />
                     {c}
                   </label>
                 ))}
-                <label className={`flex flex-col gap-2 p-2 rounded-xl border text-sm sm:col-span-2 lg:col-span-3 ${darkMode ? "border-slate-600 text-emerald-300/70" : "border-emerald-200 text-emerald-700/70"}`}>
+                <label className={`flex flex-col gap-2 p-2.5 sm:p-2 rounded-xl border text-sm sm:col-span-2 lg:col-span-3 ${darkMode ? "border-slate-600 text-emerald-300/70" : "border-emerald-200 text-emerald-700/70"}`}>
                   <span className={`font-medium ${darkMode ? "text-emerald-200" : "text-emerald-800"}`}>Nilai karakter lainnya</span>
                   <textarea
                     value={customCharacter}
@@ -2585,7 +2584,7 @@ export default function StudentDashboard() {
               <p className={`text-xs italic ${theme.mutedText}`}>Draf disimpan otomatis di perangkat ini.</p>
             )}
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col sm:flex-row flex-wrap gap-2">
               {editingJournalId && (
                 <button
                   type="button"
@@ -2596,7 +2595,7 @@ export default function StudentDashboard() {
                     setCustomCharacter("");
                     setFormError("");
                   }}
-                  className={`px-4 py-2 border text-sm font-semibold rounded-xl transition ${
+                  className={`px-4 py-2.5 sm:py-2 border text-sm font-semibold rounded-xl transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
                     darkMode ? "border-slate-600 text-emerald-200 bg-slate-800 hover:bg-slate-700" : "border-emerald-200 text-emerald-700 bg-white hover:bg-emerald-50"
                   }`}
                 >
@@ -2606,7 +2605,7 @@ export default function StudentDashboard() {
               <button
                 onClick={handleSaveJournal}
                 disabled={saving}
-                className="px-5 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 active:scale-[0.98] transition disabled:opacity-50 disabled:active:scale-100"
+                className="px-5 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-xl shadow-sm shadow-emerald-900/20 hover:bg-emerald-700 active:scale-[0.98] transition disabled:opacity-50 disabled:active:scale-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2"
               >
                 {saving ? "Menyimpan..." : editingJournalId ? "Edit & Kirim Ulang" : "Simpan Jurnal"}
               </button>
@@ -2616,9 +2615,9 @@ export default function StudentDashboard() {
 
         {/* ---- Tab: Riwayat Jurnal ---- */}
         {activeTab === "riwayat" && (
-          <div className={`p-6 rounded-2xl shadow-sm border backdrop-blur-sm ${theme.panel}`}>
+          <div className={`p-4 sm:p-6 rounded-3xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-              <h2 className={`text-lg font-bold ${theme.headingText}`}>Riwayat Jurnal Saya</h2>
+              <h2 className={`text-lg font-bold tracking-tight ${theme.headingText}`}>Riwayat Jurnal Saya</h2>
               {/* Fitur #2: pencarian & filter status */}
               <div className="flex flex-col sm:flex-row gap-2">
                 <div className="relative">
@@ -2628,13 +2627,13 @@ export default function StudentDashboard() {
                     placeholder="Cari judul atau penulis..."
                     value={riwayatSearch}
                     onChange={(e) => setRiwayatSearch(e.target.value)}
-                    className={`pl-9 pr-3 py-2 text-sm border rounded-xl outline-none focus:ring-2 transition w-full sm:w-56 ${theme.input}`}
+                    className={`pl-9 pr-3 py-2.5 sm:py-2 text-sm border rounded-xl outline-none focus:ring-2 transition w-full sm:w-56 ${theme.input}`}
                   />
                 </div>
                 <select
                   value={riwayatStatus}
                   onChange={(e) => setRiwayatStatus(e.target.value as RiwayatStatusFilter)}
-                  className={`px-3 py-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input}`}
+                  className={`px-3 py-2.5 sm:py-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input}`}
                 >
                   <option value="semua">Semua Status</option>
                   <option value="pending">Menunggu Validasi</option>
@@ -2654,12 +2653,12 @@ export default function StudentDashboard() {
                   const statusBadge = getStatusBadge(j.status);
                   const canDelete = normalizeStatus(j.status) !== "approved";
                   return (
-                    <div key={j.id} className={`border p-4 rounded-xl ${darkMode ? "border-slate-700 bg-slate-700/40" : "border-emerald-100 bg-emerald-50/50"}`}>
-                      <div className="flex justify-between items-center mb-1 gap-3">
-                        <p className={`font-bold ${theme.headingText}`}>
+                    <div key={j.id} className={`border p-3.5 sm:p-4 rounded-2xl transition-colors ${darkMode ? "border-slate-700 bg-slate-700/40" : "border-emerald-100 bg-emerald-50/50"}`}>
+                      <div className="flex flex-wrap justify-between items-start mb-1 gap-2">
+                        <p className={`font-bold text-sm sm:text-base ${theme.headingText}`}>
                           {j.bookTitle} <span className={`font-normal ${theme.mutedText}`}>({j.author})</span>
                         </p>
-                        <span className={`text-xs px-2 py-1 rounded-lg font-semibold ${statusBadge.className}`}>
+                        <span className={`text-xs px-2 py-1 rounded-lg font-semibold shrink-0 ${statusBadge.className}`}>
                           {statusBadge.label}
                         </span>
                       </div>
@@ -2715,7 +2714,7 @@ export default function StudentDashboard() {
                           <button
                             type="button"
                             onClick={() => setAddProgressTo(j.id)}
-                            className="px-3 py-2 bg-emerald-500 text-white text-xs font-semibold rounded-xl hover:bg-emerald-600 active:scale-[0.98] transition"
+                            className="flex-1 sm:flex-none px-3 py-2 bg-emerald-500 text-white text-xs font-semibold rounded-xl hover:bg-emerald-600 active:scale-[0.98] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                           >
                             + Lanjut Membaca
                           </button>
@@ -2724,7 +2723,7 @@ export default function StudentDashboard() {
                           <button
                             type="button"
                             onClick={() => startEditJournal(j)}
-                            className="px-3 py-2 bg-orange-500 text-white text-xs font-semibold rounded-xl hover:bg-orange-600 active:scale-[0.98] transition"
+                            className="flex-1 sm:flex-none px-3 py-2 bg-orange-500 text-white text-xs font-semibold rounded-xl hover:bg-orange-600 active:scale-[0.98] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-400"
                           >
                             Edit &amp; Kirim Ulang
                           </button>
@@ -2736,7 +2735,7 @@ export default function StudentDashboard() {
                             onClick={() => handleDeleteJournal(j)}
                             disabled={deleteLoadingId === j.id}
                             aria-label={`Hapus jurnal ${j.bookTitle}`}
-                            className="flex items-center gap-1.5 px-3 py-2 text-red-600 border border-red-200 bg-red-50 text-xs font-semibold rounded-xl hover:bg-red-100 active:scale-[0.98] transition disabled:opacity-50"
+                            className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 text-red-600 border border-red-200 bg-red-50 text-xs font-semibold rounded-xl hover:bg-red-100 active:scale-[0.98] transition disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                             {deleteLoadingId === j.id ? "Menghapus..." : "Hapus"}
@@ -2751,9 +2750,9 @@ export default function StudentDashboard() {
 
             {/* Modal: Tambah Progress Membaca */}
             {addProgressTo && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                <div className={`max-w-md w-full p-6 rounded-2xl shadow-lg ${darkMode ? "bg-slate-800 border-slate-700" : "bg-white border-white"} border`}>
-                  <h3 className={`text-lg font-bold mb-1 ${theme.headingText}`}>Lanjut Membaca</h3>
+              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                <div className={`max-w-md w-full p-5 sm:p-6 rounded-3xl shadow-2xl max-h-[90vh] overflow-y-auto ${darkMode ? "bg-slate-800 border-slate-700" : "bg-white border-white"} border`}>
+                  <h3 className={`text-lg font-bold tracking-tight mb-1 ${theme.headingText}`}>Lanjut Membaca</h3>
                   <p className={`text-xs mb-4 ${theme.mutedText}`}>
                     Catat progres membacamu hari ini untuk buku &quot;{journals.find((j) => j.id === addProgressTo)?.bookTitle}&quot;
                   </p>
@@ -2774,7 +2773,7 @@ export default function StudentDashboard() {
                         onChange={(e) =>
                           setAddProgressForm((prev) => ({ ...prev, startPage: e.target.value }))
                         }
-                        className={`w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 transition text-sm ${theme.input}`}
+                        className={`w-full px-3 py-2.5 sm:py-2 border rounded-xl outline-none focus:ring-2 transition text-sm ${theme.input}`}
                       />
                     </div>
                     <div>
@@ -2786,7 +2785,7 @@ export default function StudentDashboard() {
                         onChange={(e) =>
                           setAddProgressForm((prev) => ({ ...prev, endPage: e.target.value }))
                         }
-                        className={`w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 transition text-sm ${theme.input}`}
+                        className={`w-full px-3 py-2.5 sm:py-2 border rounded-xl outline-none focus:ring-2 transition text-sm ${theme.input}`}
                       />
                     </div>
                     <div>
@@ -2810,7 +2809,7 @@ export default function StudentDashboard() {
                         setAddProgressForm({ startPage: "", endPage: "", summary: "" });
                         setAddProgressError("");
                       }}
-                      className={`flex-1 px-3 py-2 rounded-xl text-sm font-semibold transition ${darkMode ? "bg-slate-700 text-emerald-100 hover:bg-slate-600" : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"}`}
+                      className={`flex-1 px-3 py-2.5 sm:py-2 rounded-xl text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${darkMode ? "bg-slate-700 text-emerald-100 hover:bg-slate-600" : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"}`}
                     >
                       Batal
                     </button>
@@ -2818,7 +2817,7 @@ export default function StudentDashboard() {
                       type="button"
                       onClick={() => void handleAddProgress()}
                       disabled={addProgressSaving}
-                      className={`flex-1 px-3 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 active:scale-[0.98] transition disabled:opacity-50`}
+                      className={`flex-1 px-3 py-2.5 sm:py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 active:scale-[0.98] transition disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2`}
                     >
                       {addProgressSaving ? "Menyimpan..." : "Simpan Progress"}
                     </button>

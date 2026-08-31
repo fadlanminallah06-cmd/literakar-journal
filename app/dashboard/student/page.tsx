@@ -193,9 +193,9 @@ const CATEGORY_ORDER = ["Jumlah Buku", "Konsistensi", "Halaman & Maraton", "Eksp
 
 const BADGE_DEFS: BadgeDef[] = [
   { key: "pemula", title: "Pembaca Pemula", description: "Baca 1 buku", category: "Jumlah Buku", tier: "bronze", target: 1, metric: "booksFinished", icon: "book" },
-  { key: "aktif", title: "Pembaca Aktif", description: "Baca 5 buku", category: "Jumlah Buku", tier: "bronze", target: 5, metric: "booksFinished", icon: "library" },
-  { key: "andal", title: "Pembaca Andal", description: "Baca 10 buku", category: "Jumlah Buku", tier: "silver", target: 10, metric: "booksFinished", icon: "trophy" },
-  { key: "maestro", title: "Pembaca Maestro", description: "Baca 20 buku", category: "Jumlah Buku", tier: "gold", target: 20, metric: "booksFinished", icon: "crown" },
+  { key: "aktif", title: "Pembaca Aktif", description: "Baca 3 buku", category: "Jumlah Buku", tier: "bronze", target: 3, metric: "booksFinished", icon: "library" },
+  { key: "andal", title: "Pembaca Andal", description: "Baca 5 buku", category: "Jumlah Buku", tier: "silver", target: 5, metric: "booksFinished", icon: "trophy" },
+  { key: "maestro", title: "Pembaca Maestro", description: "Baca 10 buku", category: "Jumlah Buku", tier: "gold", target: 10, metric: "booksFinished", icon: "crown" },
 
   { key: "konsisten7", title: "Konsisten 7 Hari", description: "Kirim jurnal 7 hari berturut-turut", category: "Konsistensi", tier: "silver", target: 7, metric: "streak", icon: "flame" },
   { key: "konsisten30", title: "Konsisten 30 Hari", description: "Kirim jurnal 30 hari berturut-turut", category: "Konsistensi", tier: "gold", target: 30, metric: "streak", icon: "zap" },

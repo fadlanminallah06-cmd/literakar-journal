@@ -8,6 +8,7 @@ import {
   query,
   where,
   getDocs,
+  onSnapshot,
   addDoc,
   updateDoc,
   deleteDoc,
@@ -25,6 +26,7 @@ import {
   LockKeyhole,
   Medal,
   Trophy,
+  Users,
   Search,
   Trash2,
   Moon,
@@ -48,14 +50,6 @@ import {
   ChevronRight,
 } from "lucide-react";
 
-interface ProgressEntry {
-  id: string;
-  startPage: number;
-  endPage: number;
-  summary: string;
-  timestamp: Date | string | number | { toDate?: () => Date } | null;
-}
-
 interface Journal {
   id: string;
   studentId: string;
@@ -71,7 +65,7 @@ interface Journal {
   finished?: boolean;
   status: string; // "pending" | "revision" | "approved"
   teacherFeedback?: string;
-  progressLog?: ProgressEntry[];
+  approvedBy?: string;
   createdAt?: Date | string | number | { toDate?: () => Date } | null;
   updatedAt?: Date | string | number | { toDate?: () => Date } | null;
 }
@@ -120,20 +114,46 @@ function toDateSafe(
   return null;
 }
 
-function formatTanggal(d: Date | null): string {
-  if (!d) return "-";
-  return d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+function getJakartaDateParts(date: Date): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+
+  const values: Record<string, string> = {};
+  parts.forEach((part) => {
+    if (part.type !== "literal") values[part.type] = part.value;
+  });
+
+  return {
+    year: Number(values.year),
+    month: Number(values.month),
+    day: Number(values.day),
+    hour: Number(values.hour),
+    minute: Number(values.minute),
+    second: Number(values.second),
+  };
 }
 
-function getLastReadPage(journal: Journal | null | undefined): number {
-  if (!journal) return 0;
+function toJakartaDateKey(date: Date): string {
+  const parts = getJakartaDateParts(date);
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
+}
 
-  const entries = [...(journal.progressLog ?? [])].sort(
-    (a, b) => (toDateSafe(b.timestamp)?.getTime() ?? 0) - (toDateSafe(a.timestamp)?.getTime() ?? 0)
-  );
-
-  const latestFromLog = entries.length > 0 ? entries[0].endPage : 0;
-  return Math.max(journal.endPage, latestFromLog);
+function formatTanggal(d: Date | null): string {
+  if (!d) return "-";
+  return new Intl.DateTimeFormat("id-ID", {
+    timeZone: "Asia/Jakarta",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(d);
 }
 
 function getStartOfMonth(date: Date): Date {
@@ -164,6 +184,47 @@ function sortLeaderboardEntries(entries: LeaderboardEntry[]): LeaderboardEntry[]
     if (b.journalCount !== a.journalCount) return b.journalCount - a.journalCount;
     return b.booksFinished - a.booksFinished;
   });
+}
+
+function getRankLabel(rank: number): string {
+  if (rank === 1) return "Juara I";
+  if (rank === 2) return "Juara II";
+  if (rank === 3) return "Juara III";
+  return `Peringkat ${rank}`;
+}
+
+function getRankBadgeStyle(rank: number, dark: boolean): string {
+  if (rank === 1) {
+    return dark
+      ? "bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-500 text-white shadow-inner shadow-black/10"
+      : "bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-500 text-white shadow-inner shadow-black/10";
+  }
+  if (rank === 2) {
+    return dark
+      ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white shadow-inner shadow-black/10"
+      : "bg-gradient-to-br from-slate-300 to-slate-500 text-white shadow-inner shadow-black/10";
+  }
+  if (rank === 3) {
+    return dark
+      ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-inner shadow-black/10"
+      : "bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-inner shadow-black/10";
+  }
+  return dark ? "bg-slate-600 text-emerald-100" : "bg-emerald-200 text-emerald-800";
+}
+
+function getPreviousWeekWindow(now = new Date()): { start: Date; end: Date } {
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+
+  const day = start.getDay();
+  const daysSinceMonday = (day + 6) % 7;
+  start.setDate(start.getDate() - daysSinceMonday - 7);
+
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+
+  return { start, end };
 }
 
 /* ------------------------------------------------------------------ */
@@ -630,6 +691,9 @@ function TreeGrowth({ totalPages, dark }: { totalPages: number; dark: boolean })
         <div className="min-w-0">
           <h2 className={`text-base sm:text-lg font-bold tracking-tight ${dark ? "text-emerald-100" : "text-emerald-900"}`}>Pohon Literasi</h2>
           <p className={`text-xs ${dark ? "text-emerald-300/60" : "text-emerald-700/60"}`}>Kenalan sama Literakar, sahabat baca yang tumbuh bareng kamu!</p>
+          <p className={`text-[11px] mt-1 font-medium ${dark ? "text-emerald-300" : "text-emerald-700"}`}>
+            Progress pohon literasi diperbarui tiap Senin pagi pukul 08.00 WIB berdasarkan jurnal yang sudah disetujui guru.
+          </p>
         </div>
       </div>
 
@@ -848,12 +912,12 @@ function MyProgressChart({ journals, dark }: { journals: Journal[]; dark: boolea
       const d = new Date(now);
       d.setDate(d.getDate() - i);
       d.setHours(0, 0, 0, 0);
-      map.set(d.toISOString().slice(0, 10), 0);
+      map.set(toJakartaDateKey(d), 0);
     }
     journals.forEach((j) => {
       const d = toDateSafe(j.createdAt);
       if (!d) return;
-      const key = d.toISOString().slice(0, 10);
+      const key = toJakartaDateKey(d);
       if (!map.has(key)) return;
       const pages = Number(j.endPage) - Number(j.startPage);
       if (!Number.isNaN(pages) && pages > 0) {
@@ -1169,12 +1233,7 @@ export default function StudentDashboard() {
   // Fitur #2: pencarian & filter status di Riwayat Jurnal
   const [riwayatSearch, setRiwayatSearch] = useState("");
   const [riwayatStatus, setRiwayatStatus] = useState<RiwayatStatusFilter>("semua");
-
-  // Fitur: Add Progress ke jurnal yang sudah ada (multi-hari)
-  const [addProgressTo, setAddProgressTo] = useState<string | null>(null);
-  const [addProgressForm, setAddProgressForm] = useState({ startPage: "", endPage: "", summary: "" });
-  const [addProgressError, setAddProgressError] = useState("");
-  const [addProgressSaving, setAddProgressSaving] = useState(false);
+  const [expandedJournalId, setExpandedJournalId] = useState<string | null>(null);
 
   // Fitur #9: target membaca harian personal (disimpan per-siswa di perangkat ini)
   const [dailyGoal, setDailyGoal] = useState<number>(50);
@@ -1191,9 +1250,10 @@ export default function StudentDashboard() {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardError, setLeaderboardError] = useState("");
+  const [totalActiveStudents, setTotalActiveStudents] = useState(0);
   const leaderboardLoaded = useRef(false);
   const [leaderboardSubTab, setLeaderboardSubTab] = useState<LeaderboardSubTab>("semua");
-  const [selectedClassCode, setSelectedClassCode] = useState<string>("");
+  const [weeklyWindowKey, setWeeklyWindowKey] = useState<string>(() => new Date().toISOString());
 
   // Fitur #10: mode gelap
   const [darkMode, setDarkMode] = useState(false);
@@ -1218,6 +1278,7 @@ export default function StudentDashboard() {
     setLeaderboardLoading(true);
     setLeaderboardError("");
     try {
+      const { start, end } = getPreviousWeekWindow();
       const querySnapshot = await getDocs(collection(db, "journals"));
       const statsMap = new Map<
         string,
@@ -1226,7 +1287,11 @@ export default function StudentDashboard() {
 
       querySnapshot.forEach((docSnap) => {
         const data = docSnap.data() as Journal;
-        if (!data.studentId) return;
+        if (!data.studentId || normalizeStatus(data.status) !== "approved") return;
+
+        const createdAt = toDateSafe(data.createdAt);
+        if (!createdAt || createdAt < start || createdAt > end) return;
+
         const existing = statsMap.get(data.studentId) || {
           studentName: data.studentName || "Siswa",
           classCode: data.classCode || "-",
@@ -1248,13 +1313,27 @@ export default function StudentDashboard() {
         booksFinished: s.finishedTitles.size,
       }));
 
-      // Simpan SEMUA entri (bukan dipotong ke 10) supaya leaderboard per kelas
-      // punya data lengkap. Top 10 global dihitung dari sini via useMemo.
+      // Data leaderboard hanya dihitung dari minggu sebelumnya dan baru refresh pada
+      // hari Senin pukul 08.00, sesuai kebijakan progres pohon literasi.
       setLeaderboard(sortLeaderboardEntries(entries));
     } catch {
       setLeaderboardError("Gagal memuat leaderboard. Silakan coba lagi.");
     } finally {
       setLeaderboardLoading(false);
+    }
+  }, []);
+
+  const fetchActiveStudentCount = useCallback(async () => {
+    try {
+      const snapshot = await getDocs(collection(db, "journals"));
+      const studentIds = new Set<string>();
+      snapshot.forEach((docSnap) => {
+        const data = docSnap.data() as Partial<Journal>;
+        if (data.studentId) studentIds.add(String(data.studentId));
+      });
+      setTotalActiveStudents(studentIds.size);
+    } catch {
+      setTotalActiveStudents(0);
     }
   }, []);
 
@@ -1266,12 +1345,75 @@ export default function StudentDashboard() {
 
     if (!user) return;
 
-    const run = async () => {
-      await fetchMyJournals();
+    queueMicrotask(() => {
+      void fetchActiveStudentCount();
+    });
+
+    let timeoutId: number | undefined;
+    const scheduleWeeklyRefresh = () => {
+      const now = new Date();
+      const day = now.getDay();
+      const hours = now.getHours();
+      const nextRefresh = new Date(now);
+
+      if (day === 1 && hours >= 8) {
+        nextRefresh.setDate(nextRefresh.getDate() + 7);
+      } else {
+        const daysUntilMonday = day === 1 ? 0 : (8 - day) % 7;
+        nextRefresh.setDate(nextRefresh.getDate() + daysUntilMonday);
+      }
+
+      nextRefresh.setHours(8, 0, 0, 0);
+
+      timeoutId = window.setTimeout(() => {
+        setWeeklyWindowKey(new Date().toISOString());
+        void fetchLeaderboard();
+        scheduleWeeklyRefresh();
+      }, Math.max(nextRefresh.getTime() - now.getTime(), 0));
     };
 
-    queueMicrotask(run);
-  }, [user, userProfile, loading, router, fetchMyJournals]);
+    scheduleWeeklyRefresh();
+    return () => {
+      if (timeoutId) window.clearTimeout(timeoutId);
+    };
+  }, [fetchActiveStudentCount, fetchLeaderboard, loading, router, user, userProfile?.role]);
+
+  useEffect(() => {
+    if (!user || userProfile?.role !== "student") return;
+
+    const unsubscribe = onSnapshot(
+      collection(db, "journals"),
+      () => {
+        void fetchLeaderboard();
+        void fetchActiveStudentCount();
+      },
+      () => setLeaderboardError("Gagal menyinkronkan data leaderboard secara realtime.")
+    );
+
+    return unsubscribe;
+  }, [fetchActiveStudentCount, fetchLeaderboard, user, userProfile?.role]);
+
+  useEffect(() => {
+    if (!loading && (!user || userProfile?.role !== "student")) {
+      router.push("/login");
+      return;
+    }
+
+    if (!user) return;
+
+    const unsubscribe = onSnapshot(
+      query(collection(db, "journals"), where("studentId", "==", user.uid)),
+      (snapshot) => {
+        const docs: Journal[] = [];
+        snapshot.forEach((journalDoc) => docs.push({ id: journalDoc.id, ...journalDoc.data() } as Journal));
+        docs.sort((a, b) => (toDateSafe(b.createdAt)?.getTime() || 0) - (toDateSafe(a.createdAt)?.getTime() || 0));
+        setJournals(docs);
+      },
+      () => setFormError("Gagal menyinkronkan riwayat jurnal secara realtime.")
+    );
+
+    return unsubscribe;
+  }, [user, userProfile, loading, router]);
 
   // Muat leaderboard sekali saat dashboard siap (bukan hanya saat tab Leaderboard
   // dibuka), karena kartu peringkat kelas di Beranda juga butuh data ini.
@@ -1427,12 +1569,18 @@ export default function StudentDashboard() {
   }, [journals]);
 
   const approvedTotalPages = useMemo(() => {
+    const reference = weeklyWindowKey ? new Date(weeklyWindowKey) : new Date();
+    const { start, end } = getPreviousWeekWindow(reference);
+
     return journals.reduce((acc, journal) => {
       if (normalizeStatus(journal.status) !== "approved") return acc;
+      const createdAt = toDateSafe(journal.createdAt);
+      if (!createdAt || createdAt < start || createdAt > end) return acc;
+
       const pages = Number(journal.endPage) - Number(journal.startPage);
       return acc + (Number.isNaN(pages) || pages < 0 ? 0 : pages);
     }, 0);
-  }, [journals]);
+  }, [journals, weeklyWindowKey]);
 
   const totalBooksFinished = useMemo(() => {
     const finishedTitles = new Set<string>();
@@ -1530,12 +1678,12 @@ export default function StudentDashboard() {
     return journals.some((j) => toDateSafe(j.createdAt)?.toDateString() === todayStr);
   }, [journals]);
 
-  // Fitur #9: total halaman yang sudah divalidasi HARI INI, dibandingkan dengan target harian.
-  // Hanya jurnal yang statusnya "approved" yang menghitung target membaca dan reward.
+  // Fitur #9: target harian membaca dihitung dari semua jurnal yang dikirim siswa
+  // hari ini, tanpa menunggu validasi guru. Validasi tetap berlaku untuk statistik
+  // approved dan pohon literasi, tetapi tidak menghambat pencapaian target harian.
   const todayPages = useMemo(() => {
     const todayStr = new Date().toDateString();
     return journals.reduce((acc, j) => {
-      if (normalizeStatus(j.status) !== "approved") return acc;
       const d = toDateSafe(j.createdAt);
       if (!d || d.toDateString() !== todayStr) return acc;
       const pages = Number(j.endPage) - Number(j.startPage);
@@ -1548,7 +1696,6 @@ export default function StudentDashboard() {
     yesterday.setDate(yesterday.getDate() - 1);
     const yesterdayKey = yesterday.toDateString();
     return journals.reduce((acc, j) => {
-      if (normalizeStatus(j.status) !== "approved") return acc;
       const d = toDateSafe(j.createdAt);
       if (!d || d.toDateString() !== yesterdayKey) return acc;
       const pages = Number(j.endPage) - Number(j.startPage);
@@ -1708,27 +1855,29 @@ export default function StudentDashboard() {
 
   // ---- Leaderboard: turunan data untuk sub-tab "Semua Kelas" & "Per Kelas" ----
 
-  // Leaderboard global (top 10 lintas semua kelas). `leaderboard` sudah terurut
-  // dari fetchLeaderboard, jadi cukup ambil 10 teratas.
-  const globalLeaderboard = useMemo(() => leaderboard.slice(0, 10), [leaderboard]);
+  // Leaderboard global (top 100 lintas semua kelas). `leaderboard` sudah terurut
+  // dari fetchLeaderboard, jadi cukup ambil 100 teratas.
+  const globalLeaderboard = useMemo(() => leaderboard.slice(0, 100), [leaderboard]);
 
-  // Daftar kode kelas unik yang punya data di leaderboard, untuk dropdown pemilih kelas.
-  const classCodesAvailable = useMemo(() => {
-    const set = new Set(leaderboard.map((e) => e.classCode).filter(Boolean));
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [leaderboard]);
+  // Siswa hanya boleh melihat kelasnya sendiri di mode "Per Kelas".
+  const studentClassCode = userProfile?.classCode || "";
 
-  // Default kelas diturunkan tanpa setState di dalam effect.
-  const effectiveSelectedClassCode = selectedClassCode
-    || (userProfile?.classCode && classCodesAvailable.includes(userProfile.classCode)
-      ? userProfile.classCode
-      : classCodesAvailable[0] || "");
-
-  // Leaderboard untuk kelas yang sedang dipilih di dropdown (semua siswa di kelas itu, bukan dipotong 10).
+  // Leaderboard untuk kelas siswa saat ini (semua siswa dalam kelas itu, bukan dipotong 10).
   const classLeaderboard = useMemo(() => {
-    if (!effectiveSelectedClassCode) return [];
-    return sortLeaderboardEntries(leaderboard.filter((e) => e.classCode === effectiveSelectedClassCode));
-  }, [leaderboard, effectiveSelectedClassCode]);
+    if (!studentClassCode) return [];
+    return sortLeaderboardEntries(leaderboard.filter((e) => e.classCode === studentClassCode));
+  }, [leaderboard, studentClassCode]);
+
+  const myLeaderboardPosition = useMemo(() => {
+    const entries = leaderboardSubTab === "semua" ? leaderboard : classLeaderboard;
+    const rankIndex = entries.findIndex((entry) => entry.studentId === user?.uid);
+    if (rankIndex === -1) return null;
+    return {
+      rank: rankIndex + 1,
+      total: entries.length,
+      isVisible: leaderboardSubTab === "kelas" || rankIndex < 100,
+    };
+  }, [classLeaderboard, leaderboard, leaderboardSubTab, user]);
 
   // Peringkat siswa yang sedang login DI KELASNYA SENDIRI — dipakai untuk kartu
   // indikator "kamu peringkat ke-berapa di kelas" pada tab Beranda.
@@ -1851,7 +2000,6 @@ export default function StudentDashboard() {
       } else {
         await addDoc(collection(db, "journals"), {
           ...payload,
-          progressLog: [],
           createdAt: serverTimestamp(),
         });
         setSuccessMessage("Jurnal berhasil disimpan! Menunggu validasi dari guru.");
@@ -1875,93 +2023,6 @@ export default function StudentDashboard() {
       setFormError(editingJournalId ? "Gagal memperbarui jurnal. Silakan coba lagi." : "Gagal menyimpan jurnal. Silakan coba lagi.");
     } finally {
       setSaving(false);
-    }
-  };
-
-  /**
-   * Tambahkan progress membaca ke jurnal yang sudah ada (untuk buku yang belum selesai).
-   * Ini memungkinkan siswa melanjutkan membaca di hari berikutnya tanpa membuat jurnal baru.
-   */
-  const openAddProgress = (journal: Journal) => {
-    const lastReadPage = getLastReadPage(journal);
-    const nextStartPage = Math.max(1, lastReadPage + 1);
-    setAddProgressTo(journal.id);
-    setAddProgressForm({
-      startPage: String(nextStartPage),
-      endPage: String(nextStartPage),
-      summary: "",
-    });
-    setAddProgressError("");
-  };
-
-  const handleAddProgress = async () => {
-    setAddProgressError("");
-
-    if (!addProgressTo) return;
-
-    const journal = journals.find((j) => j.id === addProgressTo);
-    if (!journal) return;
-
-    const lastReadPage = getLastReadPage(journal);
-    const expectedStartPage = Math.max(1, lastReadPage + 1);
-    const startPage = Number(addProgressForm.startPage);
-    const endPage = Number(addProgressForm.endPage);
-
-    if (addProgressForm.startPage === "" || addProgressForm.endPage === "") {
-      setAddProgressError("Halaman awal dan halaman akhir wajib diisi.");
-      return;
-    }
-    if (Number.isNaN(startPage) || Number.isNaN(endPage) || startPage < 1 || endPage < startPage) {
-      setAddProgressError("Halaman akhir harus lebih besar atau sama dengan halaman awal.");
-      return;
-    }
-    if (startPage < expectedStartPage) {
-      setAddProgressError(`Halaman lanjutan harus dimulai dari ${expectedStartPage} atau lebih, karena halaman terakhir yang tercatat adalah ${lastReadPage}.`);
-      return;
-    }
-    if (!addProgressForm.summary.trim()) {
-      setAddProgressError("Ringkasan untuk progress ini wajib diisi.");
-      return;
-    }
-
-    setAddProgressSaving(true);
-    try {
-      const newProgressEntry: ProgressEntry = {
-        id: Date.now().toString(),
-        startPage,
-        endPage,
-        summary: addProgressForm.summary.trim(),
-        timestamp: new Date(),
-      };
-
-      const updatedProgressLog = [...(journal.progressLog || []), newProgressEntry];
-      const isApprovedUnfinished = !journal.finished && normalizeStatus(journal.status) === "approved";
-
-      const updatedPayload = {
-        progressLog: updatedProgressLog,
-        updatedAt: serverTimestamp(),
-        ...(isApprovedUnfinished
-          ? {}
-          : {
-              startPage: journal.startPage,
-              endPage: Math.max(journal.endPage, endPage),
-              summary: addProgressForm.summary.trim(),
-              status: "pending",
-              teacherFeedback: "",
-            }),
-      };
-
-      await updateDoc(doc(db, "journals", addProgressTo), updatedPayload);
-
-      setAddProgressForm({ startPage: "", endPage: "", summary: "" });
-      setAddProgressTo(null);
-      void fetchMyJournals();
-      void fetchLeaderboard();
-    } catch (error) {
-      console.error("Gagal menambah progress:", error);
-      setAddProgressError("Gagal menambah progress. Silakan coba lagi.");
-    } finally {
-      setAddProgressSaving(false);
     }
   };
 
@@ -2362,7 +2423,7 @@ export default function StudentDashboard() {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                         {list.map((badge) => (
                           <BadgeCard
-                            key={badge.title}
+                            key={`${badge.category}-${badge.title}`}
                             title={badge.title}
                             description={badge.description}
                             earned={badge.earned}
@@ -2389,23 +2450,45 @@ export default function StudentDashboard() {
         {/* ---- Tab: Leaderboard ---- */}
         {activeTab === "leaderboard" && (
           <div className={`p-4 sm:p-6 rounded-3xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-              <div>
-                <h2 className={`text-base sm:text-lg font-bold tracking-tight flex items-center gap-2 ${theme.headingText}`}>
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
+              <div className="min-w-0 flex-1">
+                <h2 className={`text-base sm:text-lg font-bold tracking-tight flex items-start gap-2 ${theme.headingText}`}>
                   <Trophy className="w-5 h-5 text-amber-500 shrink-0" />
-                  Leaderboard Pembaca Terajin
+                  <span className="min-w-0 break-words">Leaderboard Pembaca Terajin</span>
                 </h2>
-                <p className={`text-xs mt-1 ${theme.mutedText}`}>
+                <p className={`text-xs mt-1 leading-relaxed break-words text-justify ${theme.mutedText}`}>
                   {leaderboardSubTab === "semua"
-                    ? "Top 10 siswa dengan jurnal terbanyak, dari semua kelas."
-                    : "Peringkat siswa dengan jurnal terbanyak di kelas yang dipilih."}
+                    ? "Menu ini menampilkan Top 100 siswa dengan jumlah jurnal terbanyak dari seluruh kelas."
+                    : "Peringkat siswa dengan jurnal terbanyak di kelas Anda saat ini."}
+                </p>
+                <div className={`mt-3 rounded-2xl border p-3 shadow-sm backdrop-blur-sm ${darkMode ? "border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-emerald-500/10" : "border-amber-200 bg-gradient-to-r from-amber-50 via-white to-emerald-50"}`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl shadow-md ${darkMode ? "bg-gradient-to-br from-amber-400 to-orange-500 text-slate-950" : "bg-gradient-to-br from-amber-300 to-orange-400 text-white"}`}>
+                        <Users className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${darkMode ? "text-amber-200" : "text-amber-700"}`}>Siswa aktif</p>
+                        <p className={`text-lg font-extrabold leading-none ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>{totalActiveStudents}</p>
+                      </div>
+                    </div>
+                    <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold ${darkMode ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border-emerald-300 bg-emerald-50 text-emerald-700"}`}>
+                      Top 100
+                    </span>
+                  </div>
+                </div>
+                <p className={`max-w-prose text-[11px] mt-2 leading-relaxed font-medium break-words text-justify ${darkMode ? "text-amber-300" : "text-amber-700"}`}>
+                  Jumlah progres membaca dan peringkat diperbarui tiap Senin pagi pukul 08.00 WIB.
+                </p>
+                <p className={`max-w-prose text-[11px] mt-1 leading-relaxed break-words text-justify ${darkMode ? "text-slate-300/80" : "text-emerald-700/70"}`}>
+                  Sistem menghitung progres dari jurnal yang sudah valid dan memperbarui skor setiap Senin pagi.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={() => void fetchLeaderboard()}
                 disabled={leaderboardLoading}
-                className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold transition disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 self-start sm:self-auto ${
+                className={`w-full sm:w-auto shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold transition disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 self-stretch sm:self-auto ${
                   darkMode ? "bg-slate-700 text-emerald-200 hover:bg-slate-600" : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
                 }`}
               >
@@ -2436,28 +2519,66 @@ export default function StudentDashboard() {
               ))}
             </div>
 
-            {/* Pemilih kelas — hanya muncul di sub-tab Per Kelas */}
+            {/* Kelas siswa selalu mengikuti kelas login, tidak bisa melihat kelas lain. */}
             {leaderboardSubTab === "kelas" && (
               <div className="mb-4">
-                {classCodesAvailable.length === 0 ? (
-                  <p className={`text-sm ${theme.bodyText}`}>Belum ada data kelas untuk ditampilkan.</p>
-                ) : (
-                  <div className="flex flex-col xs:flex-row xs:items-center gap-2">
-                    <label className={`text-xs font-semibold shrink-0 ${theme.bodyText}`}>Pilih Kelas:</label>
-                    <select
-                      value={effectiveSelectedClassCode}
-                      onChange={(e) => setSelectedClassCode(e.target.value)}
-                      className={`px-3 py-2 text-sm border rounded-xl outline-none focus:ring-2 transition w-full sm:w-48 ${theme.input}`}
-                    >
-                      {classCodesAvailable.map((code) => (
-                        <option key={code} value={code}>
-                          Kelas {code}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+                <p className={`text-xs font-semibold ${theme.bodyText}`}>
+                  Peringkat Kelas {studentClassCode || "-"}
+                </p>
               </div>
+            )}
+
+            {myLeaderboardPosition && (
+              myLeaderboardPosition.isVisible ? (
+              <button
+                type="button"
+                onClick={() => {
+                  document.getElementById(`leaderboard-student-${user?.uid}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                }}
+                className={`mb-4 flex w-full items-center justify-between gap-3 rounded-2xl border p-3 text-left transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 shadow-[0_12px_28px_-18px_rgba(16,185,129,0.8)] ${
+                  darkMode ? "border-emerald-500/40 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white hover:shadow-[0_14px_30px_-18px_rgba(16,185,129,0.9)]" : "border-emerald-300 bg-gradient-to-r from-emerald-50 via-white to-teal-50 text-emerald-900 hover:shadow-[0_14px_30px_-18px_rgba(16,185,129,0.7)]"
+                }`}
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${darkMode ? "bg-white/10 text-emerald-100" : "bg-emerald-100 text-emerald-700"}`}>
+                    <Trophy className="h-5 w-5" />
+                  </div>
+                  <span className="min-w-0">
+                    <span className={`block text-[10px] font-bold uppercase tracking-[0.16em] ${darkMode ? "text-emerald-100/80" : "text-emerald-700"}`}>
+                      Posisi kamu saat ini
+                    </span>
+                    <span className={`mt-0.5 block text-sm font-bold ${darkMode ? "text-white" : "text-emerald-900"}`}>
+                      {getRankLabel(myLeaderboardPosition.rank)} dari {myLeaderboardPosition.total} siswa
+                    </span>
+                    <span className={`mt-0.5 block text-[11px] ${darkMode ? "text-emerald-100/80" : "text-emerald-700/80"}`}>
+                      {myLeaderboardPosition.isVisible ? "Klik untuk melihat posisi kamu" : "Posisi ini belum masuk Top 100"}
+                    </span>
+                  </span>
+                </div>
+                <ChevronRight className="h-5 w-5 shrink-0 text-current" aria-hidden="true" />
+              </button>
+              ) : (
+                <div className={`mb-4 flex w-full items-center justify-between gap-3 rounded-2xl border p-3 text-left shadow-sm ${
+                  darkMode ? "border-amber-500/40 bg-amber-900/20" : "border-amber-300 bg-amber-50"
+                }`}>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${darkMode ? "bg-amber-500/15 text-amber-300" : "bg-amber-100 text-amber-700"}`}>
+                      <Award className="h-5 w-5" />
+                    </div>
+                    <span className="min-w-0">
+                      <span className={`block text-[10px] font-bold uppercase tracking-[0.16em] ${darkMode ? "text-amber-300" : "text-amber-700"}`}>
+                        Posisi kamu saat ini
+                      </span>
+                      <span className={`mt-0.5 block text-sm font-bold ${theme.headingText}`}>
+                        {getRankLabel(myLeaderboardPosition.rank)}
+                      </span>
+                      <span className={`mt-0.5 block text-[11px] ${theme.mutedText}`}>
+                        Posisi kamu belum masuk Top 100 leaderboard.
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              )
             )}
 
             {leaderboardError && (
@@ -2477,30 +2598,26 @@ export default function StudentDashboard() {
                     return (
                       <div
                         key={entry.studentId}
-                        className={`flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-xl border transition-colors ${
+                        id={`leaderboard-student-${entry.studentId}`}
+                        className={`flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-xl border transition-all duration-200 ${
                           isMe
                             ? darkMode
-                              ? "bg-emerald-900/40 border-emerald-600"
-                              : "bg-emerald-100 border-emerald-300"
+                              ? "bg-gradient-to-r from-emerald-900/60 via-emerald-800/40 to-teal-900/50 border-emerald-500 shadow-[0_10px_24px_-18px_rgba(16,185,129,0.95)]"
+                              : "bg-gradient-to-r from-emerald-100 via-white to-teal-50 border-emerald-300 shadow-[0_10px_24px_-18px_rgba(16,185,129,0.8)]"
                             : darkMode
                             ? "bg-slate-700/40 border-slate-700"
                             : "bg-emerald-50/50 border-emerald-100"
                         }`}
                       >
-                        <div
-                          className={`w-8 h-8 sm:w-9 sm:h-9 shrink-0 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm ${
-                            rank === 1
-                              ? "bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-500 text-white shadow-inner shadow-black/10"
-                              : rank === 2
-                              ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white shadow-inner shadow-black/10"
-                              : rank === 3
-                              ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-inner shadow-black/10"
-                              : darkMode
-                              ? "bg-slate-600 text-emerald-100"
-                              : "bg-emerald-200 text-emerald-800"
-                          }`}
-                        >
-                          {rank <= 3 ? <Crown className="w-4 h-4" /> : rank}
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <div
+                            className={`w-10 h-10 sm:w-11 sm:h-11 shrink-0 rounded-full flex flex-col items-center justify-center font-bold text-[10px] sm:text-[11px] ${getRankBadgeStyle(rank, darkMode)}`}
+                          >
+                            {rank <= 3 ? <Crown className="w-4 h-4" /> : rank}
+                          </div>
+                          <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-amber-500/80">
+                            {rank <= 3 ? getRankLabel(rank) : "Peringkat"}
+                          </div>
                         </div>
                         <div className="min-w-0 flex-1">
                           <p className={`text-xs sm:text-sm font-bold truncate ${theme.headingText}`}>
@@ -2528,30 +2645,26 @@ export default function StudentDashboard() {
                   return (
                     <div
                       key={entry.studentId}
-                      className={`flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-xl border transition-colors ${
+                      id={`leaderboard-student-${entry.studentId}`}
+                      className={`flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-xl border transition-all duration-200 ${
                         isMe
                           ? darkMode
-                            ? "bg-emerald-900/40 border-emerald-600"
-                            : "bg-emerald-100 border-emerald-300"
+                            ? "bg-gradient-to-r from-emerald-900/60 via-emerald-800/40 to-teal-900/50 border-emerald-500 shadow-[0_10px_24px_-18px_rgba(16,185,129,0.95)]"
+                            : "bg-gradient-to-r from-emerald-100 via-white to-teal-50 border-emerald-300 shadow-[0_10px_24px_-18px_rgba(16,185,129,0.8)]"
                           : darkMode
                           ? "bg-slate-700/40 border-slate-700"
                           : "bg-emerald-50/50 border-emerald-100"
                       }`}
                     >
-                      <div
-                        className={`w-8 h-8 sm:w-9 sm:h-9 shrink-0 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm ${
-                          rank === 1
-                            ? "bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-500 text-white shadow-inner shadow-black/10"
-                            : rank === 2
-                            ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white shadow-inner shadow-black/10"
-                            : rank === 3
-                            ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-inner shadow-black/10"
-                            : darkMode
-                            ? "bg-slate-600 text-emerald-100"
-                            : "bg-emerald-200 text-emerald-800"
-                        }`}
-                      >
-                        {rank <= 3 ? <Crown className="w-4 h-4" /> : rank}
+                      <div className="flex min-w-0 items-center gap-2.5">
+                        <div
+                          className={`w-10 h-10 sm:w-11 sm:h-11 shrink-0 rounded-full flex flex-col items-center justify-center font-bold text-[10px] sm:text-[11px] ${getRankBadgeStyle(rank, darkMode)}`}
+                        >
+                          {rank <= 3 ? <Crown className="w-4 h-4" /> : rank}
+                        </div>
+                        <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-amber-500/80">
+                          {rank <= 3 ? getRankLabel(rank) : "Peringkat"}
+                        </div>
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className={`text-xs sm:text-sm font-bold truncate ${theme.headingText}`}>
@@ -2818,7 +2931,13 @@ export default function StudentDashboard() {
               <div className="space-y-4">
                 {filteredRiwayat.map((j) => {
                   const statusBadge = getStatusBadge(j.status);
+                  const journalStatus = normalizeStatus(j.status);
+                  const teacherFeedback = j.teacherFeedback?.trim();
+                  const showTeacherFeedback = (journalStatus === "revision" || journalStatus === "approved") && Boolean(teacherFeedback);
+                  const teacherFeedbackLabel = journalStatus === "revision" ? "Alasan revisi" : "Feedback validasi";
                   const canDelete = normalizeStatus(j.status) !== "approved";
+                  const isExpanded = expandedJournalId === j.id;
+
                   return (
                     <div key={j.id} className={`border p-3.5 sm:p-4 rounded-2xl transition-colors ${darkMode ? "border-slate-700 bg-slate-700/40" : "border-emerald-100 bg-emerald-50/50"}`}>
                       <div className="flex flex-wrap justify-between items-start mb-1 gap-2">
@@ -2829,66 +2948,80 @@ export default function StudentDashboard() {
                           {statusBadge.label}
                         </span>
                       </div>
-                      <p className={`text-xs mb-1 ${theme.mutedText}`}>
-                        {j.genre ? `${j.genre} · ` : ""}Hal. {j.startPage}-{j.endPage} ·{" "}
-                        {formatTanggal(toDateSafe(j.createdAt))}
-                        {j.finished ? " · Selesai dibaca" : ""}
-                      </p>
-                      <p className={`text-[11px] mb-1 ${darkMode ? "text-amber-300" : "text-amber-700"}`}>
-                        Halaman terakhir yang tercatat: <span className="font-semibold">{getLastReadPage(j)}</span>
-                      </p>
-                      <p className={`text-sm italic mb-1 ${darkMode ? "text-emerald-200/80" : "text-emerald-800/80"}`}>&quot;{j.summary}&quot;</p>
-                      {j.characterValues && j.characterValues.length > 0 && (
-                        <p className={`text-xs ${theme.mutedText}`}>Nilai karakter: {j.characterValues.join(", ")}</p>
-                      )}
-                      {j.teacherFeedback && (
-                        <div className="mt-2 rounded-xl border border-orange-200 bg-orange-50 p-2.5 text-xs text-orange-800">
-                          <strong className="block mb-0.5 text-orange-900">Alasan revisi:</strong>
-                          <span>{j.teacherFeedback}</span>
+
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                        <p className={`text-xs ${theme.mutedText}`}>
+                          {j.genre ? `${j.genre} · ` : ""}Hal. {j.startPage}-{j.endPage}
+                          {j.finished ? " · Selesai dibaca" : ""}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedJournalId(isExpanded ? null : j.id)}
+                          className="self-start text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 underline-offset-2 hover:underline"
+                        >
+                          {isExpanded ? "Sembunyikan detail" : "Lihat detail jurnal"}
+                        </button>
+                      </div>
+
+                      {isExpanded && (
+                        <div className={`mt-3 rounded-2xl border p-3 sm:p-4 ${darkMode ? "border-slate-600 bg-slate-800/40" : "border-emerald-100 bg-white/60"}`}>
+                          <div className="mb-2 flex items-center gap-2">
+                            <span className={`inline-flex h-2 w-2 rounded-full ${normalizeStatus(j.status) === "approved" ? "bg-emerald-500" : normalizeStatus(j.status) === "revision" ? "bg-orange-500" : "bg-amber-500"}`} />
+                            <p className={`text-xs font-semibold ${theme.headingText}`}>Detail jurnal</p>
+                          </div>
+
+                          <div className={`grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2 ${theme.mutedText}`}>
+                            <div className="rounded-xl border border-emerald-100 bg-white/60 px-2.5 py-2 leading-tight">
+                              <span className="block font-semibold text-emerald-700/80 mb-0.5">Upload jurnal</span>
+                              <span className="break-words">{formatTanggal(toDateSafe(j.createdAt))}</span>
+                            </div>
+                            <div className="rounded-xl border border-emerald-100 bg-white/60 px-2.5 py-2 leading-tight">
+                              <span className="block font-semibold text-emerald-700/80 mb-0.5">Perubahan terakhir</span>
+                              <span className="break-words">{formatTanggal(toDateSafe(j.updatedAt || j.createdAt))}</span>
+                            </div>
+                            <div className="rounded-xl border border-emerald-100 bg-white/60 px-2.5 py-2 leading-tight">
+                              <span className="block font-semibold text-emerald-700/80 mb-0.5">Guru validator</span>
+                              <span className="break-words">{j.approvedBy || "Belum divalidasi"}</span>
+                            </div>
+                            <div className="rounded-xl border border-emerald-100 bg-white/60 px-2.5 py-2 leading-tight">
+                              <span className="block font-semibold text-emerald-700/80 mb-0.5">Nilai karakter</span>
+                              <span className="break-words">{j.characterValues && j.characterValues.length > 0 ? j.characterValues.join(", ") : "-"}</span>
+                            </div>
+                          </div>
+
+                          <p className={`text-sm italic mt-3 mb-2 ${darkMode ? "text-emerald-200/80" : "text-emerald-800/80"}`}>&quot;{j.summary}&quot;</p>
+
+                          {!showTeacherFeedback && journalStatus === "approved" && (
+                            <p className={`text-[11px] mt-2 ${darkMode ? "text-emerald-300" : "text-emerald-700"}`}>
+                              Jurnal sudah divalidasi guru dan tidak ada revisi.
+                            </p>
+                          )}
+                          {showTeacherFeedback && (
+                            <div className={`mt-2 rounded-xl border p-2.5 text-xs ${journalStatus === "revision" ? "border-orange-200 bg-orange-50 text-orange-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
+                              <strong className={`block mb-0.5 ${journalStatus === "revision" ? "text-orange-900" : "text-emerald-900"}`}>{teacherFeedbackLabel}:</strong>
+                              <span>{teacherFeedback}</span>
+                            </div>
+                          )}
                         </div>
                       )}
 
-                      {/* Progress Log — tampil log membaca bertahap jika ada */}
-                      {j.progressLog && j.progressLog.length > 0 && (
-                        <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-2.5">
-                          <strong className={`block mb-2 text-xs font-semibold ${darkMode ? "text-emerald-300" : "text-emerald-800"}`}>
-                            📚 Log Progres Membaca:
-                          </strong>
-                          <div className="space-y-1.5">
-                            {j.progressLog
-                              .slice()
-                              .sort(
-                                (a, b) =>
-                                  (toDateSafe(b.timestamp)?.getTime() ?? 0) - (toDateSafe(a.timestamp)?.getTime() ?? 0)
-                              )
-                              .map((progress, idx) => (
-                                <div key={progress.id} className={`text-xs ${darkMode ? "text-emerald-700" : "text-emerald-700"}`}>
-                                  <span className="font-semibold">
-                                    #{j.progressLog!.length - idx}.
-                                  </span>{" "}
-                                  Hal. {progress.startPage}-{progress.endPage} ({progress.endPage - progress.startPage} hal.)
-                                  <span className={`ml-1 ${darkMode ? "text-emerald-600" : "text-emerald-600"}`}>
-                                    {progress.timestamp && ` • ${formatTanggal(toDateSafe(progress.timestamp))}`}
-                                  </span>
-                                  <br />
-                                  <span className="italic">&quot;{progress.summary}&quot;</span>
-                                </div>
-                              ))}
-                          </div>
+                      {!isExpanded && j.characterValues && j.characterValues.length > 0 && (
+                        <p className={`text-xs mt-3 ${theme.mutedText}`}>Nilai karakter: {j.characterValues.join(", ")}</p>
+                      )}
+
+                      {!isExpanded && !showTeacherFeedback && journalStatus === "approved" && (
+                        <p className={`text-[11px] mt-2 ${darkMode ? "text-emerald-300" : "text-emerald-700"}`}>
+                          Jurnal sudah divalidasi guru dan tidak ada revisi.
+                        </p>
+                      )}
+                      {!isExpanded && showTeacherFeedback && (
+                        <div className={`mt-2 rounded-xl border p-2.5 text-xs ${journalStatus === "revision" ? "border-orange-200 bg-orange-50 text-orange-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
+                          <strong className={`block mb-0.5 ${journalStatus === "revision" ? "text-orange-900" : "text-emerald-900"}`}>{teacherFeedbackLabel}:</strong>
+                          <span>{teacherFeedback}</span>
                         </div>
                       )}
 
                       <div className="mt-3 flex flex-wrap justify-end gap-2">
-                        {/* Add Progress — siswa bisa lanjut membaca selama buku belum selesai, termasuk yang sudah divalidasi guru */}
-                        {!j.finished && (
-                          <button
-                            type="button"
-                            onClick={() => openAddProgress(j)}
-                            className="flex-1 sm:flex-none px-3 py-2 bg-emerald-500 text-white text-xs font-semibold rounded-xl hover:bg-emerald-600 active:scale-[0.98] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
-                          >
-                            + Lanjut Membaca
-                          </button>
-                        )}
                         {j.status === "revision" && (
                           <button
                             type="button"
@@ -2898,7 +3031,6 @@ export default function StudentDashboard() {
                             Edit &amp; Kirim Ulang
                           </button>
                         )}
-                        {/* Fitur #1: hapus jurnal milik sendiri, selama belum tervalidasi */}
                         {canDelete && (
                           <button
                             type="button"
@@ -2918,96 +3050,6 @@ export default function StudentDashboard() {
               </div>
             )}
 
-            {/* Modal: Tambah Progress Membaca */}
-            {addProgressTo && (
-              <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                <div className={`max-w-md w-full p-5 sm:p-6 rounded-3xl shadow-2xl max-h-[90vh] overflow-y-auto ${darkMode ? "bg-slate-800 border-slate-700" : "bg-white border-white"} border`}>
-                  <h3 className={`text-lg font-bold tracking-tight mb-1 ${theme.headingText}`}>Lanjut Membaca</h3>
-                  <p className={`text-xs mb-2 ${theme.mutedText}`}>
-                    Catat progres membacamu hari ini untuk buku &quot;{journals.find((j) => j.id === addProgressTo)?.bookTitle}&quot;
-                  </p>
-                  <div className={`mb-4 rounded-xl border px-3 py-2 text-[11px] ${darkMode ? "border-amber-700/50 bg-amber-900/20 text-amber-200" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
-                    <span className="font-semibold block mb-1">Halaman terakhir yang tercatat:</span>
-                    {addProgressTo ? getLastReadPage(journals.find((j) => j.id === addProgressTo) ?? null) : 0}
-                  </div>
-
-                  {addProgressError && (
-                    <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2 mb-3">
-                      {addProgressError}
-                    </p>
-                  )}
-
-                  <div className="space-y-3 mb-4">
-                    <div>
-                      <label className={`text-xs font-semibold block mb-1 ${theme.headingText}`}>Halaman terakhir yang dibaca</label>
-                      <input
-                        type="number"
-                        readOnly
-                        value={addProgressTo ? getLastReadPage(journals.find((j) => j.id === addProgressTo) ?? null) : 0}
-                        className={`w-full px-3 py-2.5 sm:py-2 border rounded-xl outline-none text-sm ${darkMode ? "bg-slate-700/50 border-slate-600 text-emerald-100" : "bg-emerald-50 border-emerald-200 text-emerald-900"}`}
-                      />
-                    </div>
-                    <div>
-                      <label className={`text-xs font-semibold block mb-1 ${theme.headingText}`}>Halaman mulai lanjutan</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={addProgressForm.startPage}
-                        onChange={(e) =>
-                          setAddProgressForm((prev) => ({ ...prev, startPage: e.target.value }))
-                        }
-                        className={`w-full px-3 py-2.5 sm:py-2 border rounded-xl outline-none focus:ring-2 transition text-sm ${theme.input}`}
-                      />
-                    </div>
-                    <div>
-                      <label className={`text-xs font-semibold block mb-1 ${theme.headingText}`}>Halaman akhir update</label>
-                      <input
-                        type="number"
-                        min="1"
-                        value={addProgressForm.endPage}
-                        onChange={(e) =>
-                          setAddProgressForm((prev) => ({ ...prev, endPage: e.target.value }))
-                        }
-                        className={`w-full px-3 py-2.5 sm:py-2 border rounded-xl outline-none focus:ring-2 transition text-sm ${theme.input}`}
-                      />
-                    </div>
-                    <div>
-                      <label className={`text-xs font-semibold block mb-1 ${theme.headingText}`}>Ringkasan Bacaan Hari Ini</label>
-                      <textarea
-                        value={addProgressForm.summary}
-                        onChange={(e) =>
-                          setAddProgressForm((prev) => ({ ...prev, summary: e.target.value }))
-                        }
-                        className={`w-full px-3 py-2 border rounded-xl outline-none focus:ring-2 transition text-sm resize-none h-20 ${theme.input}`}
-                        placeholder="Apa yang kamu pelajari dari membaca hari ini?"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setAddProgressTo(null);
-                        setAddProgressForm({ startPage: "", endPage: "", summary: "" });
-                        setAddProgressError("");
-                      }}
-                      className={`flex-1 px-3 py-2.5 sm:py-2 rounded-xl text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${darkMode ? "bg-slate-700 text-emerald-100 hover:bg-slate-600" : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"}`}
-                    >
-                      Batal
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleAddProgress()}
-                      disabled={addProgressSaving}
-                      className={`flex-1 px-3 py-2.5 sm:py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold hover:bg-emerald-700 active:scale-[0.98] transition disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2`}
-                    >
-                      {addProgressSaving ? "Menyimpan..." : "Simpan Progress"}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
           </div>
         )}
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { Fragment, useState, useEffect, useMemo, useCallback } from "react";
 import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
@@ -10,6 +10,7 @@ import {
   where,
   orderBy,
   getDocs,
+  onSnapshot,
   doc,
   updateDoc,
   deleteDoc,
@@ -37,6 +38,7 @@ import {
   Sparkles,
   Star,
   Sun,
+  Moon,
   Crown,
   Undo2,
   LayoutGrid,
@@ -63,14 +65,6 @@ import {
  */
 type JournalStatus = "pending" | "revision" | "approved";
 
-interface ProgressEntry {
-  id: string;
-  startPage: number;
-  endPage: number;
-  summary: string;
-  timestamp: Date | string | number | { toDate?: () => Date } | null;
-}
-
 interface Journal {
   id: string;
   studentId?: string;
@@ -86,7 +80,6 @@ interface Journal {
   status: string;
   teacherFeedback?: string;
   approvedBy?: string;
-  progressLog?: ProgressEntry[];
   classCode: string;
   finished?: boolean;
   createdAt?: Date | string | number | { toDate?: () => Date } | null;
@@ -146,7 +139,40 @@ type LeaderboardSubTab = "semua" | "kelas";
 
 function getCurrentMonthInput(): string {
   const date = new Date();
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+  const parts = getJakartaDateParts(date);
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}`;
+}
+
+function getJakartaDateParts(date: Date): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+
+  const values: Record<string, string> = {};
+  parts.forEach((part) => {
+    if (part.type !== "literal") values[part.type] = part.value;
+  });
+
+  return {
+    year: Number(values.year),
+    month: Number(values.month),
+    day: Number(values.day),
+    hour: Number(values.hour),
+    minute: Number(values.minute),
+    second: Number(values.second),
+  };
+}
+
+function toJakartaDateKey(date: Date): string {
+  const parts = getJakartaDateParts(date);
+  return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
 }
 
 const INACTIVITY_DAYS = 7;
@@ -166,7 +192,12 @@ function toDateSafe(value: Date | string | number | { toDate?: () => Date } | nu
 
 function formatTanggal(d: Date | null): string {
   if (!d) return "-";
-  return d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+  return new Intl.DateTimeFormat("id-ID", {
+    timeZone: "Asia/Jakarta",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(d);
 }
 
 function formatGender(g?: string): string {
@@ -175,10 +206,30 @@ function formatGender(g?: string): string {
   return "-";
 }
 
+function getStudentListKey(name: string, classCode?: string, index?: number): string {
+  const suffix = typeof index === "number" ? `-${index}` : "";
+  return `${classCode ?? "unknown"}-${name}${suffix}`;
+}
+
 function getStartOfMonth(date: Date): Date {
   const start = new Date(date.getFullYear(), date.getMonth(), 1);
   start.setHours(0, 0, 0, 0);
   return start;
+}
+
+function getPreviousWeekWindow(now = new Date()): { start: Date; end: Date } {
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+
+  const day = start.getDay();
+  const daysSinceMonday = (day + 6) % 7;
+  start.setDate(start.getDate() - daysSinceMonday - 7);
+
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  end.setHours(23, 59, 59, 999);
+
+  return { start, end };
 }
 
 function getCharacterList(j: Journal): string[] {
@@ -188,12 +239,7 @@ function getCharacterList(j: Journal): string[] {
 }
 
 function getLatestPageForJournal(journal: Journal): number {
-  const mainPage = Number(journal.endPage) || 0;
-  const logPages = (journal.progressLog || [])
-    .map((entry) => Number(entry.endPage))
-    .filter((value) => Number.isFinite(value));
-
-  return logPages.length > 0 ? Math.max(mainPage, ...logPages) : mainPage;
+  return Number(journal.endPage) || 0;
 }
 
 /**
@@ -610,12 +656,12 @@ function DailyProgressChart({ journals }: { journals: Journal[] }) {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
       d.setHours(0, 0, 0, 0);
-      map.set(d.toISOString().slice(0, 10), 0);
+      map.set(toJakartaDateKey(d), 0);
     }
     journals.forEach((j) => {
       const d = toDateSafe(j.createdAt);
       if (!d) return;
-      const key = d.toISOString().slice(0, 10);
+      const key = toJakartaDateKey(d);
       if (!map.has(key)) return;
       const pages = Number(j.endPage) - Number(j.startPage);
       if (!Number.isNaN(pages) && pages > 0) {
@@ -757,7 +803,7 @@ function CuteBackground({ mouse }: { mouse: { x: number; y: number } }) {
 
       {floaters.map(({ Icon, top, left, size, depth, color, duration, delay }, i) => (
         <div
-          key={i}
+          key={`${Icon.displayName ?? "floater"}-${top}-${left}-${size}-${i}`}
           className="absolute transition-transform duration-500 ease-out hidden xs:block"
           style={{ top, left, transform: `translate(${dx * depth}px, ${dy * depth}px)` }}
         >
@@ -872,6 +918,8 @@ export default function TeacherDashboard() {
   const [activeTab, setActiveTab] = useState<TabKey>("ringkasan");
   const [selectedStudent, setSelectedStudent] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [mentoringSearch, setMentoringSearch] = useState("");
+  const [mentoringClassFilter, setMentoringClassFilter] = useState("all");
   const [classFilter, setClassFilter] = useState<string>("all");
   const [reportView, setReportView] = useState<ReportView>("kelas");
   const [reportPeriod, setReportPeriod] = useState<ReportPeriod>("all");
@@ -892,10 +940,30 @@ export default function TeacherDashboard() {
   const [mousePos, setMousePos] = useState({ x: 0.5, y: 0.5 });
   // id jurnal yang sedang diproses (approve/revisi/batalkan) -> mencegah klik ganda
   const [journalActionLoading, setJournalActionLoading] = useState<string | null>(null);
+  const [selectedJournalIds, setSelectedJournalIds] = useState<Set<string>>(new Set());
+  const [bulkJournalLoading, setBulkJournalLoading] = useState(false);
+  const [journalClassFilter, setJournalClassFilter] = useState("all");
   // id jurnal yang sedang dihapus -> mencegah klik ganda dan memberi feedback visual
   const [deleteJournalLoading, setDeleteJournalLoading] = useState<string | null>(null);
   const [leaderboardSubTab, setLeaderboardSubTab] = useState<LeaderboardSubTab>("semua");
   const [selectedLeaderboardClass, setSelectedLeaderboardClass] = useState("");
+  const [leaderboardRefreshKey, setLeaderboardRefreshKey] = useState<string>(() => new Date().toISOString());
+  const [darkMode, setDarkMode] = useState(false);
+
+  useEffect(() => {
+    const savedTheme = localStorage.getItem("literasi_teacher_dark_mode");
+    if (savedTheme) {
+      queueMicrotask(() => setDarkMode(savedTheme === "1"));
+    }
+  }, []);
+
+  const toggleDarkMode = () => {
+    setDarkMode((current) => {
+      const next = !current;
+      localStorage.setItem("literasi_teacher_dark_mode", next ? "1" : "0");
+      return next;
+    });
+  };
 
   const fetchClassJournals = useCallback(async () => {
     const journalQuery = query(collection(db, "journals"), orderBy("createdAt", "desc"));
@@ -942,6 +1010,27 @@ export default function TeacherDashboard() {
   }, [user, userProfile, loading, router, loadDashboardData]);
 
   useEffect(() => {
+    if (!user || !["teacher", "admin"].includes(userProfile?.role || "")) return;
+
+    const unsubscribe = onSnapshot(
+      query(collection(db, "journals"), orderBy("createdAt", "desc")),
+      (snapshot) => {
+        const docs: Journal[] = [];
+        snapshot.forEach((journalDoc) => docs.push({ id: journalDoc.id, ...journalDoc.data() } as Journal));
+        docs.sort(
+          (a, b) =>
+            (toDateSafe(b.updatedAt ?? b.createdAt)?.getTime() ?? 0) -
+            (toDateSafe(a.updatedAt ?? a.createdAt)?.getTime() ?? 0)
+        );
+        setJournals(docs);
+      },
+      () => setManagementError("Gagal menyinkronkan jurnal secara realtime.")
+    );
+
+    return unsubscribe;
+  }, [user, userProfile?.role]);
+
+  useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       setMousePos({
         x: e.clientX / window.innerWidth,
@@ -963,6 +1052,161 @@ export default function TeacherDashboard() {
       await handleUpdateJournalStatus(journalId, "approved");
     } catch {
       setManagementError("Validasi jurnal gagal diperbarui. Periksa koneksi/izin dan coba lagi.");
+    }
+  };
+
+  const handleSaveValidationFeedback = async (journalId: string) => {
+    const journal = journals.find((item) => item.id === journalId);
+    if (!journal || getStatusInfo(journal.status).key !== "approved") return;
+
+    setManagementError("");
+    setJournalActionLoading(journalId);
+    try {
+      await updateDoc(doc(db, "journals", journalId), {
+        teacherFeedback: (feedbackInput[journalId] ?? journal.teacherFeedback ?? "").trim(),
+        updatedAt: serverTimestamp(),
+      });
+      await fetchClassJournals();
+    } catch {
+      setManagementError("Feedback validasi gagal disimpan. Periksa koneksi/izin dan coba lagi.");
+    } finally {
+      setJournalActionLoading(null);
+    }
+  };
+
+  const handleToggleJournalSelection = (journalId: string) => {
+    setSelectedJournalIds((current) => {
+      const next = new Set(current);
+      if (next.has(journalId)) next.delete(journalId);
+      else next.add(journalId);
+      return next;
+    });
+  };
+
+  const handleToggleClassJournals = (journalIds: string[]) => {
+    setSelectedJournalIds((current) => {
+      const next = new Set(current);
+      const allSelected = journalIds.every((journalId) => next.has(journalId));
+      journalIds.forEach((journalId) => {
+        if (allSelected) next.delete(journalId);
+        else next.add(journalId);
+      });
+      return next;
+    });
+  };
+
+  const handleBulkApprove = async () => {
+    const selectedJournals = journals.filter((journal) => selectedJournalIds.has(journal.id));
+    if (selectedJournals.length === 0) return;
+
+    setManagementError("");
+    setBulkJournalLoading(true);
+    const teacherName = userProfile?.name || "Guru";
+    try {
+      await Promise.all(
+        selectedJournals
+          .filter((journal) => getStatusInfo(journal.status).key !== "approved")
+          .map((journal) =>
+            updateDoc(doc(db, "journals", journal.id), {
+              status: "approved",
+              teacherFeedback: (feedbackInput[journal.id] ?? journal.teacherFeedback ?? "").trim(),
+              approvedBy: teacherName,
+              updatedAt: serverTimestamp(),
+            })
+          )
+      );
+      setSelectedJournalIds(new Set());
+      await fetchClassJournals();
+    } catch {
+      setManagementError("Validasi massal gagal diperbarui. Periksa koneksi/izin dan coba lagi.");
+    } finally {
+      setBulkJournalLoading(false);
+    }
+  };
+
+  const handleBulkCancelApproval = async () => {
+    const selectedApprovedJournals = journals.filter(
+      (journal) => selectedJournalIds.has(journal.id) && getStatusInfo(journal.status).key === "approved"
+    );
+    if (selectedApprovedJournals.length === 0) return;
+    if (!window.confirm(`Batalkan validasi untuk ${selectedApprovedJournals.length} jurnal terpilih?`)) return;
+
+    setManagementError("");
+    setBulkJournalLoading(true);
+    try {
+      await Promise.all(
+        selectedApprovedJournals.map((journal) =>
+          updateDoc(doc(db, "journals", journal.id), {
+            status: "pending",
+            approvedBy: "",
+            updatedAt: serverTimestamp(),
+          })
+        )
+      );
+      setSelectedJournalIds(new Set());
+      await fetchClassJournals();
+    } catch {
+      setManagementError("Pembatalan validasi massal gagal. Periksa koneksi/izin dan coba lagi.");
+    } finally {
+      setBulkJournalLoading(false);
+    }
+  };
+
+  const handleCancelRevision = async (journalId: string) => {
+    const journal = journals.find((item) => item.id === journalId);
+    if (!journal || getStatusInfo(journal.status).key !== "revision") return;
+    if (!window.confirm("Batalkan revisi jurnal ini? Statusnya akan kembali menjadi Menunggu Validasi.")) return;
+
+    setManagementError("");
+    setJournalActionLoading(journalId);
+    try {
+      await updateDoc(doc(db, "journals", journalId), {
+        status: "pending",
+        teacherFeedback: "",
+        approvedBy: "",
+        updatedAt: serverTimestamp(),
+      });
+      await fetchClassJournals();
+    } catch {
+      setManagementError("Pembatalan revisi gagal. Periksa koneksi/izin dan coba lagi.");
+    } finally {
+      setJournalActionLoading(null);
+    }
+  };
+
+  const jumpToJournalClass = (classCode: string) => {
+    setJournalClassFilter(classCode);
+    window.setTimeout(() => {
+      document.getElementById(`journal-class-${classCode}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  };
+
+  const handleBulkCancelRevision = async () => {
+    const selectedRevisionJournals = journals.filter(
+      (journal) => selectedJournalIds.has(journal.id) && getStatusInfo(journal.status).key === "revision"
+    );
+    if (selectedRevisionJournals.length === 0) return;
+    if (!window.confirm(`Batalkan revisi untuk ${selectedRevisionJournals.length} jurnal terpilih?`)) return;
+
+    setManagementError("");
+    setBulkJournalLoading(true);
+    try {
+      await Promise.all(
+        selectedRevisionJournals.map((journal) =>
+          updateDoc(doc(db, "journals", journal.id), {
+            status: "pending",
+            teacherFeedback: "",
+            approvedBy: "",
+            updatedAt: serverTimestamp(),
+          })
+        )
+      );
+      setSelectedJournalIds(new Set());
+      await fetchClassJournals();
+    } catch {
+      setManagementError("Pembatalan revisi massal gagal. Periksa koneksi/izin dan coba lagi.");
+    } finally {
+      setBulkJournalLoading(false);
     }
   };
 
@@ -1279,7 +1523,39 @@ export default function TeacherDashboard() {
     };
   }, [journals, studentSummaries]);
 
-  const leaderboard = useMemo(() => buildLeaderboard(journals), [journals]);
+  useEffect(() => {
+    if (!user || !["teacher", "admin"].includes(userProfile?.role || "")) return;
+
+    let timeoutId: number | undefined;
+    const scheduleRefresh = () => {
+      const now = new Date();
+      const day = now.getDay();
+      const nextRefresh = new Date(now);
+
+      if (day === 1 && now.getHours() >= 8) {
+        nextRefresh.setDate(nextRefresh.getDate() + 7);
+      } else {
+        const daysUntilMonday = day === 1 ? 0 : (8 - day) % 7;
+        nextRefresh.setDate(nextRefresh.getDate() + daysUntilMonday);
+      }
+
+      nextRefresh.setHours(8, 0, 0, 0);
+
+      timeoutId = window.setTimeout(() => {
+        setLeaderboardRefreshKey(new Date().toISOString());
+        void fetchClassJournals();
+        scheduleRefresh();
+      }, Math.max(nextRefresh.getTime() - now.getTime(), 0));
+    };
+
+    scheduleRefresh();
+    return () => {
+      if (timeoutId) window.clearTimeout(timeoutId);
+    };
+  }, [fetchClassJournals, user, userProfile?.role]);
+
+  const leaderboard = useMemo(() => buildLeaderboard(journals, 100, leaderboardRefreshKey), [journals, leaderboardRefreshKey]);
+  const totalRegisteredStudents = allStudents.length;
   const leaderboardClasses = useMemo(
     () => Array.from(new Set(leaderboard.map((entry) => entry.classCode).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
     [leaderboard]
@@ -1288,8 +1564,52 @@ export default function TeacherDashboard() {
     ? selectedLeaderboardClass
     : leaderboardClasses[0] || "";
   const classLeaderboard = useMemo(
-    () => buildLeaderboard(journals.filter((journal) => journal.classCode === effectiveLeaderboardClass), Number.MAX_SAFE_INTEGER),
-    [journals, effectiveLeaderboardClass]
+    () => buildLeaderboard(journals.filter((journal) => journal.classCode === effectiveLeaderboardClass), Number.MAX_SAFE_INTEGER, leaderboardRefreshKey),
+    [journals, effectiveLeaderboardClass, leaderboardRefreshKey]
+  );
+  const groupedJournalsByClass = useMemo(() => {
+    const grouped = new Map<string, Journal[]>();
+    journals.forEach((journal) => {
+      const classCode = journal.classCode || "Tanpa Kelas";
+      if (!grouped.has(classCode)) grouped.set(classCode, []);
+      grouped.get(classCode)!.push(journal);
+    });
+
+    return Array.from(grouped.entries())
+      .sort(([classA], [classB]) => classA.localeCompare(classB, "id"))
+      .map(([classCode, classJournals]) => ({
+        classCode,
+        journals: classJournals.sort(
+          (a, b) => (toDateSafe(b.updatedAt ?? b.createdAt)?.getTime() ?? 0) - (toDateSafe(a.updatedAt ?? a.createdAt)?.getTime() ?? 0)
+        ),
+      }));
+  }, [journals]);
+  const filteredGroupedJournalsByClass = useMemo(
+    () => journalClassFilter === "all"
+      ? groupedJournalsByClass
+      : groupedJournalsByClass.filter(({ classCode }) => classCode === journalClassFilter),
+    [groupedJournalsByClass, journalClassFilter]
+  );
+  const missingValidationFeedbackByClass = useMemo(() => {
+    const counts = new Map<string, number>();
+    journals.forEach((journal) => {
+      if (getStatusInfo(journal.status).key !== "approved" || journal.teacherFeedback?.trim()) return;
+      const classCode = journal.classCode || "Tanpa Kelas";
+      counts.set(classCode, (counts.get(classCode) || 0) + 1);
+    });
+    return Array.from(counts.entries()).sort(([classA], [classB]) => classA.localeCompare(classB, "id"));
+  }, [journals]);
+  const selectedPendingJournalCount = useMemo(
+    () => journals.filter((journal) => selectedJournalIds.has(journal.id) && getStatusInfo(journal.status).key !== "approved").length,
+    [journals, selectedJournalIds]
+  );
+  const selectedApprovedJournalCount = useMemo(
+    () => journals.filter((journal) => selectedJournalIds.has(journal.id) && getStatusInfo(journal.status).key === "approved").length,
+    [journals, selectedJournalIds]
+  );
+  const selectedRevisionJournalCount = useMemo(
+    () => journals.filter((journal) => selectedJournalIds.has(journal.id) && getStatusInfo(journal.status).key === "revision").length,
+    [journals, selectedJournalIds]
   );
 
   const studentsNeedingAttention: FlaggedStudent[] = useMemo(() => {
@@ -1323,6 +1643,29 @@ export default function TeacherDashboard() {
       })
       .filter((s) => s.reasons.length > 0);
   }, [studentSummaries, classStats]);
+
+  const groupedStudentsNeedingAttention = useMemo(() => {
+    const search = mentoringSearch.trim().toLowerCase();
+    const filtered = studentsNeedingAttention.filter((student) => {
+      const matchesName = !search || student.name.toLowerCase().includes(search);
+      const matchesClass = mentoringClassFilter === "all" || student.classCode === mentoringClassFilter;
+      return matchesName && matchesClass;
+    });
+    const grouped = new Map<string, FlaggedStudent[]>();
+
+    filtered.forEach((student) => {
+      const classCode = student.classCode || "Tanpa Kelas";
+      if (!grouped.has(classCode)) grouped.set(classCode, []);
+      grouped.get(classCode)!.push(student);
+    });
+
+    return Array.from(grouped.entries())
+      .sort(([classA], [classB]) => classA.localeCompare(classB, "id"))
+      .map(([classCode, students]) => ({
+        classCode,
+        students: students.sort((a, b) => a.name.localeCompare(b.name, "id")),
+      }));
+  }, [mentoringClassFilter, mentoringSearch, studentsNeedingAttention]);
 
   const selectedStudentData = useMemo(
     () => studentSummaries.find((s) => s.name === selectedStudent) || null,
@@ -1441,7 +1784,7 @@ export default function TeacherDashboard() {
   // Export CSV utama untuk tab Laporan — selalu detail per buku, baik untuk
   // Rekapan Per Kelas maupun Rekapan Per Siswa.
   const handleExportCSV = () => {
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = toJakartaDateKey(new Date());
 
     if (reportView === "siswa") {
       if (reportStudent !== "all" && reportSelectedStudentSummary) {
@@ -1543,16 +1886,23 @@ export default function TeacherDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 via-green-50 to-teal-100">
+      <div className={`min-h-screen flex items-center justify-center ${darkMode ? "bg-slate-950" : "bg-gradient-to-br from-emerald-50 via-green-50 to-teal-100"}`}>
         <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 rounded-full border-[3px] border-emerald-200 border-t-emerald-600 animate-spin" />
-          <p className="text-emerald-700 text-sm font-medium">Memuat dashboard...</p>
+          <div className={`w-10 h-10 rounded-full border-[3px] ${darkMode ? "border-slate-700 border-t-emerald-400" : "border-emerald-200 border-t-emerald-600"} animate-spin`} />
+          <p className={`${darkMode ? "text-emerald-300" : "text-emerald-700"} text-sm font-medium`}>Memuat dashboard...</p>
         </div>
       </div>
     );
   }
 
   const teacherName = userProfile?.name || "Guru";
+  const todayLabel = new Intl.DateTimeFormat("id-ID", {
+    timeZone: "Asia/Jakarta",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(new Date());
   const tabs: { key: TabKey; label: string; shortLabel: string; icon: React.ReactNode }[] = [
     { key: "ringkasan", label: "Rekap Seluruh Siswa", shortLabel: "Rekap", icon: <LayoutGrid className="w-4 h-4" /> },
     { key: "leaderboard", label: "Leaderboard", shortLabel: "Papan Skor", icon: <Trophy className="w-4 h-4" /> },
@@ -1568,36 +1918,81 @@ export default function TeacherDashboard() {
   ];
 
   return (
-    <div className="min-h-screen w-full overflow-x-hidden bg-gradient-to-br from-emerald-50 via-green-50 to-teal-100 relative print:bg-white print:p-0">
+    <div className={`teacher-dashboard ${darkMode ? "teacher-dark" : ""} min-h-screen w-full overflow-x-hidden relative print:bg-white print:p-0 ${darkMode ? "bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950" : "bg-gradient-to-br from-emerald-50 via-green-50 to-teal-100"}`}>
+      {darkMode && (
+        <style>{`
+          .teacher-dark [class*="bg-white"] { background-color: rgba(30, 41, 59, 0.88) !important; }
+          .teacher-dark [class*="bg-emerald-50"] { background-color: rgba(6, 78, 59, 0.28) !important; }
+          .teacher-dark [class*="bg-orange-50"] { background-color: rgba(124, 45, 18, 0.28) !important; }
+          .teacher-dark [class*="bg-yellow-50"] { background-color: rgba(113, 63, 18, 0.28) !important; }
+          .teacher-dark [class*="bg-slate-50"] { background-color: rgba(51, 65, 85, 0.5) !important; }
+          .teacher-dark [class*="text-emerald-900"] { color: #d1fae5 !important; }
+          .teacher-dark [class*="text-emerald-800"] { color: #a7f3d0 !important; }
+          .teacher-dark [class*="text-emerald-700"] { color: #6ee7b7 !important; }
+          .teacher-dark [class*="text-slate-800"] { color: #e2e8f0 !important; }
+          .teacher-dark [class*="text-slate-600"] { color: #cbd5e1 !important; }
+          .teacher-dark [class*="border-emerald-100"] { border-color: rgba(52, 211, 153, 0.24) !important; }
+          .teacher-dark [class*="border-emerald-200"] { border-color: rgba(52, 211, 153, 0.36) !important; }
+          .teacher-dark [class*="border-white"] { border-color: rgba(71, 85, 105, 0.7) !important; }
+          .teacher-dark input, .teacher-dark select { color-scheme: dark; }
+          .teacher-dark input, .teacher-dark select { background-color: rgba(51, 65, 85, 0.7) !important; color: #ecfdf5 !important; border-color: rgba(52, 211, 153, 0.35) !important; }
+          .teacher-dark input::placeholder { color: rgba(167, 243, 208, 0.5) !important; }
+        `}</style>
+      )}
       <CuteBackground mouse={mousePos} />
 
       <div className="relative w-full max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 box-border print:hidden">
         {/* ---- Header ---- */}
-        <header className="sticky top-2 z-30 w-full flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4 mb-4 sm:mb-6 bg-white/90 backdrop-blur-md p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl shadow-[0_4px_24px_-8px_rgba(6,95,70,0.18)] ring-1 ring-white">
-          <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-            <div className="relative shrink-0">
-              <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-white/10 flex items-center justify-center shadow-md ring-4 ring-emerald-100 overflow-hidden">
-                <Image src="/asset/literakarmascot.png" alt="Literakar Mascot" width={48} height={48} className="w-10 h-10 sm:w-12 sm:h-12 object-cover" />
+        <header className="sticky top-2 z-30 w-full mb-4 sm:mb-6">
+          <div className="relative overflow-hidden rounded-[28px] border border-emerald-200/80 bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-500 p-[1px] shadow-[0_18px_42px_-20px_rgba(16,185,129,0.9)]">
+            <div className="relative flex flex-col gap-4 overflow-hidden rounded-[27px] bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.2),_transparent_28%),linear-gradient(135deg,rgba(5,46,22,0.94),rgba(6,95,70,0.92),rgba(13,148,136,0.9))] px-4 py-4 sm:px-5 sm:py-4 text-white backdrop-blur-md">
+              <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-white/10 blur-3xl" />
+              <div className="absolute -bottom-12 left-1/4 h-28 w-28 rounded-full bg-emerald-200/10 blur-3xl" />
+
+              <div className="relative flex items-start justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+                  <div className="relative shrink-0">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-[18px] border border-white/20 bg-white/10 shadow-lg shadow-emerald-950/20 backdrop-blur-sm">
+                      <Image src="/asset/literakarmascot.png" alt="Literakar Mascot" width={52} height={52} className="h-12 w-12 object-cover" />
+                    </div>
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-50/80">{todayLabel}</p>
+                    <h1 className="mt-1 text-xl sm:text-2xl font-bold tracking-tight text-white">
+                      Selamat Datang, Guru {teacherName}!
+                    </h1>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={toggleDarkMode}
+                    aria-label={darkMode ? "Aktifkan mode terang" : "Aktifkan mode gelap"}
+                    title={darkMode ? "Mode terang" : "Mode gelap"}
+                    className={`flex h-9 w-9 items-center justify-center rounded-xl border transition active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 ${darkMode ? "border-emerald-700 bg-slate-700 text-amber-300 hover:bg-slate-600" : "border-white/20 bg-white/10 text-white hover:bg-white/15"}`}
+                  >
+                    {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={logout}
+                    aria-label="Keluar"
+                    title="Keluar"
+                    className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-white transition hover:bg-white/15 active:scale-[0.98]"
+                  >
+                    <LogOut className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-              <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-emerald-500 ring-2 ring-white" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <h1 className="text-[15px] sm:text-xl font-bold text-emerald-900 leading-tight break-words sm:truncate">
-                Selamat Datang Guru, {teacherName}!
-              </h1>
-              <p className="text-[11px] sm:text-xs text-emerald-700/60 mt-0.5 leading-relaxed">
-                Semoga Hari Ini Lancar Yaa!
-                {availableClasses.length > 0 ? ` · ${availableClasses.length} kelas aktif` : ""}
-              </p>
+
+              <div className="relative mt-1 text-sm sm:text-base text-emerald-50/90 text-justify leading-relaxed">
+                Semoga hari ini membawa semangat baru, fokus, dan inspirasi untuk terus membimbing siswa-siswi menuju prestasi terbaik.
+              </div>
+
             </div>
           </div>
-          <button
-            onClick={logout}
-            className="w-full sm:w-auto shrink-0 flex items-center justify-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl text-sm font-semibold hover:bg-red-100 active:scale-[0.98] transition"
-          >
-            <LogOut className="w-4 h-4" />
-            Keluar
-          </button>
         </header>
 
         <nav className="mb-5 sm:mb-6 w-full max-w-full overflow-x-auto rounded-2xl bg-white/80 backdrop-blur-sm p-1.5 shadow-sm shadow-emerald-900/5 border border-white [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -1658,7 +2053,7 @@ export default function TeacherDashboard() {
               />
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
               <StatCard
                 label="Total Jurnal"
                 value={classStats.totalJurnal}
@@ -1684,6 +2079,12 @@ export default function TeacherDashboard() {
                 color="yellow"
               />
               <StatCard
+                label="Perlu Memberi Feedback Jurnal"
+                value={classStats.totalMenunggu}
+                icon={<Mail className="w-4 h-4" />}
+                color="blue"
+              />
+              <StatCard
                 label="Rata-rata Jurnal/Siswa"
                 value={classStats.rataRata.toFixed(1)}
                 icon={<TrendingUp className="w-4 h-4" />}
@@ -1700,7 +2101,7 @@ export default function TeacherDashboard() {
                 ) : (
                   <ul className="space-y-2">
                     {classStats.topBooks.map(([title, count], idx) => (
-                      <li key={title} className="flex items-center justify-between gap-2 text-sm">
+                      <li key={`${title}-${count}`} className="flex items-center justify-between gap-2 text-sm">
                         <span className="flex items-center gap-2 min-w-0">
                           <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold flex items-center justify-center shrink-0">
                             {idx + 1}
@@ -1722,7 +2123,7 @@ export default function TeacherDashboard() {
                 ) : (
                   <ul className="space-y-2">
                     {classStats.topCharacters.map(([val, count], idx) => (
-                      <li key={val} className="flex items-center justify-between gap-2 text-sm">
+                      <li key={`${val}-${count}`} className="flex items-center justify-between gap-2 text-sm">
                         <span className="flex items-center gap-2 min-w-0">
                           <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-xs font-bold flex items-center justify-center shrink-0">
                             {idx + 1}
@@ -1853,9 +2254,9 @@ export default function TeacherDashboard() {
                 </p>
               ) : (
                 <div className="space-y-2">
-                  {filteredStudents.map((s) => (
+                  {filteredStudents.map((s, index) => (
                     <button
-                      key={s.name}
+                      key={getStudentListKey(s.name, s.classCode, index)}
                       onClick={() => setSelectedStudent(s.name)}
                       className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 p-3 rounded-xl bg-emerald-50/70 hover:bg-emerald-100/70 active:scale-[0.99] transition text-left"
                     >
@@ -1886,8 +2287,24 @@ export default function TeacherDashboard() {
                 <Trophy className="w-5 h-5 text-amber-500" />
                 Leaderboard Pembaca Terajin
               </h2>
-              <p className="text-xs text-emerald-700/60 mt-1">
-                Ranking ini menggunakan data jurnal yang sama dengan leaderboard dashboard siswa.
+              <p className="text-xs text-emerald-700/60 mt-1 leading-relaxed break-words text-justify">
+                Menu ini menampilkan Top 100 siswa dengan jumlah jurnal terbanyak dari seluruh kelas.
+              </p>
+              <div className={`relative mt-3 overflow-hidden rounded-2xl border px-3.5 py-3 shadow-sm sm:max-w-xl sm:px-4 ${darkMode ? "border-emerald-700/60 bg-gradient-to-r from-emerald-950/80 via-slate-800 to-amber-950/50 shadow-black/20" : "border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-amber-50 shadow-emerald-900/10"}`}>
+                <div className={`pointer-events-none absolute -right-5 -top-8 h-24 w-24 rounded-full blur-2xl ${darkMode ? "bg-amber-500/10" : "bg-amber-200/30"}`} />
+                <div className="relative flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-900/20">
+                    <Users className="h-5 w-5" aria-hidden="true" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className={`text-[10px] font-bold uppercase tracking-[0.08em] ${darkMode ? "text-emerald-300/80" : "text-emerald-700/70"}`}>Siswa aktif di platform</p>
+                    <p className={`mt-0.5 text-lg font-extrabold leading-tight sm:text-xl ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>{totalRegisteredStudents} siswa</p>
+                  </div>
+                  <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold ${darkMode ? "border-amber-500/50 bg-amber-500/15 text-amber-200" : "border-amber-300 bg-amber-100 text-amber-800"}`}>Top 100</span>
+                </div>
+              </div>
+              <p className="text-[11px] mt-1 leading-relaxed font-medium text-amber-700 break-words text-justify">
+                Jumlah progres membaca dan peringkat diperbarui tiap Senin pagi pukul 08.00 WIB.
               </p>
             </div>
 
@@ -1972,21 +2389,56 @@ export default function TeacherDashboard() {
               <HeartHandshake className="w-5 h-5 text-orange-500" />
               Siswa yang Perlu Pendampingan
             </h2>
-            <p className="text-xs text-emerald-700/50 mb-4">
+            <p className="text-xs leading-relaxed text-emerald-700/50 mb-4 text-justify">
               Termasuk siswa yang tidak aktif membaca, belum pernah mengirim jurnal sama sekali,
               jumlah jurnal jauh di bawah rata-rata, atau tumpukan jurnal belum divalidasi/masih
               perlu revisi.
             </p>
+            <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_12rem]">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-500" aria-hidden="true" />
+                <input
+                  type="search"
+                  value={mentoringSearch}
+                  onChange={(event) => setMentoringSearch(event.target.value)}
+                  placeholder="Cari nama siswa..."
+                  aria-label="Cari nama siswa yang perlu pendampingan"
+                  className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2.5 pl-9 text-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400"
+                />
+              </div>
+              <select
+                value={mentoringClassFilter}
+                onChange={(event) => setMentoringClassFilter(event.target.value)}
+                aria-label="Filter kelas siswa yang perlu pendampingan"
+                className="w-full rounded-xl border border-emerald-200 bg-emerald-50/50 px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-emerald-400"
+              >
+                <option value="all">Semua Kelas</option>
+                {availableClasses.map((classCode) => (
+                  <option key={classCode} value={classCode}>Kelas {classCode}</option>
+                ))}
+              </select>
+            </div>
             {studentsNeedingAttention.length === 0 ? (
               <p className="text-emerald-700 text-sm bg-emerald-50 p-3 rounded-xl flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
                 Semua siswa menunjukkan aktivitas membaca yang stabil. Tidak ada yang perlu
                 perhatian khusus saat ini.
               </p>
+            ) : groupedStudentsNeedingAttention.length === 0 ? (
+              <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">
+                Tidak ada siswa yang cocok dengan pencarian atau filter kelas ini.
+              </p>
             ) : (
-              <div className="space-y-3">
-                {studentsNeedingAttention.map((s) => (
-                  <div key={s.name} className="border border-orange-200 bg-orange-50/80 p-3 sm:p-4 rounded-2xl">
+              <div className="space-y-5">
+                {groupedStudentsNeedingAttention.map(({ classCode, students }) => (
+                  <section key={classCode} aria-labelledby={`mentoring-class-${classCode}`}>
+                    <div className="mb-2 flex items-center justify-between gap-2 border-b border-emerald-100 pb-2">
+                      <h3 id={`mentoring-class-${classCode}`} className="text-sm font-bold text-emerald-900">Kelas {classCode}</h3>
+                      <span className="text-[11px] text-emerald-700/60">{students.length} siswa</span>
+                    </div>
+                    <div className="space-y-3">
+                    {students.map((s, index) => (
+                  <div key={getStudentListKey(s.name, s.classCode, index)} className="border border-orange-200 bg-orange-50/80 p-3 sm:p-4 rounded-2xl">
                     <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:justify-between sm:items-start sm:gap-4">
                       <div className="flex gap-3">
                         <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
@@ -2002,7 +2454,7 @@ export default function TeacherDashboard() {
                           </p>
                           <ul className="list-disc list-inside text-xs text-slate-600 mt-1 space-y-0.5">
                             {s.reasons.map((r, i) => (
-                              <li key={i}>{r}</li>
+                              <li key={`${s.name}-${r}-${i}`}>{r}</li>
                             ))}
                           </ul>
                         </div>
@@ -2015,6 +2467,9 @@ export default function TeacherDashboard() {
                       </button>
                     </div>
                   </div>
+                    ))}
+                    </div>
+                  </section>
                 ))}
               </div>
             )}
@@ -2038,49 +2493,163 @@ export default function TeacherDashboard() {
               alasannya (misalnya typo atau ringkasan kurang lengkap), baru klik tombol Perlu
               Revisi.
             </p>
+            <div className="mb-4 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
+              <div>
+                <label htmlFor="teacher-journal-class-filter" className="mb-1.5 block text-xs font-semibold text-emerald-700/70">
+                  Filter kelas jurnal
+                </label>
+                <select
+                  id="teacher-journal-class-filter"
+                  value={journalClassFilter}
+                  onChange={(event) => setJournalClassFilter(event.target.value)}
+                  className="w-full rounded-xl border border-emerald-200 bg-emerald-50/50 px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-emerald-400"
+                >
+                  <option value="all">Semua Kelas</option>
+                  {availableClasses.map((classCode) => (
+                    <option key={classCode} value={classCode}>Kelas {classCode}</option>
+                  ))}
+                </select>
+              </div>
+              {missingValidationFeedbackByClass.length > 0 && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-3">
+                  <div className="mb-2 flex items-start gap-2">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                    <div>
+                      <p className="text-xs font-bold text-amber-900">Feedback validasi belum lengkap</p>
+                      <p className="mt-0.5 text-[11px] leading-relaxed text-amber-800/80 text-justify">Periksa jurnal tervalidasi berikut per kelas.</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {missingValidationFeedbackByClass.map(([classCode, count]) => (
+                      <button
+                        key={classCode}
+                        type="button"
+                        onClick={() => jumpToJournalClass(classCode)}
+                        aria-label={`Lihat jurnal kelas ${classCode} yang belum memiliki feedback validasi`}
+                        className={`rounded-lg border px-2 py-1 text-[11px] font-semibold transition ${
+                          journalClassFilter === classCode
+                            ? "border-amber-400 bg-amber-200 text-amber-900"
+                            : "border-amber-200 bg-white/70 text-amber-800 hover:bg-amber-100"
+                        }`}
+                      >
+                        Kelas {classCode}: {count} jurnal
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+            {selectedJournalIds.size > 0 && (
+              <div className="mb-4 flex flex-col gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs leading-relaxed font-semibold text-emerald-800 text-justify">
+                  {selectedJournalIds.size} jurnal dipilih untuk divalidasi
+                </p>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedJournalIds(new Set())}
+                    className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 sm:w-auto"
+                  >
+                    Batalkan pilihan
+                  </button>
+                  {selectedPendingJournalCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => void handleBulkApprove()}
+                      disabled={bulkJournalLoading}
+                      className="w-full rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                    >
+                      {bulkJournalLoading ? "Memvalidasi..." : `Validasi ${selectedPendingJournalCount} Jurnal`}
+                    </button>
+                  )}
+                  {selectedApprovedJournalCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => void handleBulkCancelApproval()}
+                      disabled={bulkJournalLoading}
+                      className="w-full rounded-xl border border-orange-300 bg-orange-50 px-3 py-2 text-xs font-semibold text-orange-700 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                    >
+                      {bulkJournalLoading ? "Memproses..." : `Batalkan ${selectedApprovedJournalCount} Validasi`}
+                    </button>
+                  )}
+                  {selectedRevisionJournalCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => void handleBulkCancelRevision()}
+                      disabled={bulkJournalLoading}
+                      className="w-full rounded-xl border border-orange-300 bg-orange-50 px-3 py-2 text-xs font-semibold text-orange-700 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
+                    >
+                      {bulkJournalLoading ? "Memproses..." : `Batalkan ${selectedRevisionJournalCount} Revisi`}
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
             {journals.length === 0 ? (
               <p className="text-emerald-700/60 text-sm">Belum ada jurnal dari siswa manapun.</p>
+            ) : filteredGroupedJournalsByClass.length === 0 ? (
+              <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">Tidak ada jurnal pada kelas yang dipilih.</p>
             ) : (
-              <div className="space-y-4 sm:space-y-6">
-                {[...journals]
-                  .sort(
-                    (a, b) =>
-                      (toDateSafe(b.updatedAt ?? b.createdAt)?.getTime() ?? 0) -
-                      (toDateSafe(a.updatedAt ?? a.createdAt)?.getTime() ?? 0)
-                  )
-                  .map((j) => {
+              <div className="space-y-6">
+                {filteredGroupedJournalsByClass.map(({ classCode, journals: classJournals }) => {
+                  const classJournalIds = classJournals.map((journal) => journal.id);
+                  const allClassSelected = classJournalIds.every((journalId) => selectedJournalIds.has(journalId));
+                  return (
+                  <section key={classCode} aria-labelledby={`journal-class-${classCode}`}>
+                    <div className="mb-3 flex flex-col gap-2 border-b border-emerald-100 pb-2 sm:flex-row sm:items-center sm:justify-between">
+                      <h3 id={`journal-class-${classCode}`} className="text-sm font-bold text-emerald-900">Kelas {classCode}</h3>
+                      <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-emerald-700">
+                        <input
+                          type="checkbox"
+                          checked={allClassSelected}
+                          onChange={() => handleToggleClassJournals(classJournalIds)}
+                          className="h-4 w-4 accent-emerald-600"
+                        />
+                        Pilih semua jurnal kelas ini
+                      </label>
+                    </div>
+                    <div className="space-y-4">
+                {classJournals.map((j) => {
                   const statusInfo = getStatusInfo(j.status);
                   const isBusy = journalActionLoading === j.id;
+                  const hasValidationFeedback = statusInfo.key === "approved" && Boolean(j.teacherFeedback?.trim());
                   return (
                     <div
                       key={j.id}
                       className="border border-emerald-100 p-3 sm:p-4 rounded-2xl bg-emerald-50/50 flex flex-col gap-2.5 relative overflow-hidden"
                     >
                       <span className={`absolute left-0 top-0 bottom-0 w-1 ${statusInfo.dotClass}`} />
-                      <div className="flex flex-col items-start gap-2 sm:flex-row sm:justify-between sm:items-center pl-1">
-                        <button
-                          onClick={() => setSelectedStudent(j.studentName)}
-                          className="max-w-full text-left font-bold text-emerald-900 hover:underline break-words"
-                        >
-                          {j.studentName}
-                          {j.classCode && (
-                            <span className="ml-2 text-xs font-normal text-emerald-700/50">
-                              · Kelas {j.classCode}
-                            </span>
-                          )}
-                        </button>
-                        <span
-                          className={`text-xs px-2 py-1 rounded-lg font-semibold ${statusInfo.badgeClass}`}
-                        >
+                      <div className="flex flex-col items-start gap-2 pl-1 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex min-w-0 items-start gap-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedJournalIds.has(j.id)}
+                            onChange={() => handleToggleJournalSelection(j.id)}
+                            aria-label={`Pilih jurnal ${j.studentName}`}
+                            className="mt-1 h-4 w-4 shrink-0 accent-emerald-600"
+                          />
+                          <button
+                            onClick={() => setSelectedStudent(j.studentName)}
+                            className="max-w-full text-left font-bold text-emerald-900 hover:underline break-words"
+                          >
+                            {j.studentName}
+                            {j.classCode && (
+                              <span className="ml-2 text-xs font-normal text-emerald-700/50">
+                                · Kelas {j.classCode}
+                              </span>
+                            )}
+                          </button>
+                        </div>
+                        <span className={`text-xs px-2 py-1 rounded-lg font-semibold ${statusInfo.badgeClass}`}>
                           {statusInfo.badge}
                         </span>
                       </div>
 
                       <div className="grid gap-1 text-xs text-emerald-700/70 sm:grid-cols-2 pl-1">
-                        <p>
+                        <p className="text-justify leading-relaxed">
                           <strong>Upload:</strong> {formatTanggal(toDateSafe(j.createdAt))}
                         </p>
-                        <p>
+                        <p className="text-justify leading-relaxed">
                           <strong>Validator:</strong>{" "}
                           {j.approvedBy ? (
                             <span className="font-semibold text-emerald-800">{j.approvedBy}</span>
@@ -2091,7 +2660,7 @@ export default function TeacherDashboard() {
                       </div>
 
                       {(statusInfo.key === "approved" || statusInfo.key === "revision") && (
-                        <p className="text-xs text-emerald-700/60 pl-1">
+                        <p className="text-xs leading-relaxed text-emerald-700/60 pl-1 text-justify">
                           <strong>Terakhir diubah:</strong>{" "}
                           <span className="font-semibold text-emerald-800">
                             {formatTanggal(toDateSafe(j.updatedAt || j.createdAt))}
@@ -2100,24 +2669,37 @@ export default function TeacherDashboard() {
                       )}
 
                       {statusInfo.key === "revision" && (
-                        <p className="text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1.5 ml-1">
+                        <p className="text-xs leading-relaxed text-orange-700 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1.5 ml-1 text-justify break-words">
                           <strong>Alasan revisi:</strong> {j.teacherFeedback || "-"}
                         </p>
                       )}
 
-                      <p className="text-xs sm:text-sm text-emerald-800/80 break-words pl-1">
+                      {statusInfo.key === "approved" && j.teacherFeedback?.trim() && (
+                        <p className="text-xs leading-relaxed text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1.5 ml-1 text-justify break-words">
+                          <strong>Feedback validasi:</strong> {j.teacherFeedback}
+                        </p>
+                      )}
+
+                      {statusInfo.key === "approved" && !hasValidationFeedback && (
+                        <p className="ml-1 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs leading-relaxed text-amber-800 text-justify">
+                          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                          Feedback validasi belum ditambahkan.
+                        </p>
+                      )}
+
+                      <p className="text-xs sm:text-sm leading-relaxed text-emerald-800/80 break-words pl-1 text-justify">
                         <strong>Buku:</strong> {j.bookTitle} ({j.author})
                         {j.genre ? ` · ${j.genre}` : ""} — Hal. {j.startPage}-{getLatestPageForJournal(j)}
                         {j.finished ? " · ✅ Selesai dibaca" : ""}
                       </p>
-                      <p className="text-xs sm:text-sm text-emerald-800/80 break-words pl-1">
+                      <p className="text-xs sm:text-sm leading-relaxed text-emerald-800/80 break-words pl-1 text-justify">
                         <strong>Nilai Karakter:</strong> {getCharacterList(j).join(", ") || "-"}
                       </p>
-                      <p className="text-xs sm:text-sm text-emerald-700/70 italic break-words pl-1">&quot;{j.summary}&quot;</p>
+                      <p className="text-xs sm:text-sm leading-relaxed text-emerald-700/70 italic break-words pl-1 text-justify">&quot;{j.summary}&quot;</p>
                       <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center pl-1">
                         <input
                           type="text"
-                          placeholder="Umpan balik / alasan revisi..."
+                          placeholder={statusInfo.key === "approved" ? "Tambahkan feedback validasi..." : "Umpan balik / alasan revisi..."}
                           className="min-w-0 w-full flex-1 p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition"
                           value={feedbackInput[j.id] ?? j.teacherFeedback ?? ""}
                           onChange={(e) =>
@@ -2132,6 +2714,16 @@ export default function TeacherDashboard() {
                           >
                             {isBusy ? "Memproses..." : statusInfo.key === "approved" ? "Sudah Valid" : "Validasi"}
                           </button>
+                          {statusInfo.key === "approved" && (
+                            <button
+                              type="button"
+                              onClick={() => void handleSaveValidationFeedback(j.id)}
+                              disabled={isBusy}
+                              className="col-span-2 min-w-0 rounded-xl border border-emerald-300 bg-white px-2 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 sm:col-span-1"
+                            >
+                              {isBusy ? "Menyimpan..." : "Simpan Feedback"}
+                            </button>
+                          )}
                           <button
                             onClick={() => void handleUpdateJournalStatus(j.id, "revision")}
                             disabled={statusInfo.key === "revision" || isBusy}
@@ -2149,6 +2741,16 @@ export default function TeacherDashboard() {
                               Batalkan Validasi
                             </button>
                           )}
+                          {statusInfo.key === "revision" && (
+                            <button
+                              type="button"
+                              onClick={() => void handleCancelRevision(j.id)}
+                              disabled={isBusy}
+                              className="flex min-w-0 items-center justify-center gap-1.5 px-2 py-2 border border-orange-300 text-orange-700 bg-orange-50 text-xs sm:text-sm font-semibold rounded-xl hover:bg-orange-100 active:scale-[0.98] transition disabled:opacity-50"
+                            >
+                              Batalkan Revisi
+                            </button>
+                          )}
                           <button
                             onClick={() => void handleDeleteJournal(j.id)}
                             disabled={deleteJournalLoading === j.id || journalActionLoading === j.id}
@@ -2160,6 +2762,10 @@ export default function TeacherDashboard() {
                         </div>
                       </div>
                     </div>
+                  );
+                })}
+                    </div>
+                  </section>
                   );
                 })}
               </div>
@@ -2325,8 +2931,8 @@ export default function TeacherDashboard() {
                           {students.map((student) => {
                             const isEditingThis = editingStudent?.uid === student.uid;
                             return (
-                              <>
-                                <div key={student.uid} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 sm:p-4">
+                              <Fragment key={student.uid}>
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 sm:p-4">
                               <div className="flex items-start gap-3 min-w-0 flex-1">
                                 <button
                                   onClick={() => handleToggleSelectStudent(student.uid)}
@@ -2422,7 +3028,7 @@ export default function TeacherDashboard() {
                                 </div>
                               </div>
                             )}
-                              </>
+                              </Fragment>
                             );
                           })}
                         </div>
@@ -2527,8 +3133,8 @@ export default function TeacherDashboard() {
                         <option value="all">Semua siswa</option>
                         {reportStudentsGroupedByClass.map((group) => (
                           <optgroup key={group.classCode} label={`Kelas ${group.classCode}`}>
-                            {group.students.map((s) => (
-                              <option key={s.name} value={s.name}>
+                            {group.students.map((s, index) => (
+                              <option key={getStudentListKey(s.name, s.classCode, index)} value={s.name}>
                                 {s.name}
                               </option>
                             ))}
@@ -2741,8 +3347,8 @@ export default function TeacherDashboard() {
                       <>
                         {/* Mobile: kartu */}
                         <div className="grid grid-cols-1 xs:grid-cols-2 gap-2.5 md:hidden">
-                          {reportStudentSummariesForExport.map((s) => (
-                            <StudentSummaryCard key={s.name} s={s} />
+                          {reportStudentSummariesForExport.map((s, index) => (
+                            <StudentSummaryCard key={getStudentListKey(s.name, s.classCode, index)} s={s} />
                           ))}
                         </div>
                         {/* Desktop: tabel */}
@@ -2762,8 +3368,8 @@ export default function TeacherDashboard() {
                               </tr>
                             </thead>
                             <tbody>
-                              {reportStudentSummariesForExport.map((s) => (
-                                <tr key={s.name} className="border-b border-emerald-50 last:border-0 hover:bg-emerald-50/40 transition-colors">
+                              {reportStudentSummariesForExport.map((s, index) => (
+                                <tr key={getStudentListKey(s.name, s.classCode, index)} className="border-b border-emerald-50 last:border-0 hover:bg-emerald-50/40 transition-colors">
                                   <td className="py-2 font-medium text-emerald-900">{s.name}</td>
                                   <td className="py-2 text-emerald-800/80">{s.classCode}</td>
                                   <td className="py-2 text-emerald-800/80">{formatGender(s.gender)}</td>
@@ -2942,6 +3548,11 @@ export default function TeacherDashboard() {
             </div>
           </div>
         )}
+
+        {/* Credit di bagian bawah dashboard */}
+        <p className={`text-center text-xs font-medium tracking-wide mt-8 mb-2 ${darkMode ? "text-emerald-400/40" : "text-emerald-700/50"}`}>
+          © PPG Bahasa Indonesia UNJ 2026
+        </p>
       </div>
 
       {/* ---- Versi cetak ---- */}
@@ -3086,35 +3697,6 @@ export default function TeacherDashboard() {
                         </p>
                       )}
 
-                      {/* Progress Log — tampil riwayat membaca bertahap jika ada */}
-                      {j.progressLog && j.progressLog.length > 0 && (
-                        <div className="mt-2 text-xs rounded-lg bg-blue-50 border border-blue-200 p-2">
-                          <strong className="block text-blue-900 mb-1">📚 Log Progres Membaca:</strong>
-                          <div className="space-y-1">
-                            {j.progressLog
-                              .slice()
-                              .sort(
-                                (a, b) =>
-                                  (toDateSafe(b.timestamp)?.getTime() ?? 0) -
-                                  (toDateSafe(a.timestamp)?.getTime() ?? 0)
-                              )
-                              .map((progress, idx) => (
-                                <div key={progress.id} className="text-blue-800">
-                                  <span className="font-medium">#{j.progressLog!.length - idx}.</span> Hal.{" "}
-                                  {progress.startPage}-{progress.endPage} ({progress.endPage - progress.startPage} hal.)
-                                  {progress.timestamp && (
-                                    <span className="text-blue-700 ml-1">
-                                      • {formatTanggal(toDateSafe(progress.timestamp))}
-                                    </span>
-                                  )}
-                                  <br />
-                                  <span className="italic text-blue-700">&quot;{progress.summary}&quot;</span>
-                                </div>
-                              ))}
-                          </div>
-                        </div>
-                      )}
-
                       {j.teacherFeedback && (
                         <p className="text-xs text-emerald-800 mt-1">
                           <strong>{statusInfo.key === "revision" ? "Alasan revisi" : "Umpan balik"}:</strong>{" "}
@@ -3133,14 +3715,22 @@ export default function TeacherDashboard() {
   );
 }
 
-function buildLeaderboard(journalsInput: Journal[], limit = 10): LeaderboardEntry[] {
+function buildLeaderboard(journalsInput: Journal[], limit = 10, refreshKey?: string): LeaderboardEntry[] {
+  const windowRef = refreshKey ? new Date(refreshKey) : new Date();
+  const { start, end } = getPreviousWeekWindow(windowRef);
   const statsByStudent = new Map<
     string,
     { studentName: string; classCode: string; journalCount: number; finishedTitles: Set<string> }
   >();
 
   journalsInput.forEach((journal) => {
-    if (!journal.studentId) return;
+    if (!journal.studentId || !journal.createdAt) return;
+
+    const createdAt = toDateSafe(journal.createdAt);
+    if (!createdAt || createdAt < start || createdAt > end) return;
+
+    if (journal.status !== "approved") return;
+
     const stats = statsByStudent.get(journal.studentId) || {
       studentName: journal.studentName || "Siswa",
       classCode: journal.classCode || "-",

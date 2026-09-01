@@ -78,7 +78,7 @@ service cloud.firestore {
           isTeacher()
           && request.resource.data.studentId == resource.data.studentId
           && request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['status', 'teacherFeedback', 'studentName', 'classCode', 'approvedBy', 'updatedAt', 'progressLog'])
+            .hasOnly(['status', 'teacherFeedback', 'studentName', 'classCode', 'approvedBy', 'updatedAt'])
         )
         || (
           isStudent()
@@ -91,15 +91,14 @@ service cloud.firestore {
               && request.resource.data.diff(resource.data).affectedKeys()
                 .hasOnly([
                   'bookTitle', 'author', 'genre', 'startPage', 'endPage', 'summary',
-                  'characterValues', 'finished', 'status', 'teacherFeedback',
-                  'progressLog', 'updatedAt'
+                  'characterValues', 'finished', 'status', 'teacherFeedback', 'updatedAt'
                 ])
             )
             || (
               resource.data.status == 'approved'
               && request.resource.data.status == resource.data.status
               && request.resource.data.diff(resource.data).affectedKeys()
-                .hasOnly(['progressLog', 'updatedAt'])
+                .hasOnly(['updatedAt'])
             )
           )
         );

@@ -377,16 +377,81 @@ function getTreeStage(totalPages: number): TreeStage {
 const CANOPY_BLOB_PATH =
   "M40,92 C18,90 8,60 30,44 C24,18 56,8 76,24 C92,3 132,4 142,28 C168,22 182,54 160,74 C177,96 154,122 128,116 C118,137 78,141 64,120 C33,131 18,105 40,92 Z";
 
+/**
+ * Wajah lucu Literakar (mata besar + pipi merona + senyum) yang ditumpangkan
+ * di atas kanopi, terinspirasi dari maskot pohon-buku. Dipakai bersama oleh
+ * kanopi besar (tab Pohon Literasi), ikon mini (Beranda), dan maskot modal
+ * perayaan supaya karakternya konsisten di semua tempat.
+ * `blink` membuat mata menutup sesaat (dipicu saat pohon disentuh) supaya
+ * terasa hidup dan menyenangkan buat siswa.
+ */
+function CreatureFace({
+  cx = 95,
+  cy = 62,
+  eyeGap = 26,
+  eyeR = 11,
+  blink = false,
+  size = 1,
+}: {
+  cx?: number;
+  cy?: number;
+  eyeGap?: number;
+  eyeR?: number;
+  blink?: boolean;
+  size?: number;
+}) {
+  const leftX = cx - eyeGap / 2;
+  const rightX = cx + eyeGap / 2;
+  const r = eyeR * size;
+
+  return (
+    <g>
+      {/* pipi merona */}
+      <ellipse cx={leftX - r * 1.3} cy={cy + r * 1.5} rx={r * 0.8} ry={r * 0.55} fill="#fda4af" opacity={0.55} />
+      <ellipse cx={rightX + r * 1.3} cy={cy + r * 1.5} rx={r * 0.8} ry={r * 0.55} fill="#fda4af" opacity={0.55} />
+
+      {blink ? (
+        <>
+          <path d={`M${leftX - r},${cy} Q${leftX},${cy + r * 0.7} ${leftX + r},${cy}`} stroke="#14532d" strokeWidth={r * 0.35} strokeLinecap="round" fill="none" />
+          <path d={`M${rightX - r},${cy} Q${rightX},${cy + r * 0.7} ${rightX + r},${cy}`} stroke="#14532d" strokeWidth={r * 0.35} strokeLinecap="round" fill="none" />
+        </>
+      ) : (
+        <>
+          <circle cx={leftX} cy={cy} r={r} fill="#ffffff" />
+          <circle cx={rightX} cy={cy} r={r} fill="#ffffff" />
+          <circle cx={leftX} cy={cy + r * 0.12} r={r * 0.62} fill="#14532d" />
+          <circle cx={rightX} cy={cy + r * 0.12} r={r * 0.62} fill="#14532d" />
+          <circle cx={leftX - r * 0.22} cy={cy - r * 0.28} r={r * 0.22} fill="#ffffff" />
+          <circle cx={rightX - r * 0.22} cy={cy - r * 0.28} r={r * 0.22} fill="#ffffff" />
+        </>
+      )}
+
+      {/* senyum */}
+      <path
+        d={`M${cx - r * 1.1},${cy + r * 1.55} Q${cx},${cy + r * 2.55} ${cx + r * 1.1},${cy + r * 1.55}`}
+        stroke="#14532d"
+        strokeWidth={r * 0.3}
+        strokeLinecap="round"
+        fill="none"
+      />
+    </g>
+  );
+}
+
 function TreeCanopy({
   stage,
   gradId,
   showBuds = false,
   showFruit = false,
+  showFace = true,
+  blink = false,
 }: {
   stage: TreeStage;
   gradId: string;
   showBuds?: boolean;
   showFruit?: boolean;
+  showFace?: boolean;
+  blink?: boolean;
 }) {
   const palette = TREE_STAGE_META[stage].palette;
 
@@ -410,21 +475,22 @@ function TreeCanopy({
 
       {showBuds && (
         <>
-          <circle cx="60" cy="70" r="4" fill="#fef08a" opacity={0.9} />
-          <circle cx="120" cy="55" r="3.5" fill="#fef08a" opacity={0.9} />
-          <circle cx="95" cy="30" r="3" fill="#fef9c3" opacity={0.9} />
+          <circle cx="45" cy="98" r="4" fill="#fef08a" opacity={0.9} />
+          <circle cx="140" cy="95" r="3.5" fill="#fef08a" opacity={0.9} />
+          <circle cx="30" cy="70" r="3" fill="#fef9c3" opacity={0.9} />
         </>
       )}
 
       {showFruit && (
         <>
-          <circle cx="55" cy="75" r="5" fill="#f97316" />
-          <circle cx="100" cy="95" r="5" fill="#ef4444" />
-          <circle cx="128" cy="60" r="4.5" fill="#f97316" />
-          <circle cx="80" cy="45" r="4" fill="#ef4444" />
-          <circle cx="140" cy="90" r="4" fill="#fb923c" />
+          <circle cx="35" cy="88" r="5" fill="#f97316" />
+          <circle cx="100" cy="118" r="5" fill="#ef4444" />
+          <circle cx="150" cy="70" r="4.5" fill="#f97316" />
+          <circle cx="150" cy="100" r="4" fill="#ef4444" />
         </>
       )}
+
+      {showFace && <CreatureFace blink={blink} />}
     </g>
   );
 }
@@ -456,22 +522,37 @@ function TreeShareStyles({ scope }: { scope: "full" | "mini" }) {
     <style>{`
       @keyframes tree-idle-sway { 0%,100% { transform: rotate(-1deg); } 50% { transform: rotate(1deg); } }
       @keyframes tree-tap-sway {
-        0%,100% { transform: rotate(0deg); }
-        20% { transform: rotate(-6deg); }
-        40% { transform: rotate(5deg); }
-        60% { transform: rotate(-3deg); }
-        80% { transform: rotate(2deg); }
+        0% { transform: translateY(0) rotate(0deg) scale(1); }
+        15% { transform: translateY(-14px) rotate(-6deg) scale(1.06); }
+        32% { transform: translateY(2px) rotate(5deg) scale(0.97); }
+        50% { transform: translateY(-8px) rotate(-3deg) scale(1.03); }
+        68% { transform: translateY(0px) rotate(2deg) scale(1); }
+        100% { transform: translateY(0) rotate(0deg) scale(1); }
       }
       @keyframes leaf-fall {
         0% { transform: translateY(-10px) rotate(0deg); opacity: 0; }
         10% { opacity: 1; }
         100% { transform: translateY(160px) rotate(var(--leaf-rot)); opacity: 0; }
       }
+      @keyframes arm-wave-left {
+        0%, 100% { transform: rotate(0deg); }
+        25% { transform: rotate(-22deg); }
+        50% { transform: rotate(10deg); }
+        75% { transform: rotate(-14deg); }
+      }
+      @keyframes arm-wave-right {
+        0%, 100% { transform: rotate(0deg); }
+        25% { transform: rotate(18deg); }
+        50% { transform: rotate(-8deg); }
+        75% { transform: rotate(12deg); }
+      }
       .tree-idle-sway { transform-origin: 50% 100%; animation: tree-idle-sway 4.5s ease-in-out infinite; }
-      .tree-tap-sway { transform-origin: 50% 100%; animation: tree-tap-sway 0.9s ease-in-out; }
+      .tree-tap-sway { transform-origin: 50% 100%; animation: tree-tap-sway 0.95s cubic-bezier(0.34,1.56,0.64,1); }
       .leaf-particle { animation: leaf-fall linear forwards; }
+      .arm-left-wave { transform-origin: 78px 148px; animation: arm-wave-left 0.95s ease-in-out; }
+      .arm-right-wave { transform-origin: 122px 148px; animation: arm-wave-right 0.95s ease-in-out; }
       @media (prefers-reduced-motion: reduce) {
-        .tree-idle-sway, .tree-tap-sway, .leaf-particle { animation: none !important; }
+        .tree-idle-sway, .tree-tap-sway, .leaf-particle, .arm-left-wave, .arm-right-wave { animation: none !important; }
       }
     `}</style>
   );
@@ -480,6 +561,7 @@ function TreeShareStyles({ scope }: { scope: "full" | "mini" }) {
 function TreeGrowth({ totalPages, dark }: { totalPages: number; dark: boolean }) {
   const uid = useId();
   const [isSwaying, setIsSwaying] = useState(false);
+  const [isBlinking, setIsBlinking] = useState(false);
   const [leaves, setLeaves] = useState<
     { id: number; left: number; delay: number; duration: number; rotate: number; emoji: string }[]
   >([]);
@@ -508,12 +590,15 @@ function TreeGrowth({ totalPages, dark }: { totalPages: number; dark: boolean })
 
   const shakeTree = () => {
     setIsSwaying(true);
-    window.setTimeout(() => setIsSwaying(false), 900);
+    window.setTimeout(() => setIsSwaying(false), 950);
 
-    const emojis = ["🍃", "🌿", "🍀"];
-    const burst = Array.from({ length: 9 }).map((_, i) => ({
+    setIsBlinking(true);
+    window.setTimeout(() => setIsBlinking(false), 420);
+
+    const emojis = ["🍃", "🌿", "🍀", "✨", "💚"];
+    const burst = Array.from({ length: 11 }).map((_, i) => ({
       id: Date.now() + i,
-      left: 15 + Math.random() * 70,
+      left: 12 + Math.random() * 76,
       delay: Math.random() * 0.25,
       duration: 1.2 + Math.random() * 0.7,
       rotate: Math.random() * 360,
@@ -533,7 +618,7 @@ function TreeGrowth({ totalPages, dark }: { totalPages: number; dark: boolean })
         </div>
         <div className="min-w-0">
           <h2 className={`text-base sm:text-lg font-bold tracking-tight ${dark ? "text-emerald-100" : "text-emerald-900"}`}>Pohon Literasi</h2>
-          <p className={`text-xs ${dark ? "text-emerald-300/60" : "text-emerald-700/60"}`}>Setiap halaman yang kamu baca membantu pohonmu tumbuh.</p>
+          <p className={`text-xs ${dark ? "text-emerald-300/60" : "text-emerald-700/60"}`}>Kenalan sama Literakar, sahabat baca yang tumbuh bareng kamu!</p>
         </div>
       </div>
 
@@ -548,10 +633,10 @@ function TreeGrowth({ totalPages, dark }: { totalPages: number; dark: boolean })
         <button
           type="button"
           onClick={shakeTree}
-          aria-label="Sentuh pohon literasi"
+          aria-label="Sentuh Literakar supaya bergoyang senang"
           className="relative mx-auto mt-3 block w-full max-w-xs h-52 sm:h-64 group focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-2xl"
         >
-          {/* daun berjatuhan saat disentuh */}
+          {/* daun & kilau berjatuhan saat disentuh */}
           {leaves.map((leaf) => (
             <span
               key={leaf.id}
@@ -578,7 +663,7 @@ function TreeGrowth({ totalPages, dark }: { totalPages: number; dark: boolean })
             <circle cx="30" cy="22" r="2.5" fill="#a7f3d0" opacity={0.8} />
           </svg>
 
-          {/* pohon */}
+          {/* Literakar: pohon-makhluk lucu (kanopi berwajah + akar + lengan + buku) */}
           <svg
             viewBox="0 0 200 220"
             className={`absolute bottom-3 left-1/2 -translate-x-1/2 h-full transition-transform duration-300 group-hover:scale-[1.03] ${
@@ -592,27 +677,52 @@ function TreeGrowth({ totalPages, dark }: { totalPages: number; dark: boolean })
               </linearGradient>
             </defs>
 
-            {/* batang */}
-            <path d="M92,215 C90,180 90,150 96,120 L104,120 C110,150 110,180 108,215 Z" fill={`url(#${uid}-trunk)`} />
-            <path d="M96,150 C85,145 75,148 68,140" stroke="#92400e" strokeWidth="5" strokeLinecap="round" fill="none" />
-            <path d="M104,145 C115,140 122,142 130,133" stroke="#92400e" strokeWidth="5" strokeLinecap="round" fill="none" />
+            {/* akar bergelombang di bawah (menggantikan batang lurus polos) */}
+            <path
+              d="M70,210 C55,205 40,208 28,200 M78,212 C68,206 58,209 48,215 M100,214 C100,205 100,198 100,192 M122,212 C132,206 142,209 152,215 M130,210 C145,205 160,208 172,200"
+              stroke="#92400e"
+              strokeWidth="6"
+              strokeLinecap="round"
+              fill="none"
+              opacity={0.85}
+            />
 
-            {/* kanopi sesuai tahap */}
+            {/* batang pendek */}
+            <path d="M92,192 C90,175 90,165 96,150 L104,150 C110,165 110,175 108,192 Z" fill={`url(#${uid}-trunk)`} />
+
+            {/* kanopi berwajah sesuai tahap — digambar SEBELUM lengan supaya tangan & buku
+                selalu tampil di atas kanopi (tidak tertutup) di tahap manapun, termasuk saat
+                kanopi masih kecil di layar sempit. */}
             <g transform={canopyTransform(stage, "full")}>
               <TreeCanopy
                 stage={stage}
                 gradId={`${uid}-canopy`}
                 showBuds={stage === "young"}
                 showFruit={stage === "big"}
+                showFace
+                blink={isBlinking}
               />
             </g>
-          </svg>
 
-          <span className="absolute top-2 left-1/2 -translate-x-1/2 text-xl">{stageMeta.mood}</span>
+            {/* lengan kiri melambai memegang buku */}
+            <g className={isSwaying ? "arm-left-wave" : ""}>
+              <path d="M80,150 C55,148 40,135 34,115" stroke="#92400e" strokeWidth="7" strokeLinecap="round" fill="none" />
+              <g transform="translate(14,92) rotate(-14)">
+                <rect x="0" y="0" width="30" height="21" rx="3" fill="#fde68a" stroke="#b45309" strokeWidth="1.5" />
+                <line x1="15" y1="2" x2="15" y2="19" stroke="#b45309" strokeWidth="1.5" />
+              </g>
+            </g>
+
+            {/* lengan kanan melambai */}
+            <g className={isSwaying ? "arm-right-wave" : ""}>
+              <path d="M120,150 C145,148 160,135 166,115" stroke="#92400e" strokeWidth="7" strokeLinecap="round" fill="none" />
+              <circle cx="168" cy="110" r="6" fill="#92400e" />
+            </g>
+          </svg>
         </button>
 
-        <p className="relative text-xs text-emerald-700/60 -mt-1">Sentuh pohon untuk membuatnya bergoyang!</p>
-        <h3 className="relative text-lg sm:text-xl font-bold text-emerald-900 mt-3 tracking-tight">{stageMeta.label}</h3>
+        <p className="relative text-xs text-emerald-700/60 -mt-1">Sentuh Literakar, dia akan melambai senang! 👋</p>
+        <h3 className="relative text-lg sm:text-xl font-bold text-emerald-900 mt-3 tracking-tight">{stageMeta.label} {stageMeta.mood}</h3>
         <p className="relative text-sm font-semibold text-emerald-800">({stageMeta.range})</p>
 
         {/* progres bertahap: Kecil -> Muda -> Besar */}
@@ -646,7 +756,7 @@ function TreeGrowth({ totalPages, dark }: { totalPages: number; dark: boolean })
           </div>
           <p className="text-xs text-emerald-700/60 mt-3">
             {totalPages >= 500
-              ? "Pohon besar tumbuh subur! Terus membaca untuk menjaganya."
+              ? "Literakar tumbuh subur! Terus membaca untuk menjaganya bahagia."
               : `Menuju tahap berikutnya: ${remaining} halaman lagi`}
           </p>
         </div>
@@ -672,11 +782,11 @@ function TreeProgressIcon({ totalPages, dark }: { totalPages: number; dark: bool
         </defs>
         <path d="M94,195 C92,165 92,140 97,115 L103,115 C108,140 108,165 106,195 Z" fill={`url(#${uid}-trunk-mini)`} />
         <g transform={canopyTransform(stage, "mini")}>
-          <TreeCanopy stage={stage} gradId={`${uid}-canopy-mini`} showBuds={stage === "young"} showFruit={stage === "big"} />
+          <TreeCanopy stage={stage} gradId={`${uid}-canopy-mini`} showBuds={stage === "young"} showFruit={stage === "big"} showFace />
         </g>
       </svg>
       <div className="min-w-0">
-        <p className={`text-xs ${dark ? "text-emerald-300/60" : "text-emerald-700/60"}`}>Pohonmu saat ini</p>
+        <p className={`text-xs ${dark ? "text-emerald-300/60" : "text-emerald-700/60"}`}>Literakar-mu saat ini</p>
         <p className={`text-sm font-bold truncate ${dark ? "text-emerald-100" : "text-emerald-900"}`}>{stageMeta.label}</p>
         <p className={`text-xs ${dark ? "text-emerald-300/70" : "text-emerald-700/70"}`}>{totalPages} halaman</p>
       </div>
@@ -824,17 +934,20 @@ function LiterakarMascot() {
       <path
         d="M100,60 C150,55 175,95 165,130 C175,165 140,185 100,180 C60,185 25,165 35,130 C25,95 50,55 100,60 Z"
         fill="url(#literakar-leaf)"
+        className="mascot-breathe"
       />
       <ellipse cx="75" cy="90" rx="20" ry="12" fill="#ffffff" opacity={0.25} />
 
-      {/* wajah */}
-      <circle cx="80" cy="115" r="6" fill="#14532d" />
-      <circle cx="120" cy="115" r="6" fill="#14532d" />
-      <circle cx="82" cy="113" r="2" fill="#ffffff" />
-      <circle cx="122" cy="113" r="2" fill="#ffffff" />
-      <path d="M78,135 Q100,152 122,135" stroke="#14532d" strokeWidth="4" fill="none" strokeLinecap="round" />
-      <circle cx="65" cy="128" r="6" fill="#fca5a5" opacity={0.6} />
-      <circle cx="135" cy="128" r="6" fill="#fca5a5" opacity={0.6} />
+      {/* wajah — mata besar berbinar khas Literakar */}
+      <ellipse cx="80" cy="112" rx="11" ry="12" fill="#ffffff" />
+      <ellipse cx="120" cy="112" rx="11" ry="12" fill="#ffffff" />
+      <circle cx="81" cy="115" r="6.5" fill="#14532d" />
+      <circle cx="119" cy="115" r="6.5" fill="#14532d" />
+      <circle cx="78" cy="110" r="2.4" fill="#ffffff" />
+      <circle cx="116" cy="110" r="2.4" fill="#ffffff" />
+      <path d="M78,136 Q100,153 122,136" stroke="#14532d" strokeWidth="4" fill="none" strokeLinecap="round" />
+      <circle cx="63" cy="128" r="7" fill="#fca5a5" opacity={0.6} />
+      <circle cx="137" cy="128" r="7" fill="#fca5a5" opacity={0.6} />
 
       {/* lengan kiri melambai */}
       <path
@@ -851,6 +964,14 @@ function LiterakarMascot() {
       <g transform="translate(150,72) rotate(18)">
         <rect x="0" y="0" width="34" height="24" rx="3" fill="url(#literakar-book)" stroke="#b45309" strokeWidth="1.5" />
         <line x1="17" y1="2" x2="17" y2="22" stroke="#b45309" strokeWidth="1.5" />
+      </g>
+
+      {/* kilau bintang di sekitar kepala — kesan gembira */}
+      <g className="mascot-sparkle-a">
+        <path d="M35,55 l2.4,5.6 5.6,2.4 -5.6,2.4 -2.4,5.6 -2.4,-5.6 -5.6,-2.4 5.6,-2.4 Z" fill="#fde047" />
+      </g>
+      <g className="mascot-sparkle-b">
+        <path d="M168,50 l2,4.6 4.6,2 -4.6,2 -2,4.6 -2,-4.6 -4.6,-2 4.6,-2 Z" fill="#fde047" />
       </g>
     </svg>
   );
@@ -870,8 +991,20 @@ function MascotCelebrationStyles() {
         50% { transform: rotate(-18deg); }
       }
       @keyframes mascot-bounce-idle {
-        0%, 100% { transform: translateY(0); }
-        50% { transform: translateY(-6px); }
+        0%, 100% { transform: translateY(0) scale(1); }
+        50% { transform: translateY(-9px) scale(1.015); }
+      }
+      @keyframes mascot-breathe-scale {
+        0%, 100% { transform: scale(1); }
+        50% { transform: scale(1.03); }
+      }
+      @keyframes mascot-sparkle-twinkle-a {
+        0%, 100% { opacity: 0.2; transform: scale(0.7) rotate(0deg); }
+        50% { opacity: 1; transform: scale(1.15) rotate(20deg); }
+      }
+      @keyframes mascot-sparkle-twinkle-b {
+        0%, 100% { opacity: 1; transform: scale(1.1) rotate(0deg); }
+        50% { opacity: 0.25; transform: scale(0.7) rotate(-20deg); }
       }
       @keyframes confetti-pop-fall {
         0% { transform: translateY(-20px) rotate(0deg) scale(0.6); opacity: 0; }
@@ -885,13 +1018,16 @@ function MascotCelebrationStyles() {
         0% { transform: translateY(24px) scale(0.94); opacity: 0; }
         100% { transform: translateY(0) scale(1); opacity: 1; }
       }
-      .mascot-pop { animation: mascot-pop-in 0.6s cubic-bezier(0.34,1.56,0.64,1) both, mascot-bounce-idle 2.4s ease-in-out 0.6s infinite; transform-origin: 50% 100%; }
-      .mascot-wave { animation: mascot-wave-arm 1s ease-in-out 0.6s infinite; transform-origin: 45px 120px; }
+      .mascot-pop { animation: mascot-pop-in 0.6s cubic-bezier(0.34,1.56,0.64,1) both, mascot-bounce-idle 2.2s ease-in-out 0.6s infinite; transform-origin: 50% 100%; }
+      .mascot-wave { animation: mascot-wave-arm 0.9s ease-in-out 0.6s infinite; transform-origin: 45px 120px; }
+      .mascot-breathe { animation: mascot-breathe-scale 2.2s ease-in-out 0.6s infinite; transform-origin: 100px 130px; }
+      .mascot-sparkle-a { animation: mascot-sparkle-twinkle-a 1.6s ease-in-out 0.2s infinite; transform-origin: 37px 60px; }
+      .mascot-sparkle-b { animation: mascot-sparkle-twinkle-b 1.6s ease-in-out 0.6s infinite; transform-origin: 170px 55px; }
       .confetti-piece { animation: confetti-pop-fall linear forwards; }
       .celebration-overlay { animation: celebration-fade-in 0.25s ease-out both; }
       .celebration-card { animation: celebration-card-in 0.35s cubic-bezier(0.34,1.56,0.64,1) 0.05s both; }
       @media (prefers-reduced-motion: reduce) {
-        .mascot-pop, .mascot-wave, .confetti-piece, .celebration-overlay, .celebration-card { animation: none !important; }
+        .mascot-pop, .mascot-wave, .mascot-breathe, .mascot-sparkle-a, .mascot-sparkle-b, .confetti-piece, .celebration-overlay, .celebration-card { animation: none !important; }
       }
     `}</style>
   );
@@ -1034,7 +1170,7 @@ export default function StudentDashboard() {
   const [goalDraft, setGoalDraft] = useState<string>("50");
   const [targetLocked, setTargetLocked] = useState<boolean>(true);
 
-  // Fitur: modal perayaan maskot Literakar saat target harian tercapai (sekali per hari)
+  // Fitur: modal perayaan maskot Literakar saat target harian tercapai
   const [showGoalCelebration, setShowGoalCelebration] = useState(false);
 
   // Fitur: Leaderboard pembaca terajin (lintas semua siswa), dengan sub-tab

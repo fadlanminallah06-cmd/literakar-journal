@@ -867,6 +867,7 @@ export default function TeacherDashboard() {
   const [reportMonth, setReportMonth] = useState(getCurrentMonthInput());
   const [reportClass, setReportClass] = useState("all");
   const [reportStudent, setReportStudent] = useState<string>("all");
+  const [reportStudentSearch, setReportStudentSearch] = useState("");
   const [classSummaryMonth, setClassSummaryMonth] = useState(getCurrentMonthInput());
   const [classSummaryClass, setClassSummaryClass] = useState("all");
   const [editingStudent, setEditingStudent] = useState<RosterStudent | null>(null);
@@ -1354,6 +1355,36 @@ export default function TeacherDashboard() {
         : reportStudentSummaries.filter((s) => s.name === reportStudent),
     [reportStudentSummaries, reportStudent]
   );
+
+  // Grouped & filtered students untuk dropdown laporan per siswa
+  const reportStudentsGroupedByClass = useMemo(() => {
+    const searchQ = reportStudentSearch.trim().toLowerCase();
+    const filtered = reportStudentSummaries.filter((s) => !searchQ || s.name.toLowerCase().includes(searchQ));
+
+    const grouped = new Map<string, StudentSummary[]>();
+    filtered.forEach((s) => {
+      const classCode = s.classCode || "Tanpa Kelas";
+      if (!grouped.has(classCode)) {
+        grouped.set(classCode, []);
+      }
+      grouped.get(classCode)!.push(s);
+    });
+
+    // Sort by class (7A-7H, 8A-8H, 9A-9H), siswa dalam setiap kelas sorted by nama
+    const sorted = Array.from(grouped.entries())
+      .sort(([a], [b]) => {
+        const gradeA = parseInt(a[0], 10);
+        const gradeB = parseInt(b[0], 10);
+        if (gradeA !== gradeB) return gradeA - gradeB;
+        return a.localeCompare(b, "id");
+      })
+      .map(([classCode, students]) => ({
+        classCode,
+        students: students.sort((a, b) => a.name.localeCompare(b.name, "id")),
+      }));
+
+    return sorted;
+  }, [reportStudentSummaries, reportStudentSearch]);
 
   // Daftar siswa untuk laporan Per Kelas — sama-sama bersumber dari
   // reportStudentSummaries (seluruh roster) agar tiap siswa di kelas
@@ -2193,29 +2224,31 @@ export default function TeacherDashboard() {
                 </div>
               </div>
 
-              {/* Bulk Delete Section */}
-              {selectedStudentsForDelete.size > 0 && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-red-800">
-                    {selectedStudentsForDelete.size} siswa dipilih untuk dihapus
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setSelectedStudentsForDelete(new Set())}
-                      className="px-3 py-1.5 text-sm font-semibold text-red-700 border border-red-200 bg-white rounded-lg hover:bg-red-50 transition"
-                    >
-                      Batal Hapus
-                    </button>
-                    <button
-                      onClick={handleDeleteSelectedStudents}
-                      disabled={managementLoading}
-                      className="px-3 py-1.5 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 transition"
-                    >
-                      {managementLoading ? "Menghapus..." : `Hapus ${selectedStudentsForDelete.size} Siswa`}
-                    </button>
+              {selectedStudentsForDelete.size > 0 &&
+                groupedStudentsByClass.filter(({ students }) =>
+                  students.some((student) => selectedStudentsForDelete.has(student.uid))
+                ).length > 1 && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-red-800">
+                      {selectedStudentsForDelete.size} siswa dipilih untuk dihapus
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setSelectedStudentsForDelete(new Set())}
+                        className="px-3 py-1.5 text-sm font-semibold text-red-700 border border-red-200 bg-white rounded-lg hover:bg-red-50 transition"
+                      >
+                        Batal Hapus
+                      </button>
+                      <button
+                        onClick={handleDeleteSelectedStudents}
+                        disabled={managementLoading}
+                        className="px-3 py-1.5 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 transition"
+                      >
+                        {managementLoading ? "Menghapus..." : `Hapus ${selectedStudentsForDelete.size} Siswa`}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
               {allStudents.length === 0 ? (
                 <p className="text-sm text-emerald-700/60">Belum ada akun siswa.</p>
@@ -2229,12 +2262,12 @@ export default function TeacherDashboard() {
                     
                     return (
                       <div key={classCode} className="border border-emerald-200 rounded-2xl overflow-hidden">
-                        <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 px-4 py-3 sm:py-4 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
+                        <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 px-3 py-2.5 sm:px-4 sm:py-3.5 flex items-center justify-between">
+                          <div className="flex items-center gap-2 min-w-0">
                             <button
                               onClick={() => handleSelectAllInClass(classCode, students)}
                               aria-label={`${allSelectedInClass ? "Deselect" : "Select"} all students in ${classCode}`}
-                              className="p-1 hover:bg-emerald-500/30 rounded transition"
+                              className="p-1 hover:bg-emerald-500/30 rounded transition shrink-0"
                             >
                               {allSelectedInClass ? (
                                 <CheckSquare2 className="w-5 h-5 text-white" />
@@ -2246,11 +2279,37 @@ export default function TeacherDashboard() {
                                 <Square className="w-5 h-5 text-white opacity-60" />
                               )}
                             </button>
-                            <h4 className="text-sm sm:text-base font-bold text-white">
+                            <h4 className="truncate text-sm font-bold text-white sm:text-base">
                               Kelas {classCode} ({students.length} siswa)
                             </h4>
                           </div>
                         </div>
+
+                        {students.some((student) => selectedStudentsForDelete.has(student.uid)) && (
+                          <div className="border-b border-emerald-200 bg-red-50/80 px-3 py-2.5 sm:px-4 sm:py-3">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                              <p className="text-sm font-semibold text-red-800">
+                                {students.filter((student) => selectedStudentsForDelete.has(student.uid)).length} siswa dipilih di kelas {classCode}
+                              </p>
+                              <div className="flex gap-2">
+                                <button
+                                  onClick={() => setSelectedStudentsForDelete(new Set())}
+                                  className="px-3 py-1.5 text-sm font-semibold text-red-700 border border-red-200 bg-white rounded-lg hover:bg-red-50 transition"
+                                >
+                                  Batal Hapus
+                                </button>
+                                <button
+                                  onClick={handleDeleteSelectedStudents}
+                                  disabled={managementLoading}
+                                  className="px-3 py-1.5 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 transition"
+                                >
+                                  {managementLoading ? "Menghapus..." : `Hapus ${students.filter((student) => selectedStudentsForDelete.has(student.uid)).length} Siswa`}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
                         <div className="divide-y divide-emerald-100 bg-emerald-50/40">
                           {students.map((student) => {
                             const isEditingThis = editingStudent?.uid === student.uid;
@@ -2278,11 +2337,11 @@ export default function TeacherDashboard() {
                                   </p>
                                 </div>
                               </div>
-                              <div className="flex gap-2 shrink-0 flex-wrap">
+                              <div className="flex gap-2 shrink-0 flex-wrap justify-end sm:justify-start">
                                 <button
                                   onClick={() => startEditingStudent(student)}
                                   aria-label={`Ubah profil ${student.name}`}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 text-emerald-700 border border-emerald-200 bg-white rounded-lg text-xs font-semibold hover:bg-emerald-50 transition"
+                                  className="flex items-center justify-center gap-1.5 px-2.5 py-2 text-emerald-700 border border-emerald-200 bg-white rounded-lg text-[11px] font-semibold hover:bg-emerald-50 transition min-w-[76px]"
                                 >
                                   <Pencil className="w-3.5 h-3.5" />
                                   Ubah
@@ -2291,7 +2350,7 @@ export default function TeacherDashboard() {
                                   onClick={() => void handleDeleteStudent(student)}
                                   disabled={managementLoading}
                                   aria-label={`Hapus data ${student.name}`}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 text-red-600 border border-red-200 bg-red-50 rounded-lg text-xs font-semibold hover:bg-red-100 disabled:opacity-50 transition"
+                                  className="flex items-center justify-center gap-1.5 px-2.5 py-2 text-red-600 border border-red-200 bg-red-50 rounded-lg text-[11px] font-semibold hover:bg-red-100 disabled:opacity-50 transition min-w-[96px]"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                   Hapus Data
@@ -2399,75 +2458,109 @@ export default function TeacherDashboard() {
               ))}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 bg-emerald-50/50 border border-emerald-100 rounded-2xl p-3">
-              {reportView === "kelas" && (
+            <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50/80 via-white to-white p-3 shadow-[0_1px_2px_rgba(6,95,70,0.04),0_10px_25px_-18px_rgba(6,95,70,0.2)] sm:p-4">
+              <div className="mb-3 flex items-center justify-between gap-2 border-b border-emerald-100 pb-2">
                 <div>
-                  <label className="text-xs text-emerald-700/70 mb-1 block">Kelas laporan</label>
-                  <select
-                    value={reportClass}
-                    onChange={(e) => setReportClass(e.target.value)}
-                    className="w-full p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
-                  >
-                    <option value="all">Semua kelas</option>
-                    {availableClasses.map((classCode) => (
-                      <option key={classCode} value={classCode}>{classCode}</option>
-                    ))}
-                  </select>
-                  <p className="text-[11px] text-emerald-700/50 mt-1">
-                    CSV akan berisi tiap siswa di kelas ini beserta rincian buku yang mereka baca.
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-600/80">
+                    Filter Laporan
                   </p>
+                  <h3 className="text-sm font-semibold text-emerald-900">
+                    {reportView === "siswa" ? "Rekapan Per Siswa" : "Rekapan Per Kelas"}
+                  </h3>
                 </div>
-              )}
-
-              {reportView === "siswa" && (
-                <div>
-                  <label className="text-xs text-emerald-700/70 mb-1 block">Laporan Siswa</label>
-                  <select
-                    value={reportStudent}
-                    onChange={(e) => setReportStudent(e.target.value)}
-                    className="w-full p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
-                  >
-                    <option value="all">Semua siswa</option>
-                    {studentSummaries
-                      .slice()
-                      .sort((a, b) => a.name.localeCompare(b.name, "id"))
-                      .map((s) => (
-                        <option key={s.name} value={s.name}>
-                          {s.name} (Kelas {s.classCode})
-                        </option>
-                      ))}
-                  </select>
-                  <p className="text-[11px] text-emerald-700/50 mt-1">
-                    Daftar ini mencakup seluruh siswa terdaftar (termasuk yang belum pernah kirim
-                    jurnal). Pilih satu siswa untuk laporan personal, atau &quot;Semua siswa&quot;
-                    untuk laporan gabungan seluruh siswa aktif.
-                  </p>
-                </div>
-              )}
-
-              <div>
-                <label className="text-xs text-emerald-700/70 mb-1 block">Periode</label>
-                <select
-                  value={reportPeriod}
-                  onChange={(e) => setReportPeriod(e.target.value as ReportPeriod)}
-                  className="w-full p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
-                >
-                  <option value="all">Semua waktu (all time)</option>
-                  <option value="month">Bulanan</option>
-                </select>
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700">
+                  {reportPeriod === "month" ? "Bulanan" : "Semua waktu"}
+                </span>
               </div>
 
-              {reportPeriod === "month" && (
-                <div>
-                  <label className="text-xs text-emerald-700/70 mb-1 block">Pilih bulan</label>
-                  <input
-                    type="month"
-                    value={reportMonth}
-                    onChange={(e) => setReportMonth(e.target.value)}
-                    className="w-full p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
-                  />
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {reportView === "kelas" && (
+                  <div className="min-w-0">
+                    <label className="text-[11px] font-medium text-emerald-700/70 mb-1 block">
+                      Kelas laporan
+                    </label>
+                    <select
+                      value={reportClass}
+                      onChange={(e) => setReportClass(e.target.value)}
+                      className="min-h-[42px] w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+                    >
+                      <option value="all">Semua kelas</option>
+                      {availableClasses.map((classCode) => (
+                        <option key={classCode} value={classCode}>{classCode}</option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-[11px] text-emerald-700/50">
+                      CSV akan berisi tiap siswa di kelas ini beserta rincian buku yang mereka baca.
+                    </p>
+                  </div>
+                )}
+
+                {reportView === "siswa" && (
+                  <div className="min-w-0 sm:col-span-2 xl:col-span-2">
+                    <label className="text-[11px] font-medium text-emerald-700/70 mb-1 block">
+                      Laporan Siswa
+                    </label>
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                      <input
+                        type="text"
+                        placeholder="Cari nama..."
+                        value={reportStudentSearch}
+                        onChange={(e) => setReportStudentSearch(e.target.value)}
+                        className="min-h-[42px] w-full rounded-xl border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-sm text-emerald-900 shadow-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200 sm:w-44"
+                      />
+                      <select
+                        value={reportStudent}
+                        onChange={(e) => setReportStudent(e.target.value)}
+                        className="min-h-[42px] w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+                      >
+                        <option value="all">Semua siswa</option>
+                        {reportStudentsGroupedByClass.map((group) => (
+                          <optgroup key={group.classCode} label={`Kelas ${group.classCode}`}>
+                            {group.students.map((s) => (
+                              <option key={s.name} value={s.name}>
+                                {s.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        ))}
+                      </select>
+                    </div>
+                    <p className="mt-1 text-[11px] text-emerald-700/50">
+                      Daftar ini mencakup seluruh siswa terdaftar (termasuk yang belum pernah kirim
+                      jurnal). Pilih satu siswa untuk laporan personal, atau &quot;Semua siswa&quot;
+                      untuk laporan gabungan seluruh siswa aktif.
+                    </p>
+                  </div>
+                )}
+
+                <div className="min-w-0">
+                  <label className="text-[11px] font-medium text-emerald-700/70 mb-1 block">
+                    Periode
+                  </label>
+                  <select
+                    value={reportPeriod}
+                    onChange={(e) => setReportPeriod(e.target.value as ReportPeriod)}
+                    className="min-h-[42px] w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+                  >
+                    <option value="all">Semua waktu (all time)</option>
+                    <option value="month">Bulanan</option>
+                  </select>
                 </div>
-              )}
+
+                {reportPeriod === "month" && (
+                  <div className="min-w-0">
+                    <label className="text-[11px] font-medium text-emerald-700/70 mb-1 block">
+                      Pilih bulan
+                    </label>
+                    <input
+                      type="month"
+                      value={reportMonth}
+                      onChange={(e) => setReportMonth(e.target.value)}
+                      className="min-h-[42px] w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+                    />
+                  </div>
+                )}
+              </div>
             </div>
 
             <p className="text-xs text-emerald-700/60">
@@ -2507,13 +2600,18 @@ export default function TeacherDashboard() {
             </div>
 
             {/* Section khusus Buku & Nilai Karakter */}
-            <div className="border border-emerald-100 rounded-2xl p-4 bg-emerald-50/30">
-              <h3 className="text-sm font-semibold text-emerald-800 mb-3">
-                Buku & Nilai Karakter ({reportPeriodLabel})
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <h4 className="text-xs font-semibold text-emerald-700/70 mb-2">
+            <div className="rounded-2xl border border-emerald-100 bg-white p-4 shadow-[0_1px_2px_rgba(6,95,70,0.04),0_10px_24px_-18px_rgba(6,95,70,0.28)] sm:p-5">
+              <div className="mb-4 flex items-center justify-between gap-2 border-b border-emerald-100 pb-2.5">
+                <h3 className="text-sm font-semibold text-emerald-900">
+                  Buku & Nilai Karakter ({reportPeriodLabel})
+                </h3>
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                  Ringkasan
+                </span>
+              </div>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3.5">
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700/70">
                     Top 10 Buku Paling Banyak Dibaca (Siswa)
                   </h4>
                   {reportTopBooks.length === 0 ? (
@@ -2534,8 +2632,8 @@ export default function TeacherDashboard() {
                     </ul>
                   )}
                 </div>
-                <div>
-                  <h4 className="text-xs font-semibold text-emerald-700/70 mb-2">
+                <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-3.5">
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-amber-700/80">
                     Top 10 Nilai Karakter Paling Sering Disebut (Siswa)
                   </h4>
                   {reportTopCharacters.length === 0 ? (
@@ -2559,8 +2657,13 @@ export default function TeacherDashboard() {
               </div>
             </div>
 
-            <div className="border-t border-emerald-100 pt-4">
-              <h3 className="text-sm font-semibold text-emerald-800 mb-2">Pratinjau</h3>
+            <div className="rounded-2xl border border-emerald-100 bg-white p-4 shadow-[0_1px_2px_rgba(6,95,70,0.04),0_10px_24px_-18px_rgba(6,95,70,0.28)] sm:p-5">
+              <div className="mb-4 flex items-center justify-between gap-2 border-b border-emerald-100 pb-2.5">
+                <h3 className="text-sm font-semibold text-emerald-900">Pratinjau</h3>
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                  {reportView === "siswa" ? "Per Siswa" : "Per Kelas"}
+                </span>
+              </div>
 
               {/* ---- Pratinjau: Rekapan Per Kelas ---- */}
               {reportView === "kelas" && (
@@ -2795,10 +2898,13 @@ export default function TeacherDashboard() {
                 ))}
             </div>
 
-            <div className="border-t border-emerald-100 pt-4">
-              <h3 className="text-sm font-semibold text-emerald-800 mb-2">
-                Pratinjau Detail Rekapan
-              </h3>
+            <div className="rounded-2xl border border-emerald-100 bg-white p-4 shadow-[0_1px_2px_rgba(6,95,70,0.04),0_10px_24px_-18px_rgba(6,95,70,0.28)] sm:p-5">
+              <div className="mb-3 flex items-center justify-between gap-2 border-b border-emerald-100 pb-2.5">
+                <h3 className="text-sm font-semibold text-emerald-900">Pratinjau Detail Rekapan</h3>
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                  Detail
+                </span>
+              </div>
               <p className="text-[11px] text-emerald-700/50 mb-2 md:hidden">
                 Geser ke kanan untuk melihat semua kolom.
               </p>

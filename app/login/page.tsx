@@ -1,7 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { sendPasswordResetEmail, signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { useEffect, useState } from "react";
+import {
+  browserLocalPersistence,
+  browserSessionPersistence,
+  sendPasswordResetEmail,
+  setPersistence,
+  signInWithEmailAndPassword,
+  signOut,
+} from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
@@ -9,15 +16,38 @@ import Link from "next/link";
 import Image from "next/image";
 import { Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
 
+// Key localStorage untuk menyimpan email yang diingat. Hanya email yang
+// disimpan — password TIDAK PERNAH disimpan di localStorage; pengisian
+// otomatis untuk password diserahkan ke password manager browser lewat
+// atribut autoComplete.
+const REMEMBERED_EMAIL_KEY = "literasi_remembered_email";
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState("");
   const [resetMessage, setResetMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const router = useRouter();
+
+  // Muat email yang pernah diingat (kalau ada) saat halaman pertama dibuka,
+  // supaya pengguna tidak perlu mengetik ulang emailnya.
+  useEffect(() => {
+    try {
+      const savedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY);
+      if (savedEmail) {
+        setEmail(savedEmail);
+        setRememberMe(true);
+      } else {
+        setRememberMe(false);
+      }
+    } catch {
+      // localStorage tidak tersedia (mis. SSR/privasi browser) — abaikan, form tetap kosong.
+    }
+  }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,6 +56,11 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
+      // "Ingat saya" dicentang -> sesi bertahan lintas sesi browser (persist ke disk).
+      // Tidak dicentang -> sesi hanya bertahan selama tab ini terbuka, cocok untuk
+      // komputer bersama (mis. lab sekolah) supaya tidak ada jejak login tertinggal.
+      await setPersistence(auth, rememberMe ? browserLocalPersistence : browserSessionPersistence);
+
       const res = await signInWithEmailAndPassword(auth, email, password);
 
       let userDoc;
@@ -48,6 +83,7 @@ export default function LoginPage() {
       if (userDoc.exists()) {
         const role = userDoc.data().role;
         if (role === "teacher" || role === "admin") {
+          persistRememberedEmail();
           router.push("/dashboard/teacher");
         } else if (role === "student") {
           if (
@@ -57,6 +93,7 @@ export default function LoginPage() {
             await signOut(auth);
             setError("Pendaftaran guru masih menunggu persetujuan admin.");
           } else {
+            persistRememberedEmail();
             router.push("/dashboard/student");
           }
         } else {
@@ -72,6 +109,20 @@ export default function LoginPage() {
       setError("Email atau password salah.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Simpan atau hapus email yang diingat sesuai status checkbox "Ingat saya",
+  // dipanggil hanya setelah login benar-benar berhasil.
+  const persistRememberedEmail = () => {
+    try {
+      if (rememberMe) {
+        localStorage.setItem(REMEMBERED_EMAIL_KEY, email.trim());
+      } else {
+        localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+      }
+    } catch {
+      // abaikan jika localStorage tidak tersedia
     }
   };
 
@@ -134,6 +185,7 @@ export default function LoginPage() {
               <input
                 type="email"
                 required
+                autoComplete="email"
                 placeholder="nama@email.com"
                 className="w-full pl-10 pr-3 py-2.5 bg-emerald-50/50 border border-emerald-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition"
                 value={email}
@@ -149,6 +201,7 @@ export default function LoginPage() {
               <input
                 type={showPassword ? "text" : "password"}
                 required
+                autoComplete="current-password"
                 placeholder="••••••••"
                 className="w-full pl-10 pr-10 py-2.5 bg-emerald-50/50 border border-emerald-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition"
                 value={password}
@@ -157,6 +210,7 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-500 hover:text-emerald-700"
                 tabIndex={-1}
               >
@@ -164,6 +218,19 @@ export default function LoginPage() {
               </button>
             </div>
           </div>
+
+          {/* Fitur "Ingat saya": saat dicentang, email disimpan untuk pengisian
+              otomatis di kunjungan berikutnya, dan sesi login dibuat bertahan
+              lebih lama (persist ke disk, bukan hanya selama tab terbuka). */}
+          <label className="flex items-center gap-2 text-sm text-emerald-800 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="w-4 h-4 accent-emerald-600"
+            />
+            Ingat saya di perangkat ini
+          </label>
 
           <button
             type="submit"

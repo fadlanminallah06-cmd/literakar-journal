@@ -47,6 +47,8 @@ import {
   Settings2,
   ChevronRight,
   Mail,
+  CheckSquare2,
+  Square,
 } from "lucide-react";
 
 /**
@@ -868,7 +870,8 @@ export default function TeacherDashboard() {
   const [classSummaryMonth, setClassSummaryMonth] = useState(getCurrentMonthInput());
   const [classSummaryClass, setClassSummaryClass] = useState("all");
   const [editingStudent, setEditingStudent] = useState<RosterStudent | null>(null);
-  const [studentForm, setStudentForm] = useState({ name: "", classCode: "", gender: "" });
+  const [studentForm, setStudentForm] = useState({ name: "", classCode: "", gender: "", email: "" });
+  const [selectedStudentsForDelete, setSelectedStudentsForDelete] = useState<Set<string>>(new Set());
   const [managementStudentSearch, setManagementStudentSearch] = useState("");
   const [managementClassFilter, setManagementClassFilter] = useState("all");
   const [managementMessage, setManagementMessage] = useState("");
@@ -1019,7 +1022,7 @@ export default function TeacherDashboard() {
 
   const startEditingStudent = (student: RosterStudent) => {
     setEditingStudent(student);
-    setStudentForm({ name: student.name, classCode: student.classCode, gender: student.gender || "" });
+    setStudentForm({ name: student.name, classCode: student.classCode, gender: student.gender || "", email: student.email });
     setManagementMessage("");
     setManagementError("");
   };
@@ -1032,12 +1035,21 @@ export default function TeacherDashboard() {
     setManagementLoading(true);
     setManagementError("");
     try {
-      await updateDoc(doc(db, "users", editingStudent.uid), {
+      // Update Firestore user document
+      const userUpdateData: Record<string, string> = {
         name: studentForm.name.trim(),
         classCode: studentForm.classCode.trim().toUpperCase(),
         gender: studentForm.gender,
-      });
+      };
 
+      // Update email di Firestore jika berubah
+      if (studentForm.email.trim() && studentForm.email !== editingStudent.email) {
+        userUpdateData.email = studentForm.email.trim();
+      }
+
+      await updateDoc(doc(db, "users", editingStudent.uid), userUpdateData);
+
+      // Update journal documents yang terkait
       const journalQuery = query(collection(db, "journals"), where("studentId", "==", editingStudent.uid));
       const journalSnapshot = await getDocs(journalQuery);
       await Promise.all(
@@ -1050,9 +1062,11 @@ export default function TeacherDashboard() {
       );
 
       setEditingStudent(null);
+      setStudentForm({ name: "", classCode: "", gender: "", email: "" });
       setManagementMessage("Profil siswa berhasil diperbarui.");
       await Promise.all([fetchAllStudents(), fetchClassJournals()]);
-    } catch {
+    } catch (error) {
+      console.error(error);
       setManagementError("Profil siswa gagal diperbarui. Coba lagi.");
     } finally {
       setManagementLoading(false);
@@ -1068,10 +1082,65 @@ export default function TeacherDashboard() {
       const journalSnapshot = await getDocs(journalQuery);
       await Promise.all(journalSnapshot.docs.map((journal) => deleteDoc(doc(db, "journals", journal.id))));
       await deleteDoc(doc(db, "users", student.uid));
-      setManagementMessage(`Data ${student.name} berhasil dihapus.`);
+      setManagementMessage(`Profil ${student.name} dan semua jurnal berhasil dihapus.`);
       await Promise.all([fetchAllStudents(), fetchClassJournals()]);
     } catch {
-      setManagementError("Data siswa gagal dihapus. Coba lagi.");
+      setManagementError("Profil siswa gagal dihapus. Coba lagi.");
+    } finally {
+      setManagementLoading(false);
+    }
+  };
+
+  const handleToggleSelectStudent = (uid: string) => {
+    setSelectedStudentsForDelete((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(uid)) {
+        newSet.delete(uid);
+      } else {
+        newSet.add(uid);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectAllInClass = (classCode: string, students: RosterStudent[]) => {
+    const classStudentIds = students.map((s) => s.uid);
+    setSelectedStudentsForDelete((prev) => {
+      const newSet = new Set(prev);
+      const allSelected = classStudentIds.every((id) => newSet.has(id));
+      if (allSelected) {
+        classStudentIds.forEach((id) => newSet.delete(id));
+      } else {
+        classStudentIds.forEach((id) => newSet.add(id));
+      }
+      return newSet;
+    });
+  };
+
+  const handleDeleteSelectedStudents = async () => {
+    if (selectedStudentsForDelete.size === 0) {
+      setManagementError("Pilih minimal 1 siswa untuk dihapus.");
+      return;
+    }
+    const count = selectedStudentsForDelete.size;
+    if (!window.confirm(`Hapus ${count} siswa dan semua jurnal mereka? Tindakan ini tidak bisa dibatalkan.`)) return;
+
+    setManagementLoading(true);
+    setManagementError("");
+    try {
+      await Promise.all(
+        Array.from(selectedStudentsForDelete).map(async (uid) => {
+          const journalQuery = query(collection(db, "journals"), where("studentId", "==", uid));
+          const journalSnapshot = await getDocs(journalQuery);
+          await Promise.all(journalSnapshot.docs.map((journal) => deleteDoc(doc(db, "journals", journal.id))));
+          await deleteDoc(doc(db, "users", uid));
+        })
+      );
+      setSelectedStudentsForDelete(new Set());
+      setManagementMessage(`${count} siswa dan semua jurnal mereka berhasil dihapus.`);
+      await Promise.all([fetchAllStudents(), fetchClassJournals()]);
+    } catch {
+      setManagementError("Gagal menghapus siswa. Coba lagi.");
     } finally {
       setManagementLoading(false);
     }
@@ -2083,28 +2152,39 @@ export default function TeacherDashboard() {
             {editingStudent && (
               <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-200">
                 <h3 className="text-sm font-semibold text-emerald-800 mb-3">Ubah Profil Siswa</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <input
-                    value={studentForm.name}
-                    onChange={(e) => setStudentForm({ ...studentForm, name: e.target.value })}
-                    placeholder="Nama lengkap"
-                    className="p-2 text-sm bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
-                  />
-                  <input
-                    value={studentForm.classCode}
-                    onChange={(e) => setStudentForm({ ...studentForm, classCode: e.target.value })}
-                    placeholder="Kelas, contoh 7A"
-                    className="p-2 text-sm bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
-                  />
-                  <select
-                    value={studentForm.gender}
-                    onChange={(e) => setStudentForm({ ...studentForm, gender: e.target.value })}
-                    className="p-2 text-sm bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
-                  >
-                    <option value="">Gender belum dipilih</option>
-                    <option value="laki-laki">Laki-laki</option>
-                    <option value="perempuan">Perempuan</option>
-                  </select>
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <input
+                      value={studentForm.name}
+                      onChange={(e) => setStudentForm({ ...studentForm, name: e.target.value })}
+                      placeholder="Nama lengkap"
+                      className="p-2 text-sm bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
+                    />
+                    <input
+                      value={studentForm.classCode}
+                      onChange={(e) => setStudentForm({ ...studentForm, classCode: e.target.value })}
+                      placeholder="Kelas, contoh 7A"
+                      className="p-2 text-sm bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
+                    />
+                    <select
+                      value={studentForm.gender}
+                      onChange={(e) => setStudentForm({ ...studentForm, gender: e.target.value })}
+                      className="p-2 text-sm bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
+                    >
+                      <option value="">Gender belum dipilih</option>
+                      <option value="laki-laki">Laki-laki</option>
+                      <option value="perempuan">Perempuan</option>
+                    </select>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <input
+                      type="email"
+                      value={studentForm.email}
+                      onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })}
+                      placeholder="Email"
+                      className="p-2 text-sm bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
+                    />
+                  </div>
                 </div>
                 <div className="flex gap-2 mt-3">
                   <button
@@ -2166,54 +2246,113 @@ export default function TeacherDashboard() {
                 </div>
               </div>
 
+              {/* Bulk Delete Section */}
+              {selectedStudentsForDelete.size > 0 && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-red-800">
+                    {selectedStudentsForDelete.size} siswa dipilih untuk dihapus
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setSelectedStudentsForDelete(new Set())}
+                      className="px-3 py-1.5 text-sm font-semibold text-red-700 border border-red-200 bg-white rounded-lg hover:bg-red-50 transition"
+                    >
+                      Batal Hapus
+                    </button>
+                    <button
+                      onClick={handleDeleteSelectedStudents}
+                      disabled={managementLoading}
+                      className="px-3 py-1.5 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 transition"
+                    >
+                      {managementLoading ? "Menghapus..." : `Hapus ${selectedStudentsForDelete.size} Siswa`}
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {allStudents.length === 0 ? (
                 <p className="text-sm text-emerald-700/60">Belum ada akun siswa.</p>
               ) : groupedStudentsByClass.length === 0 ? (
                 <p className="text-sm text-emerald-700/60">Tidak ada siswa yang cocok dengan pencarian &quot;{managementStudentSearch}&quot;.</p>
               ) : (
                 <div className="space-y-6">
-                  {groupedStudentsByClass.map(({ classCode, students }) => (
-                    <div key={classCode} className="border border-emerald-200 rounded-2xl overflow-hidden">
-                      <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 px-4 py-3 sm:py-4">
-                        <h4 className="text-sm sm:text-base font-bold text-white">
-                          Kelas {classCode} ({students.length} siswa)
-                        </h4>
-                      </div>
-                      <div className="divide-y divide-emerald-100 bg-emerald-50/40">
-                        {students.map((student) => (
-                          <div key={student.uid} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 sm:p-4">
-                            <div className="min-w-0">
-                              <p className="font-semibold text-emerald-900 truncate">{student.name}</p>
-                              <p className="text-xs text-emerald-700/60 flex items-center gap-1 flex-wrap mt-0.5">
-                                <Mail className="w-3 h-3 shrink-0" />
-                                <span className="truncate">{student.email || "Email tidak tersedia"}</span>
-                                {student.gender ? <span>· {formatGender(student.gender)}</span> : ""}
-                              </p>
-                            </div>
-                            <div className="flex gap-2 shrink-0 flex-wrap">
-                              <button
-                                onClick={() => startEditingStudent(student)}
-                                aria-label={`Ubah profil ${student.name}`}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-emerald-700 border border-emerald-200 bg-white rounded-lg text-xs font-semibold hover:bg-emerald-50 transition"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                                Ubah
-                              </button>
-                              <button
-                                onClick={() => void handleDeleteStudent(student)}
-                                disabled={managementLoading}
-                                aria-label={`Hapus data ${student.name}`}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-red-600 border border-red-200 bg-red-50 rounded-lg text-xs font-semibold hover:bg-red-100 disabled:opacity-50 transition"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                                Hapus Data
-                              </button>
-                            </div>
+                  {groupedStudentsByClass.map(({ classCode, students }) => {
+                    const allSelectedInClass = students.every((s) => selectedStudentsForDelete.has(s.uid));
+                    const someSelectedInClass = students.some((s) => selectedStudentsForDelete.has(s.uid)) && !allSelectedInClass;
+                    
+                    return (
+                      <div key={classCode} className="border border-emerald-200 rounded-2xl overflow-hidden">
+                        <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 px-4 py-3 sm:py-4 flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleSelectAllInClass(classCode, students)}
+                              aria-label={`${allSelectedInClass ? "Deselect" : "Select"} all students in ${classCode}`}
+                              className="p-1 hover:bg-emerald-500/30 rounded transition"
+                            >
+                              {allSelectedInClass ? (
+                                <CheckSquare2 className="w-5 h-5 text-white" />
+                              ) : someSelectedInClass ? (
+                                <div className="w-5 h-5 border-2 border-white rounded bg-emerald-600 flex items-center justify-center">
+                                  <span className="text-white text-xs font-bold">-</span>
+                                </div>
+                              ) : (
+                                <Square className="w-5 h-5 text-white opacity-60" />
+                              )}
+                            </button>
+                            <h4 className="text-sm sm:text-base font-bold text-white">
+                              Kelas {classCode} ({students.length} siswa)
+                            </h4>
                           </div>
-                        ))}
+                        </div>
+                        <div className="divide-y divide-emerald-100 bg-emerald-50/40">
+                          {students.map((student) => (
+                            <div key={student.uid} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 sm:p-4">
+                              <div className="flex items-start gap-3 min-w-0 flex-1">
+                                <button
+                                  onClick={() => handleToggleSelectStudent(student.uid)}
+                                  aria-label={`${selectedStudentsForDelete.has(student.uid) ? "Deselect" : "Select"} ${student.name}`}
+                                  className="mt-0.5 p-1 hover:bg-emerald-100 rounded transition shrink-0"
+                                >
+                                  {selectedStudentsForDelete.has(student.uid) ? (
+                                    <CheckSquare2 className="w-5 h-5 text-emerald-600" />
+                                  ) : (
+                                    <Square className="w-5 h-5 text-emerald-600 opacity-40" />
+                                  )}
+                                </button>
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-semibold text-emerald-900 truncate">{student.name}</p>
+                                  <p className="text-xs text-emerald-700/60 flex items-center gap-1 flex-wrap mt-0.5">
+                                    <Mail className="w-3 h-3 shrink-0" />
+                                    <span className="truncate">{student.email || "Email tidak tersedia"}</span>
+                                    {student.gender ? <span>· {formatGender(student.gender)}</span> : ""}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex gap-2 shrink-0 flex-wrap">
+                                <button
+                                  onClick={() => startEditingStudent(student)}
+                                  aria-label={`Ubah profil ${student.name}`}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 text-emerald-700 border border-emerald-200 bg-white rounded-lg text-xs font-semibold hover:bg-emerald-50 transition"
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                  Ubah
+                                </button>
+                                <button
+                                  onClick={() => void handleDeleteStudent(student)}
+                                  disabled={managementLoading}
+                                  aria-label={`Hapus data ${student.name}`}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 text-red-600 border border-red-200 bg-red-50 rounded-lg text-xs font-semibold hover:bg-red-100 disabled:opacity-50 transition"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                  Hapus Data
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

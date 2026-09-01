@@ -869,6 +869,7 @@ export default function TeacherDashboard() {
   const [classSummaryClass, setClassSummaryClass] = useState("all");
   const [editingStudent, setEditingStudent] = useState<RosterStudent | null>(null);
   const [studentForm, setStudentForm] = useState({ name: "", classCode: "", gender: "" });
+  const [managementStudentSearch, setManagementStudentSearch] = useState("");
   const [managementMessage, setManagementMessage] = useState("");
   const [managementError, setManagementError] = useState("");
   const [managementLoading, setManagementLoading] = useState(false);
@@ -1107,6 +1108,31 @@ export default function TeacherDashboard() {
       return matchClass && matchSearch;
     });
   }, [studentSummaries, classFilter, searchQuery]);
+
+  // Grouping students by class untuk tab Kelola Data
+  const groupedStudentsByClass = useMemo(() => {
+    const searchQ = managementStudentSearch.trim().toLowerCase();
+    const filtered = allStudents.filter((s) => !searchQ || s.name.toLowerCase().includes(searchQ));
+    
+    const grouped = new Map<string, RosterStudent[]>();
+    filtered.forEach((s) => {
+      const classCode = s.classCode || "Tanpa Kelas";
+      if (!grouped.has(classCode)) {
+        grouped.set(classCode, []);
+      }
+      grouped.get(classCode)!.push(s);
+    });
+
+    // Sort by class code, siswa dalam setiap kelas juga di-sort by nama
+    const sorted = Array.from(grouped.entries())
+      .sort(([a], [b]) => a.localeCompare(b, "id"))
+      .map(([classCode, students]) => ({
+        classCode,
+        students: students.sort((a, b) => a.name.localeCompare(b.name, "id")),
+      }));
+
+    return sorted;
+  }, [allStudents, managementStudentSearch]);
 
   const classStats = useMemo(() => {
     const totalSiswa = studentSummaries.length;
@@ -2071,43 +2097,67 @@ export default function TeacherDashboard() {
             )}
 
             <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
-              <div className="space-y-2">
-                {allStudents.length === 0 ? (
-                  <p className="text-sm text-emerald-700/60">Belum ada akun siswa.</p>
-                ) : (
-                  allStudents.map((student) => (
-                    <div key={student.uid} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-emerald-50/70">
-                      <div className="min-w-0">
-                        <p className="font-semibold text-emerald-900">{student.name}</p>
-                        <p className="text-xs text-emerald-700/60 flex items-center gap-1 flex-wrap">
-                          <Mail className="w-3 h-3 shrink-0" />
-                          {student.email || "Email tidak tersedia"} · Kelas {student.classCode}
-                          {student.gender ? ` · ${formatGender(student.gender)}` : ""}
-                        </p>
+              <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                <Search className="w-5 h-5 text-emerald-700/60 shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Cari nama siswa..."
+                  value={managementStudentSearch}
+                  onChange={(e) => setManagementStudentSearch(e.target.value)}
+                  className="flex-1 px-4 py-2 text-sm border border-emerald-200 rounded-xl bg-emerald-50/50 outline-none focus:ring-2 focus:ring-emerald-400"
+                />
+              </div>
+
+              {allStudents.length === 0 ? (
+                <p className="text-sm text-emerald-700/60">Belum ada akun siswa.</p>
+              ) : groupedStudentsByClass.length === 0 ? (
+                <p className="text-sm text-emerald-700/60">Tidak ada siswa yang cocok dengan pencarian &quot;{managementStudentSearch}&quot;.</p>
+              ) : (
+                <div className="space-y-6">
+                  {groupedStudentsByClass.map(({ classCode, students }) => (
+                    <div key={classCode} className="border border-emerald-200 rounded-2xl overflow-hidden">
+                      <div className="bg-gradient-to-r from-emerald-600 to-emerald-500 px-4 py-3 sm:py-4">
+                        <h4 className="text-sm sm:text-base font-bold text-white">
+                          Kelas {classCode} ({students.length} siswa)
+                        </h4>
                       </div>
-                      <div className="flex gap-2 shrink-0">
-                        <button
-                          onClick={() => startEditingStudent(student)}
-                          aria-label={`Ubah profil ${student.name}`}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-emerald-700 border border-emerald-200 bg-white rounded-lg text-xs font-semibold hover:bg-emerald-50 transition"
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                          Ubah
-                        </button>
-                        <button
-                          onClick={() => void handleDeleteStudent(student)}
-                          disabled={managementLoading}
-                          aria-label={`Hapus data ${student.name}`}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-red-600 border border-red-200 bg-red-50 rounded-lg text-xs font-semibold hover:bg-red-100 disabled:opacity-50 transition"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                          Hapus Data
-                        </button>
+                      <div className="divide-y divide-emerald-100 bg-emerald-50/40">
+                        {students.map((student) => (
+                          <div key={student.uid} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 sm:p-4">
+                            <div className="min-w-0">
+                              <p className="font-semibold text-emerald-900 truncate">{student.name}</p>
+                              <p className="text-xs text-emerald-700/60 flex items-center gap-1 flex-wrap mt-0.5">
+                                <Mail className="w-3 h-3 shrink-0" />
+                                <span className="truncate">{student.email || "Email tidak tersedia"}</span>
+                                {student.gender ? <span>· {formatGender(student.gender)}</span> : ""}
+                              </p>
+                            </div>
+                            <div className="flex gap-2 shrink-0 flex-wrap">
+                              <button
+                                onClick={() => startEditingStudent(student)}
+                                aria-label={`Ubah profil ${student.name}`}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-emerald-700 border border-emerald-200 bg-white rounded-lg text-xs font-semibold hover:bg-emerald-50 transition"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                                Ubah
+                              </button>
+                              <button
+                                onClick={() => void handleDeleteStudent(student)}
+                                disabled={managementLoading}
+                                aria-label={`Hapus data ${student.name}`}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-red-600 border border-red-200 bg-red-50 rounded-lg text-xs font-semibold hover:bg-red-100 disabled:opacity-50 transition"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                Hapus Data
+                              </button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  ))
-                )}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}

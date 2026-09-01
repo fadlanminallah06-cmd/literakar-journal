@@ -1884,10 +1884,11 @@ export default function StudentDashboard() {
    */
   const openAddProgress = (journal: Journal) => {
     const lastReadPage = getLastReadPage(journal);
+    const nextStartPage = Math.max(1, lastReadPage + 1);
     setAddProgressTo(journal.id);
     setAddProgressForm({
-      startPage: String(lastReadPage),
-      endPage: String(lastReadPage),
+      startPage: String(nextStartPage),
+      endPage: String(nextStartPage),
       summary: "",
     });
     setAddProgressError("");
@@ -1902,6 +1903,7 @@ export default function StudentDashboard() {
     if (!journal) return;
 
     const lastReadPage = getLastReadPage(journal);
+    const expectedStartPage = Math.max(1, lastReadPage + 1);
     const startPage = Number(addProgressForm.startPage);
     const endPage = Number(addProgressForm.endPage);
 
@@ -1913,8 +1915,8 @@ export default function StudentDashboard() {
       setAddProgressError("Halaman akhir harus lebih besar atau sama dengan halaman awal.");
       return;
     }
-    if (startPage < lastReadPage) {
-      setAddProgressError(`Halaman awal tidak boleh kurang dari halaman terakhir yang tercatat (${lastReadPage}).`);
+    if (startPage < expectedStartPage) {
+      setAddProgressError(`Halaman lanjutan harus dimulai dari ${expectedStartPage} atau lebih, karena halaman terakhir yang tercatat adalah ${lastReadPage}.`);
       return;
     }
     if (!addProgressForm.summary.trim()) {
@@ -2937,7 +2939,16 @@ export default function StudentDashboard() {
 
                   <div className="space-y-3 mb-4">
                     <div>
-                      <label className={`text-xs font-semibold block mb-1 ${theme.headingText}`}>Halaman Awal</label>
+                      <label className={`text-xs font-semibold block mb-1 ${theme.headingText}`}>Halaman terakhir yang dibaca</label>
+                      <input
+                        type="number"
+                        readOnly
+                        value={addProgressTo ? getLastReadPage(journals.find((j) => j.id === addProgressTo) ?? null) : 0}
+                        className={`w-full px-3 py-2.5 sm:py-2 border rounded-xl outline-none text-sm ${darkMode ? "bg-slate-700/50 border-slate-600 text-emerald-100" : "bg-emerald-50 border-emerald-200 text-emerald-900"}`}
+                      />
+                    </div>
+                    <div>
+                      <label className={`text-xs font-semibold block mb-1 ${theme.headingText}`}>Halaman mulai lanjutan</label>
                       <input
                         type="number"
                         min="1"
@@ -2949,7 +2960,7 @@ export default function StudentDashboard() {
                       />
                     </div>
                     <div>
-                      <label className={`text-xs font-semibold block mb-1 ${theme.headingText}`}>Halaman Akhir</label>
+                      <label className={`text-xs font-semibold block mb-1 ${theme.headingText}`}>Halaman akhir update</label>
                       <input
                         type="number"
                         min="1"

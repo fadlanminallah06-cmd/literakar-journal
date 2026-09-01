@@ -10,6 +10,7 @@ const josefinSans = Josefin_Sans({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"),
   title: "Jurnal Literasi & Karakter Siswa",
   description: "Platform jurnal membaca digital untuk siswa dan guru",
   icons: {

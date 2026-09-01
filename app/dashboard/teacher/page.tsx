@@ -870,6 +870,7 @@ export default function TeacherDashboard() {
   const [editingStudent, setEditingStudent] = useState<RosterStudent | null>(null);
   const [studentForm, setStudentForm] = useState({ name: "", classCode: "", gender: "" });
   const [managementStudentSearch, setManagementStudentSearch] = useState("");
+  const [managementClassFilter, setManagementClassFilter] = useState("all");
   const [managementMessage, setManagementMessage] = useState("");
   const [managementError, setManagementError] = useState("");
   const [managementLoading, setManagementLoading] = useState(false);
@@ -1110,9 +1111,31 @@ export default function TeacherDashboard() {
   }, [studentSummaries, classFilter, searchQuery]);
 
   // Grouping students by class untuk tab Kelola Data
+  const managementAvailableClasses = useMemo(() => {
+    const classSet = new Set<string>();
+    allStudents.forEach((s) => {
+      if (s.classCode && s.classCode !== "-") {
+        classSet.add(s.classCode);
+      }
+    });
+
+    // Sort classes: extract grade (7,8,9) and letter (A-H), sort numerically then alphabetically
+    return Array.from(classSet).sort((a, b) => {
+      const gradeA = parseInt(a[0], 10);
+      const gradeB = parseInt(b[0], 10);
+      if (gradeA !== gradeB) return gradeA - gradeB;
+      return a.localeCompare(b, "id");
+    });
+  }, [allStudents]);
+
   const groupedStudentsByClass = useMemo(() => {
     const searchQ = managementStudentSearch.trim().toLowerCase();
-    const filtered = allStudents.filter((s) => !searchQ || s.name.toLowerCase().includes(searchQ));
+    let filtered = allStudents.filter((s) => !searchQ || s.name.toLowerCase().includes(searchQ));
+    
+    // Apply class filter
+    if (managementClassFilter !== "all") {
+      filtered = filtered.filter((s) => s.classCode === managementClassFilter);
+    }
     
     const grouped = new Map<string, RosterStudent[]>();
     filtered.forEach((s) => {
@@ -1123,16 +1146,21 @@ export default function TeacherDashboard() {
       grouped.get(classCode)!.push(s);
     });
 
-    // Sort by class code, siswa dalam setiap kelas juga di-sort by nama
+    // Sort by class code (7A-7H, 8A-8H, 9A-9H), siswa dalam setiap kelas juga di-sort by nama
     const sorted = Array.from(grouped.entries())
-      .sort(([a], [b]) => a.localeCompare(b, "id"))
+      .sort(([a], [b]) => {
+        const gradeA = parseInt(a[0], 10);
+        const gradeB = parseInt(b[0], 10);
+        if (gradeA !== gradeB) return gradeA - gradeB;
+        return a.localeCompare(b, "id");
+      })
       .map(([classCode, students]) => ({
         classCode,
         students: students.sort((a, b) => a.name.localeCompare(b.name, "id")),
       }));
 
     return sorted;
-  }, [allStudents, managementStudentSearch]);
+  }, [allStudents, managementStudentSearch, managementClassFilter]);
 
   const classStats = useMemo(() => {
     const totalSiswa = studentSummaries.length;
@@ -2106,6 +2134,36 @@ export default function TeacherDashboard() {
                   onChange={(e) => setManagementStudentSearch(e.target.value)}
                   className="flex-1 px-4 py-2 text-sm border border-emerald-200 rounded-xl bg-emerald-50/50 outline-none focus:ring-2 focus:ring-emerald-400"
                 />
+              </div>
+
+              {/* Filter Kelas */}
+              <div className="mb-4 pb-4 border-b border-emerald-100">
+                <p className="text-xs sm:text-sm font-semibold text-emerald-700/70 mb-2.5">Filter Kelas</p>
+                <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                  <button
+                    onClick={() => setManagementClassFilter("all")}
+                    className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-xs font-semibold transition ${
+                      managementClassFilter === "all"
+                        ? "bg-emerald-600 text-white shadow-sm"
+                        : "bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
+                    }`}
+                  >
+                    Semua Kelas
+                  </button>
+                  {managementAvailableClasses.map((classCode) => (
+                    <button
+                      key={classCode}
+                      onClick={() => setManagementClassFilter(classCode)}
+                      className={`px-2 sm:px-3 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg text-xs font-semibold transition ${
+                        managementClassFilter === classCode
+                          ? "bg-emerald-600 text-white shadow-sm"
+                          : "bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
+                      }`}
+                    >
+                      {classCode}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {allStudents.length === 0 ? (

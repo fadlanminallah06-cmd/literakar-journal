@@ -2149,60 +2149,7 @@ export default function TeacherDashboard() {
               )}
             </div>
 
-            {editingStudent && (
-              <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-200">
-                <h3 className="text-sm font-semibold text-emerald-800 mb-3">Ubah Profil Siswa</h3>
-                <div className="space-y-3">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <input
-                      value={studentForm.name}
-                      onChange={(e) => setStudentForm({ ...studentForm, name: e.target.value })}
-                      placeholder="Nama lengkap"
-                      className="p-2 text-sm bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
-                    />
-                    <input
-                      value={studentForm.classCode}
-                      onChange={(e) => setStudentForm({ ...studentForm, classCode: e.target.value })}
-                      placeholder="Kelas, contoh 7A"
-                      className="p-2 text-sm bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
-                    />
-                    <select
-                      value={studentForm.gender}
-                      onChange={(e) => setStudentForm({ ...studentForm, gender: e.target.value })}
-                      className="p-2 text-sm bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
-                    >
-                      <option value="">Gender belum dipilih</option>
-                      <option value="laki-laki">Laki-laki</option>
-                      <option value="perempuan">Perempuan</option>
-                    </select>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <input
-                      type="email"
-                      value={studentForm.email}
-                      onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })}
-                      placeholder="Email"
-                      className="p-2 text-sm bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
-                    />
-                  </div>
-                </div>
-                <div className="flex gap-2 mt-3">
-                  <button
-                    onClick={handleUpdateStudent}
-                    disabled={managementLoading}
-                    className="px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition"
-                  >
-                    {managementLoading ? "Menyimpan..." : "Simpan Perubahan"}
-                  </button>
-                  <button
-                    onClick={() => setEditingStudent(null)}
-                    className="px-4 py-2 border border-emerald-200 text-emerald-800 text-sm font-semibold rounded-xl hover:bg-emerald-50 transition"
-                  >
-                    Batal
-                  </button>
-                </div>
-              </div>
-            )}
+
 
             <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
               <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
@@ -2305,8 +2252,11 @@ export default function TeacherDashboard() {
                           </div>
                         </div>
                         <div className="divide-y divide-emerald-100 bg-emerald-50/40">
-                          {students.map((student) => (
-                            <div key={student.uid} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 sm:p-4">
+                          {students.map((student) => {
+                            const isEditingThis = editingStudent?.uid === student.uid;
+                            return (
+                              <>
+                                <div key={student.uid} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 sm:p-4">
                               <div className="flex items-start gap-3 min-w-0 flex-1">
                                 <button
                                   onClick={() => handleToggleSelectStudent(student.uid)}
@@ -2348,7 +2298,63 @@ export default function TeacherDashboard() {
                                 </button>
                               </div>
                             </div>
-                          ))}
+                            {isEditingThis && (
+                              <div className="bg-emerald-100/40 border-t-2 border-emerald-200 p-4 sm:p-5">
+                                <h3 className="text-sm font-semibold text-emerald-800 mb-3">Ubah Profil Siswa: {student.name}</h3>
+                                <div className="space-y-3">
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <input
+                                      value={studentForm.name}
+                                      onChange={(e) => setStudentForm({ ...studentForm, name: e.target.value })}
+                                      placeholder="Nama lengkap"
+                                      className="p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
+                                    />
+                                    <input
+                                      value={studentForm.classCode}
+                                      onChange={(e) => setStudentForm({ ...studentForm, classCode: e.target.value })}
+                                      placeholder="Kelas, contoh 7A"
+                                      className="p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
+                                    />
+                                    <select
+                                      value={studentForm.gender}
+                                      onChange={(e) => setStudentForm({ ...studentForm, gender: e.target.value })}
+                                      className="p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
+                                    >
+                                      <option value="">Gender belum dipilih</option>
+                                      <option value="laki-laki">Laki-laki</option>
+                                      <option value="perempuan">Perempuan</option>
+                                    </select>
+                                  </div>
+                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    <input
+                                      type="email"
+                                      value={studentForm.email}
+                                      onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })}
+                                      placeholder="Email"
+                                      className="p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
+                                    />
+                                  </div>
+                                </div>
+                                <div className="flex gap-2 mt-3">
+                                  <button
+                                    onClick={handleUpdateStudent}
+                                    disabled={managementLoading}
+                                    className="px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition"
+                                  >
+                                    {managementLoading ? "Menyimpan..." : "Simpan Perubahan"}
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingStudent(null)}
+                                    className="px-4 py-2 border border-emerald-200 text-emerald-800 text-sm font-semibold rounded-xl hover:bg-emerald-50 transition"
+                                  >
+                                    Batal
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                              </>
+                            );
+                          })}
                         </div>
                       </div>
                     );

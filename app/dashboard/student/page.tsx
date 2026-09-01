@@ -125,6 +125,17 @@ function formatTanggal(d: Date | null): string {
   return d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
 }
 
+function getLastReadPage(journal: Journal | null | undefined): number {
+  if (!journal) return 0;
+
+  const entries = [...(journal.progressLog ?? [])].sort(
+    (a, b) => (toDateSafe(b.timestamp)?.getTime() ?? 0) - (toDateSafe(a.timestamp)?.getTime() ?? 0)
+  );
+
+  const latestFromLog = entries.length > 0 ? entries[0].endPage : 0;
+  return Math.max(journal.endPage, latestFromLog);
+}
+
 function getStartOfMonth(date: Date): Date {
   const start = new Date(date.getFullYear(), date.getMonth(), 1);
   start.setHours(0, 0, 0, 0);
@@ -1871,6 +1882,17 @@ export default function StudentDashboard() {
    * Tambahkan progress membaca ke jurnal yang sudah ada (untuk buku yang belum selesai).
    * Ini memungkinkan siswa melanjutkan membaca di hari berikutnya tanpa membuat jurnal baru.
    */
+  const openAddProgress = (journal: Journal) => {
+    const lastReadPage = getLastReadPage(journal);
+    setAddProgressTo(journal.id);
+    setAddProgressForm({
+      startPage: String(lastReadPage),
+      endPage: String(lastReadPage),
+      summary: "",
+    });
+    setAddProgressError("");
+  };
+
   const handleAddProgress = async () => {
     setAddProgressError("");
 
@@ -1879,6 +1901,7 @@ export default function StudentDashboard() {
     const journal = journals.find((j) => j.id === addProgressTo);
     if (!journal) return;
 
+    const lastReadPage = getLastReadPage(journal);
     const startPage = Number(addProgressForm.startPage);
     const endPage = Number(addProgressForm.endPage);
 
@@ -1890,6 +1913,10 @@ export default function StudentDashboard() {
       setAddProgressError("Halaman akhir harus lebih besar atau sama dengan halaman awal.");
       return;
     }
+    if (startPage < lastReadPage) {
+      setAddProgressError(`Halaman awal tidak boleh kurang dari halaman terakhir yang tercatat (${lastReadPage}).`);
+      return;
+    }
     if (!addProgressForm.summary.trim()) {
       setAddProgressError("Ringkasan untuk progress ini wajib diisi.");
       return;
@@ -1897,7 +1924,6 @@ export default function StudentDashboard() {
 
     setAddProgressSaving(true);
     try {
-      // Buat entry progress baru dengan timestamp sekarang
       const newProgressEntry: ProgressEntry = {
         id: Date.now().toString(),
         startPage,
@@ -1906,9 +1932,6 @@ export default function StudentDashboard() {
         timestamp: new Date(),
       };
 
-      // Update journal dengan progress log yang ditambah.
-      // Untuk jurnal yang sudah approved tapi belum selesai, kita simpan sebagai log lanjutan
-      // tanpa langsung mengubah hitungan utama sampai guru memvalidasi ulang / menutup buku.
       const updatedProgressLog = [...(journal.progressLog || []), newProgressEntry];
       const isApprovedUnfinished = !journal.finished && normalizeStatus(journal.status) === "approved";
 
@@ -1931,9 +1954,9 @@ export default function StudentDashboard() {
       setAddProgressForm({ startPage: "", endPage: "", summary: "" });
       setAddProgressTo(null);
       void fetchMyJournals();
-      // Segarkan juga leaderboard supaya peringkat kelas di Beranda ikut ter-update.
       void fetchLeaderboard();
-    } catch {
+    } catch (error) {
+      console.error("Gagal menambah progress:", error);
       setAddProgressError("Gagal menambah progress. Silakan coba lagi.");
     } finally {
       setAddProgressSaving(false);
@@ -2809,6 +2832,9 @@ export default function StudentDashboard() {
                         {formatTanggal(toDateSafe(j.createdAt))}
                         {j.finished ? " · Selesai dibaca" : ""}
                       </p>
+                      <p className={`text-[11px] mb-1 ${darkMode ? "text-amber-300" : "text-amber-700"}`}>
+                        Halaman terakhir yang tercatat: <span className="font-semibold">{getLastReadPage(j)}</span>
+                      </p>
                       <p className={`text-sm italic mb-1 ${darkMode ? "text-emerald-200/80" : "text-emerald-800/80"}`}>&quot;{j.summary}&quot;</p>
                       {j.characterValues && j.characterValues.length > 0 && (
                         <p className={`text-xs ${theme.mutedText}`}>Nilai karakter: {j.characterValues.join(", ")}</p>
@@ -2855,7 +2881,7 @@ export default function StudentDashboard() {
                         {!j.finished && (
                           <button
                             type="button"
-                            onClick={() => setAddProgressTo(j.id)}
+                            onClick={() => openAddProgress(j)}
                             className="flex-1 sm:flex-none px-3 py-2 bg-emerald-500 text-white text-xs font-semibold rounded-xl hover:bg-emerald-600 active:scale-[0.98] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                           >
                             + Lanjut Membaca
@@ -2899,7 +2925,8 @@ export default function StudentDashboard() {
                     Catat progres membacamu hari ini untuk buku &quot;{journals.find((j) => j.id === addProgressTo)?.bookTitle}&quot;
                   </p>
                   <div className={`mb-4 rounded-xl border px-3 py-2 text-[11px] ${darkMode ? "border-amber-700/50 bg-amber-900/20 text-amber-200" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
-                    Catatan lanjutan ini bersifat log membaca. Progres akan dihitung setelah guru memvalidasi buku yang belum selesai.
+                    <span className="font-semibold block mb-1">Halaman terakhir yang tercatat:</span>
+                    {addProgressTo ? getLastReadPage(journals.find((j) => j.id === addProgressTo) ?? null) : 0}
                   </div>
 
                   {addProgressError && (

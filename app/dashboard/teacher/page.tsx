@@ -187,6 +187,15 @@ function getCharacterList(j: Journal): string[] {
   return [];
 }
 
+function getLatestPageForJournal(journal: Journal): number {
+  const mainPage = Number(journal.endPage) || 0;
+  const logPages = (journal.progressLog || [])
+    .map((entry) => Number(entry.endPage))
+    .filter((value) => Number.isFinite(value));
+
+  return logPages.length > 0 ? Math.max(mainPage, ...logPages) : mainPage;
+}
+
 /**
  * Satu sumber kebenaran untuk label & warna status jurnal, dipakai di semua
  * tempat (daftar jurnal, modal detail, laporan, CSV) supaya konsisten.
@@ -277,8 +286,9 @@ function buildStudentSummaries(journalsInput: Journal[], allStudents: RosterStud
     if (status === "approved") s.approvedCount += 1;
     else if (status === "revision") s.revisionCount += 1;
     else s.pendingCount += 1;
-    const pages = Number(j.endPage) - Number(j.startPage);
-    if (!Number.isNaN(pages) && pages > 0) s.totalPagesRead += pages;
+    const latestPage = getLatestPageForJournal(j);
+    const pages = Math.max(0, latestPage - Number(j.startPage));
+    if (pages > 0) s.totalPagesRead += pages;
     if (j.finished) s.booksFinished += 1;
     const d = toDateSafe(j.createdAt);
     if (d && (!s.lastSubmission || d > s.lastSubmission)) s.lastSubmission = d;
@@ -355,8 +365,9 @@ function buildClassSummaries(
     if (status === "approved") summary.approvedCount += 1;
     else if (status === "revision") summary.revisionCount += 1;
     else summary.pendingCount += 1;
-    const pages = Number(journal.endPage) - Number(journal.startPage);
-    if (!Number.isNaN(pages) && pages > 0) summary.totalPagesRead += pages;
+    const latestPage = getLatestPageForJournal(journal);
+    const pages = Math.max(0, latestPage - Number(journal.startPage));
+    if (pages > 0) summary.totalPagesRead += pages;
     if (journal.studentName) {
       if (!activeStudentsByClass.has(classCode)) activeStudentsByClass.set(classCode, new Set());
       activeStudentsByClass.get(classCode)!.add(journal.studentId || journal.studentName);
@@ -501,7 +512,7 @@ function buildDetailedRows(students: StudentSummary[]): (string | number)[][] {
           j.bookTitle,
           j.author,
           j.genre || "-",
-          `${j.startPage}-${j.endPage}`,
+          `${j.startPage}-${getLatestPageForJournal(j)}`,
           getCharacterList(j).join(", ") || "-",
           getStatusInfo(j.status).csv,
           j.teacherFeedback || "-",
@@ -2096,7 +2107,7 @@ export default function TeacherDashboard() {
 
                       <p className="text-xs sm:text-sm text-emerald-800/80 break-words pl-1">
                         <strong>Buku:</strong> {j.bookTitle} ({j.author})
-                        {j.genre ? ` · ${j.genre}` : ""} — Hal. {j.startPage}-{j.endPage}
+                        {j.genre ? ` · ${j.genre}` : ""} — Hal. {j.startPage}-{getLatestPageForJournal(j)}
                         {j.finished ? " · ✅ Selesai dibaca" : ""}
                       </p>
                       <p className="text-xs sm:text-sm text-emerald-800/80 break-words pl-1">
@@ -2854,7 +2865,7 @@ export default function TeacherDashboard() {
                                       </span>
                                     </div>
                                     <p className="text-xs text-emerald-700/60">
-                                      Hal. {j.startPage}-{j.endPage}
+                                      Hal. {j.startPage}-{getLatestPageForJournal(j)}
                                       {j.finished ? " · Selesai dibaca" : ""} ·{" "}
                                       {formatTanggal(toDateSafe(j.createdAt))}
                                     </p>
@@ -3055,7 +3066,7 @@ export default function TeacherDashboard() {
                         </span>
                       </div>
                       <p className="text-xs text-emerald-700/60 mb-1">
-                        Hal. {j.startPage}-{j.endPage}
+                        Hal. {j.startPage}-{getLatestPageForJournal(j)}
                         {j.finished ? " · Selesai dibaca" : ""} · Nilai Karakter:{" "}
                         {getCharacterList(j).join(", ") || "-"}
                       </p>

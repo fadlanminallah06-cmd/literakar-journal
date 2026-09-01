@@ -1,0 +1,70 @@
+[debug] [2026-09-01T10:16:20.502Z] ----------------------------------------------------------------------
+[debug] [2026-09-01T10:16:20.507Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\FADLAN\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only firestore:rules --project literakar-journal --debug
+[debug] [2026-09-01T10:16:20.508Z] CLI Version:   15.28.2
+[debug] [2026-09-01T10:16:20.512Z] Platform:      win32
+[debug] [2026-09-01T10:16:20.513Z] Node Version:  v24.19.0
+[debug] [2026-09-01T10:16:20.513Z] Detected Agent: github_copilot_vscode_agent
+[debug] [2026-09-01T10:16:20.514Z] Time:          Tue Sep 01 2026 17:16:20 GMT+0700 (Western Indonesia Time)
+[debug] [2026-09-01T10:16:20.514Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-09-01T10:17:04.289Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-01T10:17:04.290Z] > authorizing via signed-in user (fadlanminallah06@gmail.com)
+[debug] [2026-09-01T10:17:04.291Z] [iam] checking project literakar-journal for permissions ["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]
+[debug] [2026-09-01T10:17:04.329Z] Checked if tokens are valid: true, expires at: 1788261266618
+[debug] [2026-09-01T10:17:04.329Z] Checked if tokens are valid: true, expires at: 1788261266618
+[debug] [2026-09-01T10:17:04.332Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/literakar-journal:testIamPermissions [none]
+[debug] [2026-09-01T10:17:04.332Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/literakar-journal:testIamPermissions  x-goog-user-project=literakar-journal
+[debug] [2026-09-01T10:17:04.333Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/literakar-journal:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[debug] [2026-09-01T10:17:04.715Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/literakar-journal:testIamPermissions 200
+[debug] [2026-09-01T10:17:04.715Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/literakar-journal:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[info] 
+[info] === Deploying to 'literakar-journal'...
+[info] 
+[info] i  deploying firestore 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[debug] [2026-09-01T10:17:04.724Z] Checked if tokens are valid: true, expires at: 1788261266618
+[debug] [2026-09-01T10:17:04.724Z] Checked if tokens are valid: true, expires at: 1788261266618
+[debug] [2026-09-01T10:17:04.725Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/literakar-journal/databases/(default) [none]
+[debug] [2026-09-01T10:17:04.836Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/literakar-journal/databases/(default) 200
+[debug] [2026-09-01T10:17:04.836Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/literakar-journal/databases/(default) {"name":"projects/literakar-journal/databases/(default)","uid":"e5f6b106-f5b2-4356-9f15-0de785e5d670","createTime":"2026-08-24T12:48:48.431406Z","updateTime":"2026-08-24T12:48:48.431406Z","locationId":"asia-southeast2","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2026-09-01T09:17:06.325638Z","appEngineIntegrationMode":"DISABLED","keyPrefix":"zet","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"realtimeUpdatesMode":"REALTIME_UPDATES_MODE_ENABLED","enhancedTextSearchQueryMode":"ENHANCED_QUERY_MODE_ENABLED","etag":"ILeChcSTzZYDMNzh4bPYwJYD"}
+[info] i  firestore: reading indexes from Use an existing project... 
+[info] i  cloud.firestore: checking firestore.rules for compilation errors... 
+[debug] [2026-09-01T10:17:04.841Z] Checked if tokens are valid: true, expires at: 1788261266618
+[debug] [2026-09-01T10:17:04.841Z] Checked if tokens are valid: true, expires at: 1788261266618
+[debug] [2026-09-01T10:17:04.842Z] >>> [apiv2][query] POST https://firebaserules.googleapis.com/v1/projects/literakar-journal:test [none]
+[debug] [2026-09-01T10:17:04.842Z] >>> [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/literakar-journal:test [omitted]
+[debug] [2026-09-01T10:17:05.426Z] <<< [apiv2][status] POST https://firebaserules.googleapis.com/v1/projects/literakar-journal:test 200
+[debug] [2026-09-01T10:17:05.427Z] <<< [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/literakar-journal:test {}
+[info] +  cloud.firestore: rules file firestore.rules compiled successfully 
+[debug] [2026-09-01T10:17:05.429Z] Checked if tokens are valid: true, expires at: 1788261266618
+[debug] [2026-09-01T10:17:05.429Z] Checked if tokens are valid: true, expires at: 1788261266618
+[debug] [2026-09-01T10:17:05.429Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/literakar-journal/releases pageSize=10&pageToken=
+[debug] [2026-09-01T10:17:06.765Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/literakar-journal/releases 200
+[debug] [2026-09-01T10:17:06.765Z] <<< [apiv2][body] GET https://firebaserules.googleapis.com/v1/projects/literakar-journal/releases {"releases":[{"name":"projects/literakar-journal/releases/cloud.firestore","rulesetName":"projects/literakar-journal/rulesets/08bfef58-e4a4-4f62-9e03-f61a75828a1d","createTime":"2026-08-24T12:48:50.825826Z","updateTime":"2026-08-31T07:40:06.224470Z"}]}
+[debug] [2026-09-01T10:17:06.765Z] Checked if tokens are valid: true, expires at: 1788261266618
+[debug] [2026-09-01T10:17:06.766Z] Checked if tokens are valid: true, expires at: 1788261266618
+[debug] [2026-09-01T10:17:06.766Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/literakar-journal/rulesets/08bfef58-e4a4-4f62-9e03-f61a75828a1d [none]
+[debug] [2026-09-01T10:17:08.063Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/literakar-journal/rulesets/08bfef58-e4a4-4f62-9e03-f61a75828a1d 200
+[debug] [2026-09-01T10:17:08.063Z] <<< [apiv2][body] GET https://firebaserules.googleapis.com/v1/projects/literakar-journal/rulesets/08bfef58-e4a4-4f62-9e03-f61a75828a1d [omitted]
+[info] i  firestore: uploading rules firestore.rules... 
+[debug] [2026-09-01T10:17:08.065Z] Checked if tokens are valid: true, expires at: 1788261266618
+[debug] [2026-09-01T10:17:08.065Z] Checked if tokens are valid: true, expires at: 1788261266618
+[debug] [2026-09-01T10:17:08.065Z] >>> [apiv2][query] POST https://firebaserules.googleapis.com/v1/projects/literakar-journal/rulesets [none]
+[debug] [2026-09-01T10:17:08.066Z] >>> [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/literakar-journal/rulesets [omitted]
+[debug] [2026-09-01T10:17:09.432Z] <<< [apiv2][status] POST https://firebaserules.googleapis.com/v1/projects/literakar-journal/rulesets 200
+[debug] [2026-09-01T10:17:09.432Z] <<< [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/literakar-journal/rulesets {"name":"projects/literakar-journal/rulesets/e1ad2477-1fc6-403a-b199-2e00a6b22137","source":{"files":[{"content":"rules_version = '2';\nservice cloud.firestore {\n  match /databases/{database}/documents {\n\n    function isSignedIn() {\n      return request.auth != null;\n    }\n\n    // Aman terhadap dokumen yang belum/tidak ada — tidak akan throw error.\n    function currentUserExists() {\n      return isSignedIn()\n        && exists(/databases/$(database)/documents/users/$(request.auth.uid));\n    }\n\n    function currentUser() {\n      return get(/databases/$(database)/documents/users/$(request.auth.uid));\n    }\n\n    function hasRole(role) {\n      return currentUserExists() && currentUser().data.role == role;\n    }\n\n    function isStudent() {\n      return hasRole('student');\n    }\n\n    function isTeacher() {\n      return hasRole('teacher');\n    }\n\n    function isAdmin() {\n      return hasRole('admin');\n    }\n\n    function isStaff() {\n      return isTeacher() || isAdmin();\n    }\n\n    match /users/{userId} {\n      // Self-read dicek DULUAN (tidak butuh get() tambahan), baru staff-check.\n      allow read: if (isSignedIn() && request.auth.uid == userId) || isStaff();\n\n      // Public registration can create a student or teacher for the authenticated UID.\n      allow create: if isSignedIn()\n        && request.auth.uid == userId\n        && request.resource.data.uid == userId\n        && request.resource.data.role in ['student', 'teacher'];\n\n      // Staff can edit profile data but cannot change UID or role.\n      allow update: if isAdmin()\n        || (\n          isTeacher()\n          && resource.data.role == 'student'\n          && request.resource.data.role == resource.data.role\n          && request.resource.data.uid == resource.data.uid\n        )\n        || (\n          isSignedIn()\n          && request.auth.uid == userId\n          && request.resource.data.role == resource.data.role\n          && request.resource.data.uid == resource.data.uid\n        );\n\n      allow delete: if isAdmin() || (isTeacher() && resource.data.role == 'student');\n    }\n\n    match /journals/{journalId} {\n      allow read: if isStaff()\n        || isStudent();\n\n      allow create: if isStudent()\n        && request.resource.data.studentId == request.auth.uid\n        && request.resource.data.status == 'pending';\n\n      // Teachers validate and annotate; admins may manage any journal field.\n      allow update: if isAdmin()\n        || (\n          isTeacher()\n          && request.resource.data.studentId == resource.data.studentId\n          && request.resource.data.diff(resource.data).affectedKeys()\n            .hasOnly(['status', 'teacherFeedback', 'studentName', 'classCode', 'approvedBy', 'updatedAt', 'progressLog'])\n        )\n        || (\n          isStudent()\n          && resource.data.studentId == request.auth.uid\n          && request.resource.data.studentId == resource.data.studentId\n          && (\n            (\n              resource.data.status in ['pending', 'revision']\n              && request.resource.data.status == 'pending'\n              && request.resource.data.diff(resource.data).affectedKeys()\n                .hasOnly([\n                  'bookTitle', 'author', 'genre', 'startPage', 'endPage', 'summary',\n                  'characterValues', 'finished', 'status', 'teacherFeedback',\n                  'progressLog', 'updatedAt'\n                ])\n            )\n            || (\n              resource.data.status == 'approved'\n              && request.resource.data.status == resource.data.status\n              && request.resource.data.diff(resource.data).affectedKeys()\n                .hasOnly(['progressLog', 'updatedAt'])\n            )\n          )\n        );\n\n      allow delete: if isStaff();\n    }\n  }\n}","name":"firestore.rules"}]},"createTime":"2026-09-01T10:17:10.798911Z","metadata":{"services":["cloud.firestore"]}}
+[debug] [2026-09-01T10:17:09.432Z] [rules] created ruleset projects/literakar-journal/rulesets/e1ad2477-1fc6-403a-b199-2e00a6b22137
+[debug] [2026-09-01T10:17:09.433Z] [rules] releasing cloud.firestore with ruleset projects/literakar-journal/rulesets/e1ad2477-1fc6-403a-b199-2e00a6b22137
+[debug] [2026-09-01T10:17:09.434Z] Checked if tokens are valid: true, expires at: 1788261266618
+[debug] [2026-09-01T10:17:09.434Z] Checked if tokens are valid: true, expires at: 1788261266618
+[debug] [2026-09-01T10:17:09.434Z] >>> [apiv2][query] PATCH https://firebaserules.googleapis.com/v1/projects/literakar-journal/releases/cloud.firestore [none]
+[debug] [2026-09-01T10:17:09.434Z] >>> [apiv2][body] PATCH https://firebaserules.googleapis.com/v1/projects/literakar-journal/releases/cloud.firestore {"release":{"name":"projects/literakar-journal/releases/cloud.firestore","rulesetName":"projects/literakar-journal/rulesets/e1ad2477-1fc6-403a-b199-2e00a6b22137"}}
+[debug] [2026-09-01T10:17:10.014Z] <<< [apiv2][status] PATCH https://firebaserules.googleapis.com/v1/projects/literakar-journal/releases/cloud.firestore 200
+[debug] [2026-09-01T10:17:10.015Z] <<< [apiv2][body] PATCH https://firebaserules.googleapis.com/v1/projects/literakar-journal/releases/cloud.firestore {"name":"projects/literakar-journal/releases/cloud.firestore","rulesetName":"projects/literakar-journal/rulesets/e1ad2477-1fc6-403a-b199-2e00a6b22137","createTime":"2026-08-24T12:48:50.825826Z","updateTime":"2026-09-01T10:17:11.385376Z"}
+[debug] [2026-09-01T10:17:10.015Z] [rules] updated release projects/literakar-journal/releases/cloud.firestore
+[info] +  firestore: released rules firestore.rules to cloud.firestore 
+[info] 
+[info] +  Deploy complete! 
+[info] 
+[info] Project Console: https://console.firebase.google.com/project/literakar-journal/overview

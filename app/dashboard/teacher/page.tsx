@@ -10,7 +10,6 @@ import {
   where,
   orderBy,
   getDocs,
-  onSnapshot,
   doc,
   updateDoc,
   deleteDoc,
@@ -19,6 +18,7 @@ import {
 import { useRouter } from "next/navigation";
 import {
   LogOut,
+  RefreshCw,
   Users,
   BookOpen,
   CheckCircle2,
@@ -87,6 +87,7 @@ interface Journal {
 }
 
 interface StudentSummary {
+  key: string; // identitas unik: uid siswa, atau nama+kelas untuk data lama
   name: string;
   classCode: string;
   gender?: "laki-laki" | "perempuan" | "";
@@ -175,6 +176,26 @@ function toJakartaDateKey(date: Date): string {
   return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
 }
 
+function getJakartaWeekdayIndex(date: Date): number {
+  const parts = getJakartaDateParts(date);
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay();
+}
+
+function getLatestMondaySnapshotCutoff(now = new Date()): Date {
+  const parts = getJakartaDateParts(now);
+  const weekday = getJakartaWeekdayIndex(now);
+  const daysSinceMonday = (weekday + 6) % 7;
+  const currentMondayUtcMs = Date.UTC(parts.year, parts.month - 1, parts.day - daysSinceMonday, 8, 0, 0, 0);
+  const currentMondayAtEight = new Date(currentMondayUtcMs - 7 * 60 * 60 * 1000);
+
+  if (now.getTime() < currentMondayAtEight.getTime()) {
+    const previousMondayUtcMs = Date.UTC(parts.year, parts.month - 1, parts.day - daysSinceMonday - 7, 8, 0, 0, 0);
+    return new Date(previousMondayUtcMs - 7 * 60 * 60 * 1000);
+  }
+
+  return currentMondayAtEight;
+}
+
 const INACTIVITY_DAYS = 7;
 const LOW_ACTIVITY_RATIO = 0.5;
 const PENDING_BACKLOG_THRESHOLD = 3;
@@ -206,30 +227,22 @@ function formatGender(g?: string): string {
   return "-";
 }
 
-function getStudentListKey(name: string, classCode?: string, index?: number): string {
-  const suffix = typeof index === "number" ? `-${index}` : "";
-  return `${classCode ?? "unknown"}-${name}${suffix}`;
+/**
+ * Kunci identitas unik per siswa. Diprioritaskan dari UID akun (studentId)
+ * karena itu satu-satunya identitas yang benar-benar unik. Untuk data lama
+ * yang belum punya studentId, fallback ke kombinasi nama+kelas — jauh lebih
+ * aman daripada nama saja, karena nama sama di kelas BERBEDA tidak akan
+ * tertukar lagi.
+ */
+function getStudentIdentityKey(studentId: string | undefined | null, name: string, classCode: string): string {
+  if (studentId) return `uid:${studentId}`;
+  return `legacy:${(classCode || "-").trim()}|${(name || "Tanpa Nama").trim().toLowerCase()}`;
 }
 
 function getStartOfMonth(date: Date): Date {
   const start = new Date(date.getFullYear(), date.getMonth(), 1);
   start.setHours(0, 0, 0, 0);
   return start;
-}
-
-function getPreviousWeekWindow(now = new Date()): { start: Date; end: Date } {
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-
-  const day = start.getDay();
-  const daysSinceMonday = (day + 6) % 7;
-  start.setDate(start.getDate() - daysSinceMonday - 7);
-
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  end.setHours(23, 59, 59, 999);
-
-  return { start, end };
 }
 
 function getCharacterList(j: Journal): string[] {
@@ -301,21 +314,26 @@ function filterJournalsByPeriod(
   });
 }
 
+/**
+ * Meringkas jurnal per siswa. Dikelompokkan berdasarkan identitas unik
+ * (getStudentIdentityKey) — mengutamakan UID akun (studentId) supaya dua
+ * siswa dengan nama yang sama (bahkan di kelas yang sama) tidak pernah
+ * tertukar datanya. Roster (koleksi users) selalu punya uid asli, jadi
+ * entri dari sana otomatis menyatu dengan jurnal yang studentId-nya cocok.
+ */
 function buildStudentSummaries(journalsInput: Journal[], allStudents: RosterStudent[]): StudentSummary[] {
   const map = new Map<string, StudentSummary>();
 
-  const genderByName = new Map<string, string>();
-  allStudents.forEach((stu) => {
-    if (stu.gender) genderByName.set(stu.name, stu.gender);
-  });
-
   journalsInput.forEach((j) => {
-    const key = j.studentName || "Tanpa Nama";
+    const name = j.studentName || "Tanpa Nama";
+    const classCode = j.classCode || "-";
+    const key = getStudentIdentityKey(j.studentId, name, classCode);
     if (!map.has(key)) {
       map.set(key, {
-        name: key,
-        classCode: j.classCode || "-",
-        gender: (genderByName.get(key) as StudentSummary["gender"]) || "",
+        key,
+        name,
+        classCode,
+        gender: "",
         totalJournals: 0,
         approvedCount: 0,
         pendingCount: 0,
@@ -350,8 +368,10 @@ function buildStudentSummaries(journalsInput: Journal[], allStudents: RosterStud
   });
 
   allStudents.forEach((stu) => {
-    if (!map.has(stu.name)) {
-      map.set(stu.name, {
+    const key = getStudentIdentityKey(stu.uid, stu.name, stu.classCode);
+    if (!map.has(key)) {
+      map.set(key, {
+        key,
         name: stu.name,
         classCode: stu.classCode,
         gender: stu.gender || "",
@@ -365,10 +385,12 @@ function buildStudentSummaries(journalsInput: Journal[], allStudents: RosterStud
         journals: [],
       });
     } else {
-      const existing = map.get(stu.name)!;
-      if (!existing.gender && stu.gender) {
-        existing.gender = stu.gender;
-      }
+      const existing = map.get(key)!;
+      existing.gender = stu.gender || existing.gender;
+      // Roster adalah sumber kebenaran untuk nama & kelas terkini (bisa saja
+      // guru baru saja mengubahnya di tab Kelola Data).
+      existing.name = stu.name;
+      existing.classCode = stu.classCode;
     }
   });
 
@@ -456,14 +478,15 @@ function buildClassSummaries(
  * jurnal. Jika satu siswa mengirim beberapa jurnal untuk buku/nilai yang
  * sama, itu tetap dihitung 1 siswa saja — jadi angka mencerminkan "buku
  * paling sering dibaca oleh siswa" dan "nilai karakter paling sering
- * disebutkan oleh siswa", bukan sekadar jumlah entri jurnal.
+ * disebutkan oleh siswa", bukan sekadar jumlah entri jurnal. Dedup memakai
+ * identitas unik (uid/legacy) supaya dua siswa nama sama tidak tergabung.
  */
 function getTopBooks(journalsInput: Journal[], limit = 10): [string, number][] {
   const bookStudents = new Map<string, Set<string>>();
   journalsInput.forEach((j) => {
     if (!j.bookTitle?.trim()) return;
     const title = j.bookTitle.trim();
-    const student = j.studentName || "Tanpa Nama";
+    const student = getStudentIdentityKey(j.studentId, j.studentName || "Tanpa Nama", j.classCode || "-");
     if (!bookStudents.has(title)) bookStudents.set(title, new Set());
     bookStudents.get(title)!.add(student);
   });
@@ -476,7 +499,7 @@ function getTopBooks(journalsInput: Journal[], limit = 10): [string, number][] {
 function getTopCharacters(journalsInput: Journal[], limit = 10): [string, number][] {
   const charStudents = new Map<string, Set<string>>();
   journalsInput.forEach((j) => {
-    const student = j.studentName || "Tanpa Nama";
+    const student = getStudentIdentityKey(j.studentId, j.studentName || "Tanpa Nama", j.classCode || "-");
     getCharacterList(j).forEach((c) => {
       const val = c.trim();
       if (!val) return;
@@ -940,6 +963,8 @@ export default function TeacherDashboard() {
   const [mousePos, setMousePos] = useState({ x: 0.5, y: 0.5 });
   // id jurnal yang sedang diproses (approve/revisi/batalkan) -> mencegah klik ganda
   const [journalActionLoading, setJournalActionLoading] = useState<string | null>(null);
+  // Error validasi spesifik per jurnal, ditampilkan langsung pada kartu jurnal terkait.
+  const [journalInlineError, setJournalInlineError] = useState<{ id: string; message: string } | null>(null);
   const [selectedJournalIds, setSelectedJournalIds] = useState<Set<string>>(new Set());
   const [bulkJournalLoading, setBulkJournalLoading] = useState(false);
   const [journalClassFilter, setJournalClassFilter] = useState("all");
@@ -949,6 +974,8 @@ export default function TeacherDashboard() {
   const [selectedLeaderboardClass, setSelectedLeaderboardClass] = useState("");
   const [leaderboardRefreshKey, setLeaderboardRefreshKey] = useState<string>(() => new Date().toISOString());
   const [darkMode, setDarkMode] = useState(false);
+  // Loading state untuk tombol "Muat Ulang" manual.
+  const [isRefreshingData, setIsRefreshingData] = useState(false);
 
   useEffect(() => {
     const savedTheme = localStorage.getItem("literasi_teacher_dark_mode");
@@ -976,6 +1003,7 @@ export default function TeacherDashboard() {
         (toDateSafe(a.updatedAt ?? a.createdAt)?.getTime() ?? 0)
     );
     setJournals(docs);
+    setJournalInlineError(null);
   }, []);
 
   const fetchAllStudents = useCallback(async () => {
@@ -999,6 +1027,19 @@ export default function TeacherDashboard() {
     await Promise.all([fetchClassJournals(), fetchAllStudents()]);
   }, [fetchClassJournals, fetchAllStudents]);
 
+  const handleManualRefresh = useCallback(async () => {
+    if (isRefreshingData) return;
+    setIsRefreshingData(true);
+    setManagementError("");
+    try {
+      await loadDashboardData();
+    } catch {
+      setManagementError("Gagal memuat ulang data. Periksa koneksi dan coba lagi.");
+    } finally {
+      setIsRefreshingData(false);
+    }
+  }, [isRefreshingData, loadDashboardData]);
+
   useEffect(() => {
     if (!loading && (!user || !["teacher", "admin"].includes(userProfile?.role || ""))) {
       router.push("/login");
@@ -1009,26 +1050,8 @@ export default function TeacherDashboard() {
     }
   }, [user, userProfile, loading, router, loadDashboardData]);
 
-  useEffect(() => {
-    if (!user || !["teacher", "admin"].includes(userProfile?.role || "")) return;
-
-    const unsubscribe = onSnapshot(
-      query(collection(db, "journals"), orderBy("createdAt", "desc")),
-      (snapshot) => {
-        const docs: Journal[] = [];
-        snapshot.forEach((journalDoc) => docs.push({ id: journalDoc.id, ...journalDoc.data() } as Journal));
-        docs.sort(
-          (a, b) =>
-            (toDateSafe(b.updatedAt ?? b.createdAt)?.getTime() ?? 0) -
-            (toDateSafe(a.updatedAt ?? a.createdAt)?.getTime() ?? 0)
-        );
-        setJournals(docs);
-      },
-      () => setManagementError("Gagal menyinkronkan jurnal secara realtime.")
-    );
-
-    return unsubscribe;
-  }, [user, userProfile?.role]);
+  // Data jurnal di-fetch saat dashboard dimuat dan dapat disegarkan manual
+  // melalui tombol "Muat Ulang" agar tidak memasang listener koleksi penuh.
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -1066,7 +1089,13 @@ export default function TeacherDashboard() {
         teacherFeedback: (feedbackInput[journalId] ?? journal.teacherFeedback ?? "").trim(),
         updatedAt: serverTimestamp(),
       });
-      await fetchClassJournals();
+      setJournals((current) =>
+        current.map((item) =>
+          item.id === journalId
+            ? { ...item, teacherFeedback: (feedbackInput[journalId] ?? journal.teacherFeedback ?? "").trim(), updatedAt: new Date() }
+            : item
+        )
+      );
     } catch {
       setManagementError("Feedback validasi gagal disimpan. Periksa koneksi/izin dan coba lagi.");
     } finally {
@@ -1166,7 +1195,13 @@ export default function TeacherDashboard() {
         approvedBy: "",
         updatedAt: serverTimestamp(),
       });
-      await fetchClassJournals();
+      setJournals((current) =>
+        current.map((item) =>
+          item.id === journalId
+            ? { ...item, status: "pending", teacherFeedback: "", approvedBy: "", updatedAt: new Date() }
+            : item
+        )
+      );
     } catch {
       setManagementError("Pembatalan revisi gagal. Periksa koneksi/izin dan coba lagi.");
     } finally {
@@ -1221,12 +1256,15 @@ export default function TeacherDashboard() {
     const feedback = (feedbackInput[journalId] ?? journal.teacherFeedback ?? "").trim();
 
     if (newStatus === "revision" && !feedback) {
-      setManagementError(
-        "Tulis alasan revisi di kolom umpan balik jurnal ini sebelum menandainya Perlu Revisi."
-      );
+      setJournalInlineError({
+        id: journalId,
+        message: "Tulis alasan revisi di kolom umpan balik jurnal ini sebelum menandainya Perlu Revisi.",
+      });
+      document.getElementById(`journal-card-${journalId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
 
+    setJournalInlineError((current) => (current?.id === journalId ? null : current));
     setManagementError("");
     const teacherName = userProfile?.name || "Guru";
     const updatePayload: {
@@ -1244,7 +1282,13 @@ export default function TeacherDashboard() {
     setJournalActionLoading(journalId);
     try {
       await updateDoc(doc(db, "journals", journalId), updatePayload);
-      await fetchClassJournals();
+      setJournals((current) =>
+        current.map((item) =>
+          item.id === journalId
+            ? { ...item, ...updatePayload, updatedAt: new Date() }
+            : item
+        )
+      );
     } catch {
       setManagementError("Status jurnal gagal diperbarui. Periksa koneksi/izin dan coba lagi.");
       return;
@@ -1529,23 +1573,22 @@ export default function TeacherDashboard() {
     let timeoutId: number | undefined;
     const scheduleRefresh = () => {
       const now = new Date();
-      const day = now.getDay();
-      const nextRefresh = new Date(now);
+      const jakartaParts = getJakartaDateParts(now);
+      const weekday = getJakartaWeekdayIndex(now);
+      const daysUntilMonday = weekday === 1 ? 0 : (8 - weekday) % 7;
+      const nextMondayAtEight = new Date(
+        Date.UTC(jakartaParts.year, jakartaParts.month - 1, jakartaParts.day + daysUntilMonday, 8, 0, 0, 0) - 7 * 60 * 60 * 1000
+      );
 
-      if (day === 1 && now.getHours() >= 8) {
-        nextRefresh.setDate(nextRefresh.getDate() + 7);
-      } else {
-        const daysUntilMonday = day === 1 ? 0 : (8 - day) % 7;
-        nextRefresh.setDate(nextRefresh.getDate() + daysUntilMonday);
+      if (weekday === 1 && now.getTime() >= nextMondayAtEight.getTime()) {
+        nextMondayAtEight.setUTCDate(nextMondayAtEight.getUTCDate() + 7);
       }
-
-      nextRefresh.setHours(8, 0, 0, 0);
 
       timeoutId = window.setTimeout(() => {
         setLeaderboardRefreshKey(new Date().toISOString());
         void fetchClassJournals();
         scheduleRefresh();
-      }, Math.max(nextRefresh.getTime() - now.getTime(), 0));
+      }, Math.max(nextMondayAtEight.getTime() - now.getTime(), 0));
     };
 
     scheduleRefresh();
@@ -1668,7 +1711,7 @@ export default function TeacherDashboard() {
   }, [mentoringClassFilter, mentoringSearch, studentsNeedingAttention]);
 
   const selectedStudentData = useMemo(
-    () => studentSummaries.find((s) => s.name === selectedStudent) || null,
+    () => studentSummaries.find((s) => s.key === selectedStudent) || null,
     [studentSummaries, selectedStudent]
   );
 
@@ -1698,7 +1741,7 @@ export default function TeacherDashboard() {
   );
 
   const reportSelectedStudentSummary: StudentSummary | null = useMemo(
-    () => (reportStudent === "all" ? null : reportStudentSummaries.find((s) => s.name === reportStudent) || null),
+    () => (reportStudent === "all" ? null : reportStudentSummaries.find((s) => s.key === reportStudent) || null),
     [reportStudentSummaries, reportStudent]
   );
 
@@ -1706,7 +1749,7 @@ export default function TeacherDashboard() {
     () =>
       reportStudent === "all"
         ? reportStudentSummaries
-        : reportStudentSummaries.filter((s) => s.name === reportStudent),
+        : reportStudentSummaries.filter((s) => s.key === reportStudent),
     [reportStudentSummaries, reportStudent]
   );
 
@@ -1790,10 +1833,11 @@ export default function TeacherDashboard() {
       if (reportStudent !== "all" && reportSelectedStudentSummary) {
         // Laporan personal: rincian jurnal siswa itu pada periode terpilih.
         const rows = buildDetailedRows([reportSelectedStudentSummary]);
+        const studentSlug = reportSelectedStudentSummary.name.trim().replace(/\s+/g, "_");
         downloadCSV(
           DETAILED_HEADERS,
           rows,
-          `laporan-personal-${reportStudent}-${reportPeriod === "all" ? "semua" : reportMonth}-${todayStr}.csv`
+          `laporan-personal-${studentSlug}-${reportPeriod === "all" ? "semua" : reportMonth}-${todayStr}.csv`
         );
       } else {
         // Semua siswa: satu baris per buku, ditambah baris untuk siswa yang
@@ -1945,49 +1989,59 @@ export default function TeacherDashboard() {
         {/* ---- Header ---- */}
         <header className="sticky top-2 z-30 w-full mb-4 sm:mb-6">
           <div className="relative overflow-hidden rounded-[28px] border border-emerald-200/80 bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-500 p-[1px] shadow-[0_18px_42px_-20px_rgba(16,185,129,0.9)]">
-            <div className="relative flex flex-col gap-4 overflow-hidden rounded-[27px] bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.2),_transparent_28%),linear-gradient(135deg,rgba(5,46,22,0.94),rgba(6,95,70,0.92),rgba(13,148,136,0.9))] px-4 py-4 sm:px-5 sm:py-4 text-white backdrop-blur-md">
-              <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-white/10 blur-3xl" />
-              <div className="absolute -bottom-12 left-1/4 h-28 w-28 rounded-full bg-emerald-200/10 blur-3xl" />
+            <div className="relative flex flex-col gap-3 overflow-hidden rounded-[27px] bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.2),_transparent_28%),linear-gradient(135deg,rgba(5,46,22,0.94),rgba(6,95,70,0.92),rgba(13,148,136,0.9))] px-3.5 py-3.5 sm:px-5 sm:py-4 text-white backdrop-blur-md">
+              <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-white/10 blur-3xl sm:h-36 sm:w-36" />
+              <div className="absolute -bottom-12 left-1/4 h-24 w-24 rounded-full bg-emerald-200/10 blur-3xl sm:h-28 sm:w-28" />
 
-              <div className="relative flex items-start justify-between gap-3">
-                <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+              <div className="relative flex items-start justify-between gap-2.5 sm:gap-3">
+                <div className="flex min-w-0 items-center gap-2.5 sm:gap-4">
                   <div className="relative shrink-0">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-[18px] border border-white/20 bg-white/10 shadow-lg shadow-emerald-950/20 backdrop-blur-sm">
-                      <Image src="/asset/literakarmascot.png" alt="Literakar Mascot" width={52} height={52} className="h-12 w-12 object-cover" />
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/10 shadow-lg shadow-emerald-950/20 backdrop-blur-sm sm:h-14 sm:w-14 sm:rounded-[18px]">
+                      <Image src="/asset/literakarmascot.png" alt="Literakar Mascot" width={52} height={52} className="h-9 w-9 object-cover sm:h-12 sm:w-12" />
                     </div>
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <p className="text-[10px] uppercase tracking-[0.2em] text-emerald-50/80">{todayLabel}</p>
-                    <h1 className="mt-1 text-xl sm:text-2xl font-bold tracking-tight text-white">
+                    <p className="text-[9px] uppercase tracking-[0.16em] text-emerald-50/80 sm:text-[10px] sm:tracking-[0.2em]">{todayLabel}</p>
+                    <h1 className="mt-0.5 text-lg font-bold leading-tight tracking-tight text-white sm:mt-1 sm:text-2xl">
                       Selamat Datang, Guru {teacherName}!
                     </h1>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0 sm:gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleManualRefresh()}
+                    disabled={isRefreshingData}
+                    aria-label="Muat ulang data"
+                    title="Muat ulang data"
+                    className={`flex h-8 w-8 items-center justify-center rounded-xl border transition active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-9 ${darkMode ? "border-emerald-700 bg-slate-700 text-emerald-300 hover:bg-slate-600" : "border-white/20 bg-white/10 text-white hover:bg-white/15"}`}
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${isRefreshingData ? "animate-spin" : ""}`} />
+                  </button>
                   <button
                     type="button"
                     onClick={toggleDarkMode}
                     aria-label={darkMode ? "Aktifkan mode terang" : "Aktifkan mode gelap"}
                     title={darkMode ? "Mode terang" : "Mode gelap"}
-                    className={`flex h-9 w-9 items-center justify-center rounded-xl border transition active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 ${darkMode ? "border-emerald-700 bg-slate-700 text-amber-300 hover:bg-slate-600" : "border-white/20 bg-white/10 text-white hover:bg-white/15"}`}
+                    className={`flex h-8 w-8 items-center justify-center rounded-xl border transition active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 sm:h-9 sm:w-9 ${darkMode ? "border-emerald-700 bg-slate-700 text-amber-300 hover:bg-slate-600" : "border-white/20 bg-white/10 text-white hover:bg-white/15"}`}
                   >
-                    {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+                    {darkMode ? <Sun className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Moon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
                   </button>
                   <button
                     type="button"
                     onClick={logout}
                     aria-label="Keluar"
                     title="Keluar"
-                    className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-white transition hover:bg-white/15 active:scale-[0.98]"
+                    className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-white transition hover:bg-white/15 active:scale-[0.98] sm:h-9 sm:w-9"
                   >
-                    <LogOut className="w-4 h-4" />
+                    <LogOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </button>
                 </div>
               </div>
 
-              <div className="relative mt-1 text-sm sm:text-base text-emerald-50/90 text-justify leading-relaxed">
+              <div className="relative text-xs leading-relaxed text-emerald-50/90 text-justify sm:mt-1 sm:text-base">
                 Semoga hari ini membawa semangat baru, fokus, dan inspirasi untuk terus membimbing siswa-siswi menuju prestasi terbaik.
               </div>
 
@@ -2080,7 +2134,7 @@ export default function TeacherDashboard() {
               />
               <StatCard
                 label="Perlu Memberi Feedback Jurnal"
-                value={classStats.totalMenunggu}
+                value={missingValidationFeedbackByClass.reduce((total, [, count]) => total + count, 0)}
                 icon={<Mail className="w-4 h-4" />}
                 color="blue"
               />
@@ -2254,10 +2308,10 @@ export default function TeacherDashboard() {
                 </p>
               ) : (
                 <div className="space-y-2">
-                  {filteredStudents.map((s, index) => (
+                  {filteredStudents.map((s) => (
                     <button
-                      key={getStudentListKey(s.name, s.classCode, index)}
-                      onClick={() => setSelectedStudent(s.name)}
+                      key={s.key}
+                      onClick={() => setSelectedStudent(s.key)}
                       className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 p-3 rounded-xl bg-emerald-50/70 hover:bg-emerald-100/70 active:scale-[0.99] transition text-left"
                     >
                       <div className="min-w-0">
@@ -2437,8 +2491,8 @@ export default function TeacherDashboard() {
                       <span className="text-[11px] text-emerald-700/60">{students.length} siswa</span>
                     </div>
                     <div className="space-y-3">
-                    {students.map((s, index) => (
-                  <div key={getStudentListKey(s.name, s.classCode, index)} className="border border-orange-200 bg-orange-50/80 p-3 sm:p-4 rounded-2xl">
+                    {students.map((s) => (
+                  <div key={s.key} className="border border-orange-200 bg-orange-50/80 p-3 sm:p-4 rounded-2xl">
                     <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:justify-between sm:items-start sm:gap-4">
                       <div className="flex gap-3">
                         <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
@@ -2454,13 +2508,13 @@ export default function TeacherDashboard() {
                           </p>
                           <ul className="list-disc list-inside text-xs text-slate-600 mt-1 space-y-0.5">
                             {s.reasons.map((r, i) => (
-                              <li key={`${s.name}-${r}-${i}`}>{r}</li>
+                              <li key={`${s.key}-${r}-${i}`}>{r}</li>
                             ))}
                           </ul>
                         </div>
                       </div>
                       <button
-                        onClick={() => setSelectedStudent(s.name)}
+                        onClick={() => setSelectedStudent(s.key)}
                         className="w-full sm:w-auto shrink-0 px-3 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700 active:scale-[0.98] transition"
                       >
                         Lihat Detail
@@ -2475,8 +2529,8 @@ export default function TeacherDashboard() {
             )}
             <p className="text-xs text-emerald-700/50 mt-4">
               Catatan: daftar &quot;belum pernah mengirim jurnal&quot; diambil dari akun bertipe
-              &quot;student&quot; di koleksi <code>users</code>. Pencocokan masih berdasarkan nama
-              (bukan ID akun) — pastikan nama di jurnal sama persis dengan nama saat mendaftar.
+              &quot;student&quot; di koleksi <code>users</code>. Siswa dengan nama yang sama kini
+              dibedakan berdasarkan UID akun, bukan nama saja.
             </p>
           </div>
         )}
@@ -2616,7 +2670,10 @@ export default function TeacherDashboard() {
                   return (
                     <div
                       key={j.id}
-                      className="border border-emerald-100 p-3 sm:p-4 rounded-2xl bg-emerald-50/50 flex flex-col gap-2.5 relative overflow-hidden"
+                      id={`journal-card-${j.id}`}
+                      className={`border p-3 sm:p-4 rounded-2xl bg-emerald-50/50 flex flex-col gap-2.5 relative overflow-hidden transition-colors ${
+                        journalInlineError?.id === j.id ? "border-red-300 ring-2 ring-red-200" : "border-emerald-100"
+                      }`}
                     >
                       <span className={`absolute left-0 top-0 bottom-0 w-1 ${statusInfo.dotClass}`} />
                       <div className="flex flex-col items-start gap-2 pl-1 sm:flex-row sm:items-center sm:justify-between">
@@ -2629,7 +2686,7 @@ export default function TeacherDashboard() {
                             className="mt-1 h-4 w-4 shrink-0 accent-emerald-600"
                           />
                           <button
-                            onClick={() => setSelectedStudent(j.studentName)}
+                            onClick={() => setSelectedStudent(getStudentIdentityKey(j.studentId, j.studentName, j.classCode))}
                             className="max-w-full text-left font-bold text-emerald-900 hover:underline break-words"
                           >
                             {j.studentName}
@@ -2696,15 +2753,26 @@ export default function TeacherDashboard() {
                         <strong>Nilai Karakter:</strong> {getCharacterList(j).join(", ") || "-"}
                       </p>
                       <p className="text-xs sm:text-sm leading-relaxed text-emerald-700/70 italic break-words pl-1 text-justify">&quot;{j.summary}&quot;</p>
+                      {journalInlineError?.id === j.id && (
+                        <p className="ml-1 flex items-start gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs leading-relaxed text-red-700 text-justify">
+                          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                          {journalInlineError.message}
+                        </p>
+                      )}
                       <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center pl-1">
                         <input
                           type="text"
                           placeholder={statusInfo.key === "approved" ? "Tambahkan feedback validasi..." : "Umpan balik / alasan revisi..."}
-                          className="min-w-0 w-full flex-1 p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition"
+                          className={`min-w-0 w-full flex-1 p-2 text-sm bg-white border rounded-xl outline-none focus:ring-2 transition ${
+                            journalInlineError?.id === j.id
+                              ? "border-red-300 focus:ring-red-300 focus:border-red-400"
+                              : "border-emerald-200 focus:ring-emerald-400 focus:border-emerald-400"
+                          }`}
                           value={feedbackInput[j.id] ?? j.teacherFeedback ?? ""}
-                          onChange={(e) =>
-                            setFeedbackInput({ ...feedbackInput, [j.id]: e.target.value })
-                          }
+                          onChange={(e) => {
+                            setFeedbackInput({ ...feedbackInput, [j.id]: e.target.value });
+                            if (journalInlineError?.id === j.id) setJournalInlineError(null);
+                          }}
                         />
                         <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
                           <button
@@ -3133,8 +3201,8 @@ export default function TeacherDashboard() {
                         <option value="all">Semua siswa</option>
                         {reportStudentsGroupedByClass.map((group) => (
                           <optgroup key={group.classCode} label={`Kelas ${group.classCode}`}>
-                            {group.students.map((s, index) => (
-                              <option key={getStudentListKey(s.name, s.classCode, index)} value={s.name}>
+                            {group.students.map((s) => (
+                              <option key={s.key} value={s.key}>
                                 {s.name}
                               </option>
                             ))}
@@ -3184,7 +3252,7 @@ export default function TeacherDashboard() {
               {reportView === "siswa"
                 ? reportStudent === "all"
                   ? `Menampilkan ${reportStudentSummariesForExport.length} siswa (${reportPeriodLabel}).`
-                  : `Laporan personal ${reportStudent} (${reportPeriodLabel}) · ${
+                  : `Laporan personal ${reportSelectedStudentSummary?.name ?? "siswa ini"} (${reportPeriodLabel}) · ${
                       reportSelectedStudentSummary?.totalJournals ?? 0
                     } jurnal.`
                 : `Menampilkan ${reportClassStudentSummaries.length} siswa untuk ${
@@ -3347,8 +3415,8 @@ export default function TeacherDashboard() {
                       <>
                         {/* Mobile: kartu */}
                         <div className="grid grid-cols-1 xs:grid-cols-2 gap-2.5 md:hidden">
-                          {reportStudentSummariesForExport.map((s, index) => (
-                            <StudentSummaryCard key={getStudentListKey(s.name, s.classCode, index)} s={s} />
+                          {reportStudentSummariesForExport.map((s) => (
+                            <StudentSummaryCard key={s.key} s={s} />
                           ))}
                         </div>
                         {/* Desktop: tabel */}
@@ -3368,8 +3436,8 @@ export default function TeacherDashboard() {
                               </tr>
                             </thead>
                             <tbody>
-                              {reportStudentSummariesForExport.map((s, index) => (
-                                <tr key={getStudentListKey(s.name, s.classCode, index)} className="border-b border-emerald-50 last:border-0 hover:bg-emerald-50/40 transition-colors">
+                              {reportStudentSummariesForExport.map((s) => (
+                                <tr key={s.key} className="border-b border-emerald-50 last:border-0 hover:bg-emerald-50/40 transition-colors">
                                   <td className="py-2 font-medium text-emerald-900">{s.name}</td>
                                   <td className="py-2 text-emerald-800/80">{s.classCode}</td>
                                   <td className="py-2 text-emerald-800/80">{formatGender(s.gender)}</td>
@@ -3395,7 +3463,7 @@ export default function TeacherDashboard() {
                   <div className="space-y-4">
                     {!reportSelectedStudentSummary || reportSelectedStudentSummary.totalJournals === 0 ? (
                       <p className="text-sm text-emerald-700/60">
-                        Belum ada jurnal dari {reportStudent} pada periode ini.
+                        Belum ada jurnal dari {reportSelectedStudentSummary?.name ?? "siswa ini"} pada periode ini.
                       </p>
                     ) : (
                       <>
@@ -3562,7 +3630,7 @@ export default function TeacherDashboard() {
         </h1>
         <p className="text-sm mb-1">
           {reportView === "siswa"
-            ? reportStudent === "all" ? "Semua siswa" : `Siswa: ${reportStudent}`
+            ? reportStudent === "all" ? "Semua siswa" : `Siswa: ${reportSelectedStudentSummary?.name ?? "-"}`
             : reportClass === "all" ? "Semua kelas" : `Kelas: ${reportClass}`}
         </p>
         <p className="text-sm mb-4">Periode: {reportPeriodLabel} · Dicetak pada {formatTanggal(new Date())}</p>
@@ -3717,19 +3785,17 @@ export default function TeacherDashboard() {
 
 function buildLeaderboard(journalsInput: Journal[], limit = 10, refreshKey?: string): LeaderboardEntry[] {
   const windowRef = refreshKey ? new Date(refreshKey) : new Date();
-  const { start, end } = getPreviousWeekWindow(windowRef);
+  const snapshotCutoff = getLatestMondaySnapshotCutoff(windowRef);
   const statsByStudent = new Map<
     string,
     { studentName: string; classCode: string; journalCount: number; finishedTitles: Set<string> }
   >();
 
   journalsInput.forEach((journal) => {
-    if (!journal.studentId || !journal.createdAt) return;
+    if (!journal.studentId || journal.status !== "approved") return;
 
     const createdAt = toDateSafe(journal.createdAt);
-    if (!createdAt || createdAt < start || createdAt > end) return;
-
-    if (journal.status !== "approved") return;
+    if (!createdAt || createdAt > snapshotCutoff) return;
 
     const stats = statsByStudent.get(journal.studentId) || {
       studentName: journal.studentName || "Siswa",

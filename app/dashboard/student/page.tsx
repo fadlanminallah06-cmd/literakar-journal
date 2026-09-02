@@ -18,6 +18,7 @@ import {
 import { useRouter } from "next/navigation";
 import {
   LogOut,
+  RefreshCw,
   BookOpen,
   Flame,
   CalendarCheck,
@@ -100,6 +101,73 @@ const CHARACTER_OPTIONS = [
 ];
 
 const GENRE_SUGGESTIONS = ["Fiksi", "Non-Fiksi", "Petualangan", "Fantasi", "Biografi", "Sains", "Sejarah"];
+
+interface BookRecommendation {
+  title: string;
+  author: string;
+}
+
+/** Rekomendasi buku statis berdasarkan judul yang paling sering dicatat
+ *  siswa — "karena kamu sering baca buku ini, coba juga buku-buku ini".
+ *  Kunci memakai judul huruf kecil supaya cocok dengan input bebas-teks
+ *  siswa di form jurnal (yang di-lowercase saat dibandingkan). */
+const BOOK_RECOMMENDATIONS: Record<string, BookRecommendation[]> = {
+  "laskar pelangi": [
+    { title: "Sang Pemimpi", author: "Andrea Hirata" },
+    { title: "Edensor", author: "Andrea Hirata" },
+    { title: "Negeri 5 Menara", author: "Ahmad Fuadi" },
+  ],
+  "bumi manusia": [
+    { title: "Anak Semua Bangsa", author: "Pramoedya Ananta Toer" },
+    { title: "Jejak Langkah", author: "Pramoedya Ananta Toer" },
+    { title: "Gadis Pantai", author: "Pramoedya Ananta Toer" },
+  ],
+  "negeri 5 menara": [
+    { title: "Ranah 3 Warna", author: "Ahmad Fuadi" },
+    { title: "Rantau 1 Muara", author: "Ahmad Fuadi" },
+    { title: "Laskar Pelangi", author: "Andrea Hirata" },
+  ],
+  "bumi": [
+    { title: "Bulan", author: "Tere Liye" },
+    { title: "Matahari", author: "Tere Liye" },
+    { title: "Bintang", author: "Tere Liye" },
+  ],
+  "matahari": [
+    { title: "Bumi", author: "Tere Liye" },
+    { title: "Bulan", author: "Tere Liye" },
+    { title: "Ceros dan Batozar", author: "Tere Liye" },
+  ],
+  "si anak kuat": [
+    { title: "Si Anak Pintar", author: "Tere Liye" },
+    { title: "Si Anak Cahaya", author: "Tere Liye" },
+    { title: "Si Anak Spesial", author: "Tere Liye" },
+  ],
+  "habibie & ainun": [
+    { title: "Sang Pencerah", author: "Akmal Nasery Basral" },
+    { title: "Chairul Tanjung Si Anak Singkong", author: "Tjahja Gunawan Diredja" },
+  ],
+  "sang pencerah": [
+    { title: "Habibie & Ainun", author: "B.J. Habibie" },
+    { title: "Gajah Mada", author: "Langit Kresna Hariadi" },
+  ],
+  "supernova: ksatria, puteri, dan bintang jatuh": [
+    { title: "Supernova: Akar", author: "Dee Lestari" },
+    { title: "Supernova: Petir", author: "Dee Lestari" },
+    { title: "Perahu Kertas", author: "Dee Lestari" },
+  ],
+  "atomic habits": [
+    { title: "Filosofi Teras", author: "Henry Manampiring" },
+    { title: "Sapiens: Riwayat Singkat Umat Manusia", author: "Yuval Noah Harari" },
+  ],
+  "sapiens: riwayat singkat umat manusia": [
+    { title: "Homo Deus", author: "Yuval Noah Harari" },
+    { title: "Atomic Habits", author: "James Clear" },
+  ],
+  "gajah mada": [
+    { title: "Arus Balik", author: "Pramoedya Ananta Toer" },
+    { title: "Sang Pencerah", author: "Akmal Nasery Basral" },
+  ],
+};
 
 function toDateSafe(
   value: Date | string | number | { toDate?: () => Date } | null | undefined
@@ -212,19 +280,24 @@ function getRankBadgeStyle(rank: number, dark: boolean): string {
   return dark ? "bg-slate-600 text-emerald-100" : "bg-emerald-200 text-emerald-800";
 }
 
-function getPreviousWeekWindow(now = new Date()): { start: Date; end: Date } {
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
+function getJakartaWeekdayIndex(date: Date): number {
+  const parts = getJakartaDateParts(date);
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay();
+}
 
-  const day = start.getDay();
-  const daysSinceMonday = (day + 6) % 7;
-  start.setDate(start.getDate() - daysSinceMonday - 7);
+function getLatestMondaySnapshotCutoff(now = new Date()): Date {
+  const parts = getJakartaDateParts(now);
+  const weekday = getJakartaWeekdayIndex(now);
+  const daysSinceMonday = (weekday + 6) % 7;
+  const currentMondayUtcMs = Date.UTC(parts.year, parts.month - 1, parts.day - daysSinceMonday, 8, 0, 0, 0);
+  const currentMondayAtEight = new Date(currentMondayUtcMs - 7 * 60 * 60 * 1000);
 
-  const end = new Date(start);
-  end.setDate(start.getDate() + 6);
-  end.setHours(23, 59, 59, 999);
+  if (now.getTime() < currentMondayAtEight.getTime()) {
+    const previousMondayUtcMs = Date.UTC(parts.year, parts.month - 1, parts.day - daysSinceMonday - 7, 8, 0, 0, 0);
+    return new Date(previousMondayUtcMs - 7 * 60 * 60 * 1000);
+  }
 
-  return { start, end };
+  return currentMondayAtEight;
 }
 
 /* ------------------------------------------------------------------ */
@@ -947,12 +1020,12 @@ function MyProgressChart({ journals, dark }: { journals: Journal[]; dark: boolea
   const labelColor = dark ? "#6ee7b7" : "#047857";
 
   return (
-    <div className={`p-4 sm:p-5 rounded-2xl shadow-md border ${dark ? "bg-slate-800/80 border-slate-700 shadow-black/20" : "bg-white/90 backdrop-blur-sm shadow-emerald-900/[0.06] border-white"}`}>
+    <div className={`p-3 sm:p-5 rounded-2xl shadow-md border ${dark ? "bg-slate-800/80 border-slate-700 shadow-black/20" : "bg-white/90 backdrop-blur-sm shadow-emerald-900/[0.06] border-white"}`}>
       <h3 className={`text-sm font-semibold mb-2 ${dark ? "text-emerald-200/80" : "text-emerald-800/70"}`}>
         Progres Membacamu (14 hari terakhir)
       </h3>
       <div className="w-full overflow-x-auto">
-        <svg viewBox={`0 0 ${w} ${h}`} className="w-full min-w-[420px] sm:min-w-0 max-w-full h-36 sm:h-40">
+        <svg viewBox={`0 0 ${w} ${h}`} className="w-full min-w-[300px] sm:min-w-0 max-w-full h-32 sm:h-40">
           {[0, 0.25, 0.5, 0.75, 1].map((t) => {
             const y = pad + innerH - t * innerH;
             return <line key={t} x1={pad} y1={y} x2={w - pad} y2={y} stroke={gridColor} strokeWidth="1" />;
@@ -1257,6 +1330,7 @@ export default function StudentDashboard() {
 
   // Fitur #10: mode gelap
   const [darkMode, setDarkMode] = useState(false);
+  const [isRefreshingData, setIsRefreshingData] = useState(false);
 
   const fetchMyJournals = useCallback(async () => {
     if (!user) return;
@@ -1278,19 +1352,21 @@ export default function StudentDashboard() {
     setLeaderboardLoading(true);
     setLeaderboardError("");
     try {
-      const { start, end } = getPreviousWeekWindow();
+      const snapshotCutoff = getLatestMondaySnapshotCutoff();
       const querySnapshot = await getDocs(collection(db, "journals"));
       const statsMap = new Map<
         string,
         { studentName: string; classCode: string; journalCount: number; finishedTitles: Set<string> }
       >();
+      const activeStudentIds = new Set<string>();
 
       querySnapshot.forEach((docSnap) => {
         const data = docSnap.data() as Journal;
+        if (data.studentId) activeStudentIds.add(String(data.studentId));
         if (!data.studentId || normalizeStatus(data.status) !== "approved") return;
 
         const createdAt = toDateSafe(data.createdAt);
-        if (!createdAt || createdAt < start || createdAt > end) return;
+        if (!createdAt || createdAt > snapshotCutoff) return;
 
         const existing = statsMap.get(data.studentId) || {
           studentName: data.studentName || "Siswa",
@@ -1305,17 +1381,18 @@ export default function StudentDashboard() {
         statsMap.set(data.studentId, existing);
       });
 
-      const entries: LeaderboardEntry[] = Array.from(statsMap.entries()).map(([studentId, s]) => ({
+      const entries: LeaderboardEntry[] = Array.from(statsMap.entries()).map(([studentId, stats]) => ({
         studentId,
-        studentName: s.studentName,
-        classCode: s.classCode,
-        journalCount: s.journalCount,
-        booksFinished: s.finishedTitles.size,
+        studentName: stats.studentName,
+        classCode: stats.classCode,
+        journalCount: stats.journalCount,
+        booksFinished: stats.finishedTitles.size,
       }));
 
-      // Data leaderboard hanya dihitung dari minggu sebelumnya dan baru refresh pada
-      // hari Senin pukul 08.00, sesuai kebijakan progres pohon literasi.
+      // Data leaderboard dihitung dari snapshot Senin 08.00 WIB terakhir dan
+      // hanya berubah ketika snapshot berikutnya dibuka pada Senin depan.
       setLeaderboard(sortLeaderboardEntries(entries));
+      setTotalActiveStudents(activeStudentIds.size);
     } catch {
       setLeaderboardError("Gagal memuat leaderboard. Silakan coba lagi.");
     } finally {
@@ -1323,19 +1400,19 @@ export default function StudentDashboard() {
     }
   }, []);
 
-  const fetchActiveStudentCount = useCallback(async () => {
+  const handleManualRefresh = useCallback(async () => {
+    if (isRefreshingData) return;
+    setIsRefreshingData(true);
+    setFormError("");
     try {
-      const snapshot = await getDocs(collection(db, "journals"));
-      const studentIds = new Set<string>();
-      snapshot.forEach((docSnap) => {
-        const data = docSnap.data() as Partial<Journal>;
-        if (data.studentId) studentIds.add(String(data.studentId));
-      });
-      setTotalActiveStudents(studentIds.size);
+      await Promise.all([fetchMyJournals(), fetchLeaderboard()]);
+      setWeeklyWindowKey(new Date().toISOString());
     } catch {
-      setTotalActiveStudents(0);
+      setFormError("Gagal memuat ulang data. Periksa koneksi dan coba lagi.");
+    } finally {
+      setIsRefreshingData(false);
     }
-  }, []);
+  }, [fetchLeaderboard, fetchMyJournals, isRefreshingData]);
 
   useEffect(() => {
     if (!loading && (!user || userProfile?.role !== "student")) {
@@ -1345,53 +1422,32 @@ export default function StudentDashboard() {
 
     if (!user) return;
 
-    queueMicrotask(() => {
-      void fetchActiveStudentCount();
-    });
-
     let timeoutId: number | undefined;
     const scheduleWeeklyRefresh = () => {
       const now = new Date();
-      const day = now.getDay();
-      const hours = now.getHours();
-      const nextRefresh = new Date(now);
+      const jakartaParts = getJakartaDateParts(now);
+      const weekday = getJakartaWeekdayIndex(now);
+      const daysUntilMonday = weekday === 1 ? 0 : (8 - weekday) % 7;
+      const nextMondayAtEight = new Date(
+        Date.UTC(jakartaParts.year, jakartaParts.month - 1, jakartaParts.day + daysUntilMonday, 8, 0, 0, 0) - 7 * 60 * 60 * 1000
+      );
 
-      if (day === 1 && hours >= 8) {
-        nextRefresh.setDate(nextRefresh.getDate() + 7);
-      } else {
-        const daysUntilMonday = day === 1 ? 0 : (8 - day) % 7;
-        nextRefresh.setDate(nextRefresh.getDate() + daysUntilMonday);
+      if (weekday === 1 && now.getTime() >= nextMondayAtEight.getTime()) {
+        nextMondayAtEight.setUTCDate(nextMondayAtEight.getUTCDate() + 7);
       }
-
-      nextRefresh.setHours(8, 0, 0, 0);
 
       timeoutId = window.setTimeout(() => {
         setWeeklyWindowKey(new Date().toISOString());
         void fetchLeaderboard();
         scheduleWeeklyRefresh();
-      }, Math.max(nextRefresh.getTime() - now.getTime(), 0));
+      }, Math.max(nextMondayAtEight.getTime() - now.getTime(), 0));
     };
 
     scheduleWeeklyRefresh();
     return () => {
       if (timeoutId) window.clearTimeout(timeoutId);
     };
-  }, [fetchActiveStudentCount, fetchLeaderboard, loading, router, user, userProfile?.role]);
-
-  useEffect(() => {
-    if (!user || userProfile?.role !== "student") return;
-
-    const unsubscribe = onSnapshot(
-      collection(db, "journals"),
-      () => {
-        void fetchLeaderboard();
-        void fetchActiveStudentCount();
-      },
-      () => setLeaderboardError("Gagal menyinkronkan data leaderboard secara realtime.")
-    );
-
-    return unsubscribe;
-  }, [fetchActiveStudentCount, fetchLeaderboard, user, userProfile?.role]);
+  }, [fetchLeaderboard, loading, router, user, userProfile?.role]);
 
   useEffect(() => {
     if (!loading && (!user || userProfile?.role !== "student")) {
@@ -1570,16 +1626,25 @@ export default function StudentDashboard() {
 
   const approvedTotalPages = useMemo(() => {
     const reference = weeklyWindowKey ? new Date(weeklyWindowKey) : new Date();
-    const { start, end } = getPreviousWeekWindow(reference);
+    const snapshotCutoff = getLatestMondaySnapshotCutoff(reference);
 
     return journals.reduce((acc, journal) => {
       if (normalizeStatus(journal.status) !== "approved") return acc;
       const createdAt = toDateSafe(journal.createdAt);
-      if (!createdAt || createdAt < start || createdAt > end) return acc;
+      if (!createdAt || createdAt > snapshotCutoff) return acc; // ✅ kumulatif s.d. cutoff, skip yang setelahnya
 
       const pages = Number(journal.endPage) - Number(journal.startPage);
       return acc + (Number.isNaN(pages) || pages < 0 ? 0 : pages);
     }, 0);
+  }, [journals, weeklyWindowKey]);
+
+  const badgeJournals = useMemo(() => {
+    const reference = weeklyWindowKey ? new Date(weeklyWindowKey) : new Date();
+    const snapshotCutoff = getLatestMondaySnapshotCutoff(reference);
+    return journals.filter((journal) => {
+      const createdAt = toDateSafe(journal.createdAt);
+      return normalizeStatus(journal.status) === "approved" && Boolean(createdAt) && createdAt! <= snapshotCutoff;
+    });
   }, [journals, weeklyWindowKey]);
 
   const totalBooksFinished = useMemo(() => {
@@ -1590,43 +1655,55 @@ export default function StudentDashboard() {
     return finishedTitles.size;
   }, [journals]);
 
+  // Streak harian, real-time (BUKAN dibekukan mingguan) — dihitung dari
+  // SEMUA jurnal (status apapun, tidak perlu menunggu validasi guru).
+  // Kalau hari ini belum kirim jurnal, tetap cek dari kemarin dulu (supaya
+  // tidak langsung ke-0 di tengah hari sebelum sempat isi jurnal). Tapi
+  // begitu ada 1 hari kalender yang benar-benar bolong, streak putus total
+  // dan mulai dari 0 lagi — bukan menyambung dari streak lama.
   const readingStreak = useMemo(() => {
     const dates = new Set<string>();
     journals.forEach((j) => {
       const d = toDateSafe(j.createdAt);
-      if (d) dates.add(d.toDateString());
+      if (d) dates.add(toJakartaDateKey(d));
     });
     if (dates.size === 0) return 0;
 
-    let streak = 0;
-    const cursor = new Date();
-    cursor.setHours(0, 0, 0, 0);
-    // Jika belum ada jurnal hari ini, cek dari kemarin supaya streak yang masih "hidup" tetap terhitung
-    if (!dates.has(cursor.toDateString())) {
-      cursor.setDate(cursor.getDate() - 1);
+    const nowParts = getJakartaDateParts(new Date());
+    let cursorDay = nowParts.day;
+    const keyFor = (day: number) => toJakartaDateKey(new Date(Date.UTC(nowParts.year, nowParts.month - 1, day, 12)));
+
+    if (!dates.has(keyFor(cursorDay))) {
+      cursorDay -= 1;
     }
-    while (dates.has(cursor.toDateString())) {
+
+    let streak = 0;
+    while (dates.has(keyFor(cursorDay))) {
       streak += 1;
-      cursor.setDate(cursor.getDate() - 1);
+      cursorDay -= 1;
     }
     return streak;
   }, [journals]);
 
-  // Statistik tambahan untuk badge/achievement (jumlah hari aktif minggu ini,
-  // variasi genre & nilai karakter, halaman terbanyak dalam satu jurnal, jam kirim jurnal).
+  // Jumlah hari unik dengan jurnal sejak Senin minggu berjalan (real-time,
+  // timezone Jakarta) — dipakai untuk badge "Rajin Mingguan".
   const weeklyDaysCount = useMemo(() => {
-    const now = new Date();
-    const day = now.getDay();
-    const diffToMonday = day === 0 ? 6 : day - 1;
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - diffToMonday);
-    monday.setHours(0, 0, 0, 0);
-    const set = new Set<string>();
+    const nowParts = getJakartaDateParts(new Date());
+    const weekday = getJakartaWeekdayIndex(new Date());
+    const daysSinceMonday = (weekday + 6) % 7;
+
+    const dates = new Set<string>();
     journals.forEach((j) => {
       const d = toDateSafe(j.createdAt);
-      if (d && d >= monday) set.add(d.toDateString());
+      if (d) dates.add(toJakartaDateKey(d));
     });
-    return set.size;
+
+    let count = 0;
+    for (let offset = 0; offset <= daysSinceMonday; offset += 1) {
+      const key = toJakartaDateKey(new Date(Date.UTC(nowParts.year, nowParts.month - 1, nowParts.day - daysSinceMonday + offset, 12)));
+      if (dates.has(key)) count += 1;
+    }
+    return count;
   }, [journals]);
 
   const genreCount = useMemo(() => {
@@ -1636,6 +1713,42 @@ export default function StudentDashboard() {
     });
     return set.size;
   }, [journals]);
+
+  // Judul buku yang paling sering muncul di jurnal siswa (dihitung dari jumlah
+  // entri jurnal per judul, bukan sekadar sekali muncul) — dipakai sebagai
+  // dasar "karena kamu sering baca buku ini" untuk rekomendasi berikutnya.
+  const favoriteBookInfo = useMemo<{ key: string; label: string; count: number } | null>(() => {
+    const counts = new Map<string, { label: string; count: number }>();
+    journals.forEach((j) => {
+      const raw = j.bookTitle?.trim();
+      if (!raw) return;
+      const key = raw.toLowerCase();
+      const existing = counts.get(key);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        counts.set(key, { label: raw, count: 1 });
+      }
+    });
+    if (counts.size === 0) return null;
+
+    let best: { key: string; label: string; count: number } | null = null;
+    counts.forEach((value, key) => {
+      if (!best || value.count > best.count) {
+        best = { key, label: value.label, count: value.count };
+      }
+    });
+    return best;
+  }, [journals]);
+
+  // Rekomendasi buku dari judul favorit, dikurangi buku yang sudah pernah
+  // dicatat siswa (dicocokkan dari judul, tanpa memandang huruf besar/kecil).
+  const recommendedBooks = useMemo<BookRecommendation[]>(() => {
+    if (!favoriteBookInfo) return [];
+    const pool = BOOK_RECOMMENDATIONS[favoriteBookInfo.key] || [];
+    const readTitles = new Set(journals.map((j) => j.bookTitle.trim().toLowerCase()));
+    return pool.filter((book) => !readTitles.has(book.title.trim().toLowerCase())).slice(0, 3);
+  }, [favoriteBookInfo, journals]);
 
   const characterVarietyCount = useMemo(() => {
     const set = new Set<string>();
@@ -1763,19 +1876,46 @@ export default function StudentDashboard() {
     };
   }, [journals]);
 
-  // Daftar badge/achievement lengkap dengan progres, dihitung dari BADGE_DEFS + statistik siswa.
+  // Daftar badge/achievement lengkap dengan progres dari snapshot jurnal tervalidasi.
   const badges: BadgeComputed[] = useMemo(() => {
+    const finishedTitles = new Set<string>();
+    const totalPagesApproved = badgeJournals.reduce((total, journal) => {
+      if (journal.finished && journal.bookTitle) finishedTitles.add(journal.bookTitle.trim().toLowerCase());
+      const pages = Number(journal.endPage) - Number(journal.startPage);
+      return total + (Number.isNaN(pages) || pages < 0 ? 0 : pages);
+    }, 0);
+
+    const genres = new Set<string>();
+    const characters = new Set<string>();
+    let maxPages = 0;
+    let earlyBird = false;
+    let nightOwl = false;
+    badgeJournals.forEach((journal) => {
+      if (journal.genre?.trim()) genres.add(journal.genre.trim().toLowerCase());
+      (journal.characterValues || []).forEach((value) => {
+        if (value.trim()) characters.add(value.trim().toLowerCase());
+      });
+      const pages = Number(journal.endPage) - Number(journal.startPage);
+      if (!Number.isNaN(pages) && pages > maxPages) maxPages = pages;
+      const date = toDateSafe(journal.createdAt);
+      if (date) {
+        const parts = getJakartaDateParts(date);
+        earlyBird ||= parts.hour < 7;
+        nightOwl ||= parts.hour >= 21;
+      }
+    });
+
     const metrics: Record<BadgeMetricKey, number> = {
-      booksFinished: totalBooksFinished,
+      booksFinished: finishedTitles.size,
       streak: readingStreak,
       weeklyDays: weeklyDaysCount,
-      totalPages,
-      maxSinglePages,
-      journalCount: journals.length,
-      genreCount,
-      characterVarietyCount,
-      earlyBird: earlyBirdEarned ? 1 : 0,
-      nightOwl: nightOwlEarned ? 1 : 0,
+      totalPages: totalPagesApproved,
+      maxSinglePages: maxPages,
+      journalCount: badgeJournals.length,
+      genreCount: genres.size,
+      characterVarietyCount: characters.size,
+      earlyBird: earlyBird ? 1 : 0,
+      nightOwl: nightOwl ? 1 : 0,
     };
     return BADGE_DEFS.map((def) => {
       const raw = metrics[def.metric] ?? 0;
@@ -1784,18 +1924,7 @@ export default function StudentDashboard() {
       const percent = def.target > 0 ? Math.min(100, (raw / def.target) * 100) : 0;
       return { ...def, current, earned, percent };
     });
-  }, [
-    totalBooksFinished,
-    readingStreak,
-    weeklyDaysCount,
-    totalPages,
-    maxSinglePages,
-    journals.length,
-    genreCount,
-    characterVarietyCount,
-    earlyBirdEarned,
-    nightOwlEarned,
-  ]);
+  }, [badgeJournals, readingStreak, weeklyDaysCount]);
 
   const visibleBadges = badges.filter((badge) => {
     if (badgeFilter === "terkunci") return !badge.earned;
@@ -2017,8 +2146,6 @@ export default function StudentDashboard() {
         }
       }
       void fetchMyJournals();
-      // Segarkan juga leaderboard supaya peringkat kelas di Beranda ikut ter-update.
-      void fetchLeaderboard();
     } catch {
       setFormError(editingJournalId ? "Gagal memperbarui jurnal. Silakan coba lagi." : "Gagal menyimpan jurnal. Silakan coba lagi.");
     } finally {
@@ -2073,7 +2200,7 @@ export default function StudentDashboard() {
   ];
 
   return (
-    <div className={`min-h-screen p-3 sm:p-4 md:p-6 relative ${theme.pageBg}`}>
+    <div className={`min-h-screen p-2 sm:p-4 md:p-6 relative ${theme.pageBg}`}>
       {/* Modal perayaan Literakar saat target harian tercapai */}
       <GoalCelebrationModal
         show={showGoalCelebration}
@@ -2090,20 +2217,43 @@ export default function StudentDashboard() {
       </div>
 
       <div className="relative max-w-5xl mx-auto">
-        <header className={`flex flex-wrap justify-between items-center gap-3 mb-4 sm:mb-6 p-3 sm:p-4 rounded-2xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
-          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-            <div className={`hidden sm:flex w-11 h-11 rounded-2xl items-center justify-center shrink-0 ${darkMode ? "bg-emerald-900/60 text-emerald-300" : "bg-emerald-100 text-emerald-700"}`}>
-              <BookOpen className="w-5 h-5" />
+        <header className={`relative overflow-hidden flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 sm:mb-6 p-3.5 sm:p-4 rounded-2xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
+          <div className={`pointer-events-none absolute inset-x-0 top-0 h-0.5 ${darkMode ? "bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400" : "bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-300"}`} />
+          <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 w-full sm:w-auto">
+            <div className={`flex w-10 h-10 sm:w-11 sm:h-11 rounded-2xl items-center justify-center shrink-0 ${darkMode ? "bg-emerald-900/60 text-emerald-300" : "bg-emerald-100 text-emerald-700"}`}>
+              <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
             <div className="min-w-0">
-              <h1 className={`text-base sm:text-xl font-bold tracking-tight truncate ${theme.headingText}`}>Dashboard Siswa</h1>
-              <p className={`text-xs sm:text-sm ${theme.bodyText}`}>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className={`text-base sm:text-xl font-bold tracking-tight truncate ${theme.headingText}`}>Dashboard Siswa</h1>
+                <span className={`text-[9px] sm:text-[10px] uppercase tracking-[0.14em] font-bold px-1.5 py-0.5 rounded-full border ${darkMode ? "border-emerald-700 bg-emerald-900/40 text-emerald-300" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+                  Literakar
+                </span>
+              </div>
+              <p className={`text-xs sm:text-sm mt-0.5 ${theme.bodyText}`}>
                 Kelas: {userProfile?.classCode}
                 {genderLabel && <span className="ml-2">· {genderLabel}</span>}
               </p>
+              <p className={`mt-1 max-w-xl text-xs font-medium leading-relaxed sm:text-sm ${theme.bodyText}`}>
+                Setiap halaman yang kamu baca menumbuhkan cerita, karakter, dan masa depan bersama Literakar.
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center justify-end gap-2 shrink-0 w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={() => void handleManualRefresh()}
+              disabled={isRefreshingData}
+              aria-label="Muat ulang data"
+              title="Muat ulang data"
+              className={`flex items-center justify-center w-9 h-9 sm:w-10 sm:h-10 rounded-xl border transition active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-50 ${
+                darkMode
+                  ? "bg-slate-700 border-slate-600 text-emerald-300 hover:bg-slate-600"
+                  : "bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+              }`}
+            >
+              <RefreshCw className={`w-4 h-4 ${isRefreshingData ? "animate-spin" : ""}`} />
+            </button>
             {/* Fitur #10: tombol mode gelap */}
             <button
               onClick={toggleDarkMode}
@@ -2118,7 +2268,7 @@ export default function StudentDashboard() {
             </button>
             <button
               onClick={logout}
-              className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl text-sm font-semibold hover:bg-red-100 active:scale-[0.98] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+              className="flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 bg-red-50 text-red-600 border border-red-200 rounded-xl text-sm font-semibold hover:bg-red-100 active:scale-[0.98] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
             >
               <LogOut className="w-4 h-4" />
               <span className="hidden sm:inline">Keluar</span>
@@ -2155,35 +2305,39 @@ export default function StudentDashboard() {
         {/* ---- Tab: Beranda ---- */}
         {activeTab === "beranda" && (
           <div className="space-y-4 sm:space-y-6">
-            <div className={`p-4 sm:p-6 rounded-3xl shadow-md border backdrop-blur-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 ${theme.panel}`}>
+            <div className={`p-4 sm:p-6 rounded-3xl shadow-md border backdrop-blur-sm flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between ${theme.panel}`}>
               <div>
                 <h2 className={`text-lg sm:text-xl font-bold tracking-tight ${theme.headingText}`}>Halo, {displayName} 👋</h2>
-                <p className={`text-sm mt-1 ${theme.bodyText}`}>Semangat membaca hari ini!</p>
+                <p className={`text-sm mt-1 ${theme.bodyText}`}>Satu halaman hari ini, satu langkah lebih dekat menuju versi terbaik dirimu.</p>
               </div>
-              <TreeProgressIcon totalPages={approvedTotalPages} dark={darkMode} />
+              <div className="w-full sm:w-auto">
+                <TreeProgressIcon totalPages={approvedTotalPages} dark={darkMode} />
+              </div>
             </div>
 
             {/* Indikator: peringkat siswa di kelasnya sendiri, berdasarkan leaderboard */}
             {myClassRank && (
-              <div className={`p-3.5 sm:p-4 rounded-2xl shadow-md border backdrop-blur-sm flex items-center gap-3 ${theme.panel}`}>
-                <div
-                  className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 ${
-                    myClassRank.rank <= 3
-                      ? "bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-500 text-white shadow-inner shadow-black/10"
-                      : darkMode
-                      ? "bg-slate-700 text-emerald-200"
-                      : "bg-emerald-100 text-emerald-700"
-                  }`}
-                >
-                  <Crown className="w-5 h-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className={`text-xs sm:text-sm font-semibold ${theme.headingText}`}>
-                    Peringkat kamu di kelas: <span className="text-amber-500">#{myClassRank.rank}</span> dari {myClassRank.total} siswa
-                  </p>
-                  <p className={`text-[11px] sm:text-xs mt-0.5 ${theme.mutedText}`}>
-                    Berdasarkan jumlah jurnal terbanyak di Kelas {userProfile?.classCode}
-                  </p>
+              <div className={`p-3.5 sm:p-4 rounded-2xl shadow-md border backdrop-blur-sm flex flex-col gap-3 sm:flex-row sm:items-center ${theme.panel}`}>
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 ${
+                      myClassRank.rank <= 3
+                        ? "bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-500 text-white shadow-inner shadow-black/10"
+                        : darkMode
+                        ? "bg-slate-700 text-emerald-200"
+                        : "bg-emerald-100 text-emerald-700"
+                    }`}
+                  >
+                    <Crown className="w-5 h-5" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-xs sm:text-sm font-semibold ${theme.headingText}`}>
+                      Peringkat kamu di kelas: <span className="text-amber-500">#{myClassRank.rank}</span> dari {myClassRank.total} siswa
+                    </p>
+                    <p className={`text-[11px] sm:text-xs mt-0.5 ${theme.mutedText}`}>
+                      Berdasarkan jumlah jurnal terbanyak di Kelas {userProfile?.classCode}
+                    </p>
+                  </div>
                 </div>
                 <button
                   type="button"
@@ -2191,7 +2345,7 @@ export default function StudentDashboard() {
                     setActiveTab("leaderboard");
                     setLeaderboardSubTab("kelas");
                   }}
-                  className="shrink-0 flex items-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.98] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                  className="shrink-0 flex items-center justify-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.98] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 w-full sm:w-auto"
                 >
                   <span className="hidden xs:inline">Lihat</span>
                   <ChevronRight className="w-3.5 h-3.5" />
@@ -2240,32 +2394,47 @@ export default function StudentDashboard() {
 
             {/* Fitur #9: target membaca harian personal */}
             <div className={`p-4 sm:p-6 rounded-3xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
-              <div className="flex items-center justify-between gap-2 mb-3">
-                <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-3 mb-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-2 min-w-0">
                   <Target className={`w-4 h-4 ${darkMode ? "text-emerald-300" : "text-emerald-700"}`} />
                   <h3 className={`text-sm font-semibold ${theme.headingText}`}>Target Membaca Harian</h3>
                 </div>
-                <span
-                  className={`text-[10px] px-2 py-1 rounded-full font-semibold shrink-0 ${
-                    targetLocked
-                      ? darkMode
-                        ? "bg-emerald-900/50 text-emerald-200 border border-emerald-700"
-                        : "bg-emerald-100 text-emerald-700 border border-emerald-200"
-                      : darkMode
-                        ? "bg-slate-700 text-emerald-200 border border-slate-600"
-                        : "bg-slate-100 text-slate-600 border border-slate-200"
-                  }`}
-                >
-                  {targetLocked ? "Target aktif" : "Belum disimpan"}
-                </span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span
+                    className={`text-[10px] px-2 py-1 rounded-full font-semibold shrink-0 ${
+                      targetLocked
+                        ? darkMode
+                          ? "bg-emerald-900/50 text-emerald-200 border border-emerald-700"
+                          : "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                        : darkMode
+                          ? "bg-slate-700 text-emerald-200 border border-slate-600"
+                          : "bg-slate-100 text-slate-600 border border-slate-200"
+                    }`}
+                  >
+                    {targetLocked ? "Target aktif" : "Belum disimpan"}
+                  </span>
+                  {targetLocked && (
+                    <button
+                      type="button"
+                      onClick={() => setTargetLocked(false)}
+                      className={`inline-flex items-center justify-center rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
+                        darkMode
+                          ? "border-emerald-700/70 bg-emerald-900/30 text-emerald-200 hover:bg-emerald-900/40"
+                          : "border-emerald-200 bg-white/80 text-emerald-700 hover:bg-emerald-50"
+                      }`}
+                    >
+                      Ubah Target
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className={`mb-3 rounded-xl border px-3 py-2 text-xs ${darkMode ? "border-emerald-800 bg-emerald-900/20 text-emerald-200" : "border-emerald-200 bg-emerald-50/80 text-emerald-800"}`}>
                 Target harian kamu adalah <strong>{dailyGoal} halaman per hari</strong>. Kamu bisa menjaga konsistensi membaca setiap hari untuk naik level.
               </div>
 
-              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap w-full">
                   <input
                     type="number"
                     min={1}
@@ -2273,13 +2442,13 @@ export default function StudentDashboard() {
                     value={goalDraft}
                     onChange={(e) => setGoalDraft(e.target.value)}
                     disabled={targetLocked}
-                    className={`w-20 sm:w-24 p-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input} ${targetLocked ? "opacity-60 cursor-not-allowed" : ""}`}
+                    className={`w-full sm:w-20 sm:min-w-[5.5rem] p-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input} ${targetLocked ? "opacity-60 cursor-not-allowed" : ""}`}
                   />
                   <span className={`text-xs ${theme.bodyText}`}>halaman / hari</span>
                   <button
                     onClick={saveDailyGoal}
                     disabled={targetLocked}
-                    className="px-3 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-xl hover:bg-emerald-700 active:scale-[0.98] transition disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:hover:bg-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+                    className="w-full sm:w-auto px-3 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-xl hover:bg-emerald-700 active:scale-[0.98] transition disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:hover:bg-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
                   >
                     Simpan Target
                   </button>
@@ -2310,6 +2479,35 @@ export default function StudentDashboard() {
                 </div>
               </div>
             </div>
+
+            {/* Fitur: rekomendasi buku berdasarkan judul buku yang paling sering dicatat */}
+            {favoriteBookInfo && recommendedBooks.length > 0 && (
+              <div className={`p-4 sm:p-6 rounded-3xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center shrink-0 ${darkMode ? "bg-emerald-900/60 text-emerald-300" : "bg-emerald-100 text-emerald-700"}`}>
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className={`text-sm sm:text-base font-bold tracking-tight ${theme.headingText}`}>Rekomendasi Buku Untukmu</h3>
+                    <p className={`text-xs mt-0.5 ${theme.mutedText}`}>
+                      Karena kamu sering baca: <span className="font-semibold">{favoriteBookInfo.label}</span>
+                    </p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {recommendedBooks.map((book) => (
+                    <div
+                      key={book.title}
+                      className={`p-3 rounded-2xl border flex flex-col gap-1 ${darkMode ? "border-slate-700 bg-slate-700/40" : "border-emerald-100 bg-emerald-50/50"}`}
+                    >
+                      <BookOpen className={`w-4 h-4 mb-1 ${darkMode ? "text-emerald-300" : "text-emerald-600"}`} />
+                      <p className={`text-sm font-semibold leading-snug ${theme.headingText}`}>{book.title}</p>
+                      <p className={`text-xs ${theme.mutedText}`}>{book.author}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Fitur #5: grafik progres membaca pribadi */}
             <MyProgressChart journals={journals} dark={darkMode} />
@@ -2342,6 +2540,11 @@ export default function StudentDashboard() {
                 <h2 className={`text-lg font-bold tracking-tight ${theme.headingText}`}>Badge Saya</h2>
                 <p className={`text-xs mt-1 ${theme.mutedText}`}>
                   Kumpulkan pencapaian dari kebiasaan membaca dan jurnalmu.
+                </p>
+                <p className={`text-[11px] mt-1.5 font-medium ${darkMode ? "text-emerald-300" : "text-emerald-700"}`}>
+                  Badge Jumlah Buku, Halaman &amp; Maraton, serta Eksplorasi &amp; Kebiasaan diperbarui tiap Senin pagi
+                  pukul 08.00 WIB (menunggu validasi guru). Badge Konsistensi (streak &amp; rajin mingguan) tetap
+                  update setiap hari.
                 </p>
               </div>
               <div

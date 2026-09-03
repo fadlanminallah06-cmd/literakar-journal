@@ -39,10 +39,12 @@ export default function LoginPage() {
     try {
       const savedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY);
       if (savedEmail) {
-        setEmail(savedEmail);
-        setRememberMe(true);
+        queueMicrotask(() => {
+          setEmail(savedEmail);
+          setRememberMe(true);
+        });
       } else {
-        setRememberMe(false);
+        queueMicrotask(() => setRememberMe(false));
       }
     } catch {
       // localStorage tidak tersedia (mis. SSR/privasi browser) — abaikan, form tetap kosong.
@@ -66,11 +68,15 @@ export default function LoginPage() {
       let userDoc;
       try {
         userDoc = await getDoc(doc(db, "users", res.user.uid));
-      } catch (profileErr: any) {
+      } catch (profileErr: unknown) {
         // Login Auth berhasil, tapi baca profil Firestore gagal
         // (misal permission-denied karena dokumen belum ada, atau rules bermasalah).
         await signOut(auth);
-        if (profileErr?.code === "permission-denied") {
+        const profileErrorCode =
+          typeof profileErr === "object" && profileErr !== null && "code" in profileErr
+            ? profileErr.code
+            : undefined;
+        if (profileErrorCode === "permission-denied") {
           setError(
             "Profil akun bermasalah (akses ditolak). Hubungi admin untuk memperbaiki akun ini."
           );
@@ -105,7 +111,7 @@ export default function LoginPage() {
         await signOut(auth);
         setError("Profil akun tidak ditemukan. Hubungi admin untuk mendaftarkan ulang profil kamu.");
       }
-    } catch (err) {
+    } catch {
       setError("Email atau password salah.");
     } finally {
       setLoading(false);

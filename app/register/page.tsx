@@ -97,7 +97,7 @@ export default function RegisterPage() {
           ...(role === "student" ? { classCode, gender } : {}),
           createdAt: serverTimestamp(),
         });
-      } catch (firestoreErr) {
+      } catch {
         // PENTING: kalau gagal simpan profil, hapus lagi akun Auth-nya
         // supaya tidak ada akun "zombie" (bisa login tapi tanpa profil).
         await createdUser.delete().catch(() => {});
@@ -107,12 +107,13 @@ export default function RegisterPage() {
       }
 
       router.push(role === "teacher" ? "/dashboard/teacher" : "/dashboard/student");
-    } catch (err: any) {
-      if (err?.code) {
-        setError(getAuthErrorMessage(err.code));
-      } else {
-        setError(err?.message || "Gagal mendaftar.");
-      }
+    } catch (err: unknown) {
+      const errorCode =
+        typeof err === "object" && err !== null && "code" in err && typeof err.code === "string"
+          ? err.code
+          : undefined;
+      const errorMessage = err instanceof Error ? err.message : undefined;
+      setError(errorCode ? getAuthErrorMessage(errorCode) : errorMessage || "Gagal mendaftar.");
     } finally {
       setLoading(false);
     }

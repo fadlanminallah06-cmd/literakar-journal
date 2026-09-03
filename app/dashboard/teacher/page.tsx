@@ -953,7 +953,7 @@ export default function TeacherDashboard() {
   const [classSummaryMonth, setClassSummaryMonth] = useState(getCurrentMonthInput());
   const [classSummaryClass, setClassSummaryClass] = useState("all");
   const [editingStudent, setEditingStudent] = useState<RosterStudent | null>(null);
-  const [studentForm, setStudentForm] = useState({ name: "", classCode: "", gender: "", email: "" });
+  const [studentForm, setStudentForm] = useState({ name: "", classCode: "", gender: "" });
   const [selectedStudentsForDelete, setSelectedStudentsForDelete] = useState<Set<string>>(new Set());
   const [managementStudentSearch, setManagementStudentSearch] = useState("");
   const [managementClassFilter, setManagementClassFilter] = useState("all");
@@ -1322,7 +1322,7 @@ export default function TeacherDashboard() {
 
   const startEditingStudent = (student: RosterStudent) => {
     setEditingStudent(student);
-    setStudentForm({ name: student.name, classCode: student.classCode, gender: student.gender || "", email: student.email });
+    setStudentForm({ name: student.name, classCode: student.classCode, gender: student.gender || "" });
     setManagementMessage("");
     setManagementError("");
   };
@@ -1342,11 +1342,6 @@ export default function TeacherDashboard() {
         gender: studentForm.gender,
       };
 
-      // Update email di Firestore jika berubah
-      if (studentForm.email.trim() && studentForm.email !== editingStudent.email) {
-        userUpdateData.email = studentForm.email.trim();
-      }
-
       await updateDoc(doc(db, "users", editingStudent.uid), userUpdateData);
 
       // Update journal documents yang terkait
@@ -1362,7 +1357,7 @@ export default function TeacherDashboard() {
       );
 
       setEditingStudent(null);
-      setStudentForm({ name: "", classCode: "", gender: "", email: "" });
+      setStudentForm({ name: "", classCode: "", gender: "" });
       setManagementMessage("Profil siswa berhasil diperbarui.");
       await Promise.all([fetchAllStudents(), fetchClassJournals()]);
     } catch (error) {
@@ -3068,15 +3063,6 @@ export default function TeacherDashboard() {
                                       <option value="laki-laki">Laki-laki</option>
                                       <option value="perempuan">Perempuan</option>
                                     </select>
-                                  </div>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    <input
-                                      type="email"
-                                      value={studentForm.email}
-                                      onChange={(e) => setStudentForm({ ...studentForm, email: e.target.value })}
-                                      placeholder="Email"
-                                      className="p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
-                                    />
                                   </div>
                                 </div>
                                 <div className="flex gap-2 mt-3">

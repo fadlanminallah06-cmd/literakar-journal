@@ -1370,6 +1370,27 @@ export default function StudentDashboard() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
+  const swipeStartX = useRef<number | null>(null);
+
+  const handleSwipeStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (!window.matchMedia("(hover: none) and (pointer: coarse)").matches) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("nav, button, input, textarea, select, a")) return;
+    swipeStartX.current = event.touches[0]?.clientX ?? null;
+  };
+
+  const handleSwipeEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    const startX = swipeStartX.current;
+    swipeStartX.current = null;
+    if (startX === null) return;
+    const endX = event.changedTouches[0]?.clientX;
+    if (endX === undefined || Math.abs(endX - startX) < 70) return;
+
+    const tabKeys: TabKey[] = ["beranda", "badge", "pohon", "leaderboard", "jurnal", "riwayat"];
+    const currentIndex = tabKeys.indexOf(activeTab);
+    const nextIndex = endX < startX ? currentIndex + 1 : currentIndex - 1;
+    if (nextIndex >= 0 && nextIndex < tabKeys.length) setActiveTab(tabKeys[nextIndex]);
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -2301,7 +2322,11 @@ export default function StudentDashboard() {
   ];
 
   return (
-    <div className={`min-h-screen p-2 sm:p-4 md:p-6 relative ${theme.pageBg}`}>
+    <div
+      className={`min-h-screen p-2 sm:p-4 md:p-6 relative ${theme.pageBg}`}
+      onTouchStart={handleSwipeStart}
+      onTouchEnd={handleSwipeEnd}
+    >
       {/* Modal perayaan Literakar saat target harian tercapai */}
       <GoalCelebrationModal
         show={showGoalCelebration}
@@ -2338,7 +2363,7 @@ export default function StudentDashboard() {
               <p className={`mt-1 max-w-xl text-xs font-medium leading-relaxed sm:text-sm ${theme.bodyText}`}>
                 Setiap halaman yang kamu baca menumbuhkan cerita, karakter, dan masa depan bersama Literakar.
               </p>
-              <div className={`mt-2 flex w-full max-w-xl items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 backdrop-blur-sm ${
+              <div className={`mt-2 flex w-full max-w-xl items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 backdrop-blur-sm lg:max-w-2xl lg:px-4 lg:py-2 ${
                 darkMode ? "border-slate-600 bg-slate-900/40" : "border-emerald-200/80 bg-white/55"
               }`}>
                 {weatherLoading ? (
@@ -2378,14 +2403,14 @@ export default function StudentDashboard() {
                 )}
               </div>
               {weather?.hourly.length ? (
-                <div className="mt-2 w-full max-w-xl">
-                  <p className={`mb-1.5 text-[10px] font-medium ${theme.mutedText}`}>Prakiraan BMKG per 3 jam · dapat berubah</p>
+                <div className="mt-2 w-full max-w-xl lg:max-w-2xl">
+                  <p className={`mb-1.5 text-[10px] font-medium lg:mb-1 ${theme.mutedText}`}>Prakiraan BMKG per 3 jam · dapat berubah</p>
                   <div className="flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     {weather.hourly.map((hour) => {
                       const hourInfo = getWeatherInfo(hour.weatherCode);
                       const HourIcon = hourInfo.Icon;
                       return (
-                        <div key={hour.time} className={`min-w-[4.25rem] shrink-0 rounded-xl border px-2 py-2 text-center ${darkMode ? "border-slate-600 bg-slate-900/35" : "border-emerald-200/80 bg-white/45"}`}>
+                        <div key={hour.time} className={`min-w-[4.25rem] shrink-0 rounded-xl border px-2 py-2 text-center lg:min-w-[3.75rem] lg:px-1.5 lg:py-1.5 ${darkMode ? "border-slate-600 bg-slate-900/35" : "border-emerald-200/80 bg-white/45"}`}>
                           <p className={`text-[10px] font-semibold ${theme.mutedText}`}>{hour.time.slice(11, 16)}</p>
                           <HourIcon className={`mx-auto my-1 h-4 w-4 ${hourInfo.color}`} aria-label={hour.description} />
                           <p className={`text-xs font-bold ${theme.headingText}`}>{Math.round(hour.temperature)}°</p>

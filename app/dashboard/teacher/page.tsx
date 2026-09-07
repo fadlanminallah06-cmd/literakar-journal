@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, useEffect, useMemo, useCallback } from "react";
+import { Fragment, useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/lib/firebase";
@@ -1013,6 +1013,27 @@ export default function TeacherDashboard() {
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
+  const swipeStartX = useRef<number | null>(null);
+
+  const handleSwipeStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (!window.matchMedia("(hover: none) and (pointer: coarse)").matches) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("nav, button, input, textarea, select, a")) return;
+    swipeStartX.current = event.touches[0]?.clientX ?? null;
+  };
+
+  const handleSwipeEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    const startX = swipeStartX.current;
+    swipeStartX.current = null;
+    if (startX === null) return;
+    const endX = event.changedTouches[0]?.clientX;
+    if (endX === undefined || Math.abs(endX - startX) < 70) return;
+
+    const tabKeys: TabKey[] = ["ringkasan", "leaderboard", "pendampingan", "jurnal", "laporan", "kelola"];
+    const currentIndex = tabKeys.indexOf(activeTab);
+    const nextIndex = endX < startX ? currentIndex + 1 : currentIndex - 1;
+    if (nextIndex >= 0 && nextIndex < tabKeys.length) setActiveTab(tabKeys[nextIndex]);
+  };
   // Loading state untuk tombol "Muat Ulang" manual.
   const [isRefreshingData, setIsRefreshingData] = useState(false);
 
@@ -2058,7 +2079,11 @@ export default function TeacherDashboard() {
   ];
 
   return (
-    <div className={`teacher-dashboard ${darkMode ? "teacher-dark" : ""} min-h-screen w-full overflow-x-hidden relative print:bg-white print:p-0 ${darkMode ? "bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950" : "bg-gradient-to-br from-emerald-50 via-green-50 to-teal-100"}`}>
+    <div
+      className={`teacher-dashboard ${darkMode ? "teacher-dark" : ""} min-h-screen w-full overflow-x-hidden relative print:bg-white print:p-0 ${darkMode ? "bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950" : "bg-gradient-to-br from-emerald-50 via-green-50 to-teal-100"}`}
+      onTouchStart={handleSwipeStart}
+      onTouchEnd={handleSwipeEnd}
+    >
       {darkMode && (
         <style>{`
           .teacher-dark [class*="bg-white"] { background-color: rgba(30, 41, 59, 0.88) !important; }
@@ -2085,7 +2110,7 @@ export default function TeacherDashboard() {
         {/* ---- Header ---- */}
         <header className="sticky top-2 z-30 w-full mb-4 sm:mb-6">
           <div className="relative overflow-hidden rounded-[28px] border border-emerald-200/80 bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-500 p-[1px] shadow-[0_18px_42px_-20px_rgba(16,185,129,0.9)]">
-            <div className="relative flex flex-col gap-3 overflow-hidden rounded-[27px] bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.2),_transparent_28%),linear-gradient(135deg,rgba(5,46,22,0.94),rgba(6,95,70,0.92),rgba(13,148,136,0.9))] px-3.5 py-3.5 sm:px-5 sm:py-4 text-white backdrop-blur-md">
+            <div className="relative flex flex-col gap-3 overflow-hidden rounded-[27px] bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.2),_transparent_28%),linear-gradient(135deg,rgba(5,46,22,0.94),rgba(6,95,70,0.92),rgba(13,148,136,0.9))] px-3.5 py-3.5 text-white backdrop-blur-md sm:px-5 sm:py-4 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-6 lg:gap-y-3">
               <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-white/10 blur-3xl sm:h-36 sm:w-36" />
               <div className="absolute -bottom-12 left-1/4 h-24 w-24 rounded-full bg-emerald-200/10 blur-3xl sm:h-28 sm:w-28" />
 
@@ -2137,11 +2162,11 @@ export default function TeacherDashboard() {
                 </div>
               </div>
 
-              <div className="relative text-xs leading-relaxed text-emerald-50/90 text-justify sm:mt-1 sm:text-base">
+              <div className="relative text-xs leading-relaxed text-emerald-50/90 text-justify sm:mt-1 sm:text-base lg:max-w-xl">
                 Semoga hari ini membawa semangat baru, fokus, dan inspirasi untuk terus membimbing siswa-siswi menuju prestasi terbaik.
               </div>
 
-              <div className="relative flex w-full items-center justify-between gap-3 rounded-2xl border border-white/15 bg-black/10 px-3 py-2.5 backdrop-blur-sm sm:max-w-xl sm:px-3.5">
+              <div className="relative flex w-full items-center justify-between gap-3 rounded-2xl border border-white/15 bg-black/10 px-3 py-2.5 backdrop-blur-sm sm:max-w-xl sm:px-3.5 lg:max-w-2xl lg:flex-1 lg:px-4 lg:py-2">
                 {weatherLoading ? (
                   <div className="flex min-w-0 items-center gap-2.5 text-xs text-emerald-50/80">
                     <CloudSun className="h-5 w-5 shrink-0 animate-pulse text-sky-200" />
@@ -2179,14 +2204,14 @@ export default function TeacherDashboard() {
                 )}
               </div>
               {weather?.hourly.length ? (
-                <div className="relative w-full sm:max-w-xl">
-                  <p className="mb-1.5 text-[10px] font-medium text-emerald-50/70">Prakiraan BMKG per 3 jam · dapat berubah</p>
+                <div className="relative w-full sm:max-w-xl lg:max-w-none lg:flex-1">
+                  <p className="mb-1.5 text-[10px] font-medium text-emerald-50/70 lg:mb-1">Prakiraan BMKG per 3 jam · dapat berubah</p>
                   <div className="flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     {weather.hourly.map((hour) => {
                       const hourInfo = getWeatherInfo(hour.weatherCode);
                       const HourIcon = hourInfo.Icon;
                       return (
-                        <div key={hour.time} className="min-w-[4.25rem] shrink-0 rounded-xl border border-white/15 bg-black/10 px-2 py-2 text-center">
+                        <div key={hour.time} className="min-w-[4.25rem] shrink-0 rounded-xl border border-white/15 bg-black/10 px-2 py-2 text-center lg:min-w-[3.75rem] lg:px-1.5 lg:py-1.5">
                           <p className="text-[10px] font-semibold text-emerald-50/80">{hour.time.slice(11, 16)}</p>
                           <HourIcon className={`mx-auto my-1 h-4 w-4 ${hourInfo.color}`} aria-label={hour.description} />
                           <p className="text-xs font-bold text-white">{Math.round(hour.temperature)}°</p>

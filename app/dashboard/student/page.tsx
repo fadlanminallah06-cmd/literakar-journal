@@ -49,6 +49,12 @@ import {
   History,
   TreeDeciduous,
   ChevronRight,
+  ArrowUp,
+  Cloud,
+  CloudRain,
+  CloudSun,
+  CloudLightning,
+  Droplets,
 } from "lucide-react";
 
 interface Journal {
@@ -88,6 +94,33 @@ type NormalizedStatus = "pending" | "revision" | "approved";
 type LeaderboardSubTab = "semua" | "kelas";
 
 type TreeStage = "small" | "young" | "big";
+
+interface WeatherData {
+  temperature: number;
+  apparentTemperature: number;
+  weatherCode: number;
+  high: number;
+  low: number;
+  rainChance: number;
+  hourly: WeatherHour[];
+}
+
+interface WeatherHour {
+  time: string;
+  temperature: number;
+  weatherCode: number;
+  rainChance: number;
+}
+
+function getWeatherInfo(code: number): { label: string; Icon: typeof Sun; color: string } {
+  if (code === 0) return { label: "Cerah", Icon: Sun, color: "text-amber-500" };
+  if (code <= 3) return { label: "Berawan", Icon: CloudSun, color: "text-sky-500" };
+  if (code <= 48) return { label: "Berkabut", Icon: Cloud, color: "text-slate-400" };
+  if (code <= 67 || (code >= 80 && code <= 82)) return { label: "Hujan", Icon: CloudRain, color: "text-sky-600" };
+  if (code <= 77) return { label: "Salju", Icon: Cloud, color: "text-blue-400" };
+  if (code >= 95) return { label: "Badai petir", Icon: CloudLightning, color: "text-amber-500" };
+  return { label: "Berawan", Icon: CloudSun, color: "text-sky-500" };
+}
 
 const CHARACTER_OPTIONS = [
   "Religius",
@@ -1331,6 +1364,69 @@ export default function StudentDashboard() {
   // Fitur #10: mode gelap
   const [darkMode, setDarkMode] = useState(false);
   const [isRefreshingData, setIsRefreshingData] = useState(false);
+  const [showScrollTop, setShowScrollTop] = useState(false);
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [weatherLoading, setWeatherLoading] = useState(true);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const loadWeather = async () => {
+      try {
+        const params = new URLSearchParams({
+          latitude: "-6.192774162647776",
+          longitude: "106.88737103233535",
+          current: "temperature_2m,apparent_temperature,weather_code",
+          daily: "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max",
+          hourly: "temperature_2m,weather_code,precipitation_probability",
+          timezone: "Asia/Jakarta",
+          forecast_days: "1",
+        });
+        const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`, { signal: controller.signal });
+        if (!response.ok) throw new Error("Weather request failed");
+
+        const data = await response.json();
+        setWeather({
+          temperature: Number(data.current.temperature_2m),
+          apparentTemperature: Number(data.current.apparent_temperature),
+          weatherCode: Number(data.current.weather_code),
+          high: Number(data.daily.temperature_2m_max[0]),
+          low: Number(data.daily.temperature_2m_min[0]),
+          rainChance: Number(data.daily.precipitation_probability_max[0]),
+          hourly: data.hourly.time
+            .map((time: string, index: number) => ({
+              time,
+              temperature: Number(data.hourly.temperature_2m[index]),
+              weatherCode: Number(data.hourly.weather_code[index]),
+              rainChance: Number(data.hourly.precipitation_probability[index]),
+            }))
+            .filter((hour: WeatherHour) => {
+              const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Jakarta" }).format(new Date());
+              return hour.time.startsWith(today) && Number(hour.time.slice(11, 13)) >= getJakartaDateParts(new Date()).hour;
+            })
+            .slice(0, 12),
+        });
+      } catch (error) {
+        if (!controller.signal.aborted) console.error("Gagal memuat cuaca Rawamangun", error);
+      } finally {
+        if (!controller.signal.aborted) setWeatherLoading(false);
+      }
+    };
+
+    void loadWeather();
+    return () => controller.abort();
+  }, []);
+
+  useEffect(() => {
+    const handleScroll = () => setShowScrollTop(window.scrollY > 400);
+
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const handleScrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   const fetchMyJournals = useCallback(async () => {
     if (!user) return;
@@ -2020,6 +2116,7 @@ export default function StudentDashboard() {
 
   const displayName = userProfile?.name || "Siswa";
   const genderLabel = formatGender(userProfile?.gender);
+  const weatherInfo = weather ? getWeatherInfo(weather.weatherCode) : null;
 
   const getStatusBadge = (status: string) => {
     if (status === "approved") {
@@ -2237,6 +2334,66 @@ export default function StudentDashboard() {
               <p className={`mt-1 max-w-xl text-xs font-medium leading-relaxed sm:text-sm ${theme.bodyText}`}>
                 Setiap halaman yang kamu baca menumbuhkan cerita, karakter, dan masa depan bersama Literakar.
               </p>
+              <div className={`mt-2 flex w-full max-w-xl items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 backdrop-blur-sm ${
+                darkMode ? "border-slate-600 bg-slate-900/40" : "border-emerald-200/80 bg-white/55"
+              }`}>
+                {weatherLoading ? (
+                  <div className={`flex min-w-0 items-center gap-2.5 text-xs ${theme.bodyText}`}>
+                    <CloudSun className="h-5 w-5 shrink-0 animate-pulse text-sky-500" />
+                    <span>Memuat cuaca Rawamangun...</span>
+                  </div>
+                ) : weather && weatherInfo ? (
+                  <>
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <weatherInfo.Icon className={`h-7 w-7 shrink-0 ${weatherInfo.color}`} aria-hidden="true" />
+                      <div className="min-w-0">
+                        <p className={`truncate text-[10px] font-semibold uppercase tracking-[0.1em] ${theme.mutedText}`}>
+                          Cuaca hari ini · Rawamangun
+                        </p>
+                        <p className={`mt-0.5 truncate text-xs font-semibold sm:text-sm ${theme.headingText}`}>
+                          {weatherInfo.label} · terasa {Math.round(weather.apparentTemperature)}°C
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2.5 text-right">
+                      <div>
+                        <p className={`text-xl font-bold leading-none sm:text-2xl ${theme.headingText}`}>{Math.round(weather.temperature)}°</p>
+                        <p className={`mt-1 text-[10px] ${theme.mutedText}`}>{Math.round(weather.low)}° - {Math.round(weather.high)}°</p>
+                      </div>
+                      <div className={`hidden items-center gap-1 text-[10px] sm:flex sm:text-xs ${theme.mutedText}`}>
+                        <Droplets className="h-3.5 w-3.5" aria-hidden="true" />
+                        {Math.round(weather.rainChance)}%
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className={`flex min-w-0 items-center gap-2 text-xs ${theme.mutedText}`}>
+                    <Cloud className="h-5 w-5 shrink-0 text-sky-500" aria-hidden="true" />
+                    <span>Cuaca Rawamangun belum tersedia.</span>
+                  </div>
+                )}
+              </div>
+              {weather?.hourly.length ? (
+                <div className="mt-2 w-full max-w-xl">
+                  <p className={`mb-1.5 text-[10px] font-medium ${theme.mutedText}`}>Perkiraan beberapa jam ke depan · dapat berubah</p>
+                  <div className="flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                    {weather.hourly.map((hour) => {
+                      const hourInfo = getWeatherInfo(hour.weatherCode);
+                      const HourIcon = hourInfo.Icon;
+                      return (
+                        <div key={hour.time} className={`min-w-[4.25rem] shrink-0 rounded-xl border px-2 py-2 text-center ${darkMode ? "border-slate-600 bg-slate-900/35" : "border-emerald-200/80 bg-white/45"}`}>
+                          <p className={`text-[10px] font-semibold ${theme.mutedText}`}>{hour.time.slice(11, 16)}</p>
+                          <HourIcon className={`mx-auto my-1 h-4 w-4 ${hourInfo.color}`} aria-label={hourInfo.label} />
+                          <p className={`text-xs font-bold ${theme.headingText}`}>{Math.round(hour.temperature)}°</p>
+                          <p className={`mt-0.5 flex items-center justify-center gap-0.5 text-[9px] ${theme.mutedText}`}>
+                            <Droplets className="h-2.5 w-2.5" aria-hidden="true" /> {hour.rainChance}%
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
           <div className="flex items-center justify-end gap-2 shrink-0 w-full sm:w-auto">
@@ -3261,6 +3418,22 @@ export default function StudentDashboard() {
           © PPG Bahasa Indonesia UNJ 2026
         </p>
       </div>
+
+      {showScrollTop && (
+        <button
+          type="button"
+          onClick={handleScrollToTop}
+          aria-label="Kembali ke atas"
+          title="Kembali ke atas"
+          className={`fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] right-4 z-40 flex h-12 w-12 touch-manipulation select-none items-center justify-center rounded-2xl border shadow-lg transition duration-200 hover:-translate-y-0.5 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 motion-reduce:transition-none sm:bottom-7 sm:right-7 sm:h-11 sm:w-11 sm:rounded-full ${
+            darkMode
+              ? "border-emerald-700 bg-slate-800 text-emerald-300 shadow-black/30 hover:bg-slate-700"
+              : "border-emerald-200 bg-white text-emerald-700 shadow-emerald-900/15 hover:bg-emerald-50"
+          }`}
+        >
+          <ArrowUp className="h-5 w-5" />
+        </button>
+      )}
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { Fragment, useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
+import Avatar from "@/lib/AvatarComponent";
 import { db } from "@/lib/firebase";
 import {
   collection,
@@ -937,12 +938,15 @@ function StudentSummaryCard({ s, onOpen }: { s: StudentSummary; onOpen?: () => v
       className="w-full text-left rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3.5 disabled:cursor-default"
     >
       <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="min-w-0">
-          <p className="text-sm font-bold text-emerald-900 truncate">{s.name}</p>
-          <p className="text-[11px] text-emerald-700/60">
-            Kelas {s.classCode}
-            {s.gender ? ` · ${formatGender(s.gender)}` : ""}
-          </p>
+        <div className="flex min-w-0 items-center gap-2">
+          <Avatar gender={s.gender} name={s.name} className="h-9 w-9" />
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-emerald-900 truncate">{s.name}</p>
+            <p className="text-[11px] text-emerald-700/60">
+              Kelas {s.classCode}
+              {s.gender ? ` · ${formatGender(s.gender)}` : ""}
+            </p>
+          </div>
         </div>
         {onOpen && <ChevronRight className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />}
       </div>
@@ -2503,12 +2507,15 @@ export default function TeacherDashboard() {
                       onClick={() => setSelectedStudent(s.key)}
                       className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 p-3 rounded-xl bg-emerald-50/70 hover:bg-emerald-100/70 active:scale-[0.99] transition text-left"
                     >
-                      <div className="min-w-0">
-                        <span className="font-semibold text-emerald-900">{s.name}</span>
-                        <span className="text-xs text-emerald-700/50 ml-2">
-                          Kelas {s.classCode}
-                          {s.gender ? ` · ${formatGender(s.gender)}` : ""}
-                        </span>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Avatar gender={s.gender} name={s.name} className="h-9 w-9" />
+                        <div className="min-w-0">
+                          <span className="font-semibold text-emerald-900">{s.name}</span>
+                          <span className="text-xs text-emerald-700/50 ml-2">
+                            Kelas {s.classCode}
+                            {s.gender ? ` · ${formatGender(s.gender)}` : ""}
+                          </span>
+                        </div>
                       </div>
                       <span className="text-xs text-emerald-700/70 shrink-0">
                         {s.totalJournals} jurnal · {s.totalPagesRead} hlm · {s.booksFinished} buku
@@ -2684,6 +2691,7 @@ export default function TeacherDashboard() {
                   <div key={s.key} className="border border-orange-200 bg-orange-50/80 p-3 sm:p-4 rounded-2xl">
                     <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:justify-between sm:items-start sm:gap-4">
                       <div className="flex gap-3">
+                        <Avatar gender={s.gender} name={s.name} className="h-9 w-9" />
                         <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
                           <AlertTriangle className="w-4 h-4" />
                         </div>
@@ -3202,6 +3210,7 @@ export default function TeacherDashboard() {
                                     <Square className="w-5 h-5 text-emerald-600 opacity-40" />
                                   )}
                                 </button>
+                                <Avatar gender={student.gender} name={student.name} className="h-9 w-9" />
                                 <div className="min-w-0 flex-1">
                                   <p className="font-semibold text-emerald-900 truncate">{student.name}</p>
                                   <p className="text-xs text-emerald-700/60 flex items-center gap-1 flex-wrap mt-0.5">

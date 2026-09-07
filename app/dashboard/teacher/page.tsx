@@ -2094,10 +2094,10 @@ export default function TeacherDashboard() {
     >
       {darkMode && (
         <style>{`
-          .teacher-dark [class*="bg-white"] { background-color: rgba(30, 41, 59, 0.88) !important; }
-          .teacher-dark [class*="bg-emerald-50"] { background-color: rgba(6, 78, 59, 0.28) !important; }
-          .teacher-dark [class*="bg-orange-50"] { background-color: rgba(124, 45, 18, 0.28) !important; }
-          .teacher-dark [class*="bg-yellow-50"] { background-color: rgba(113, 63, 18, 0.28) !important; }
+          .teacher-dark [class*="bg-white"] { background-color: rgba(30, 41, 59, 0.8) !important; }
+          .teacher-dark [class*="bg-emerald-50"] { background-color: rgba(51, 65, 85, 0.5) !important; }
+          .teacher-dark [class*="bg-orange-50"] { background-color: rgba(124, 45, 18, 0.2) !important; }
+          .teacher-dark [class*="bg-yellow-50"] { background-color: rgba(113, 63, 18, 0.2) !important; }
           .teacher-dark [class*="bg-slate-50"] { background-color: rgba(51, 65, 85, 0.5) !important; }
           .teacher-dark [class*="text-emerald-900"] { color: #d1fae5 !important; }
           .teacher-dark [class*="text-emerald-800"] { color: #a7f3d0 !important; }
@@ -2108,7 +2108,7 @@ export default function TeacherDashboard() {
           .teacher-dark [class*="border-emerald-200"] { border-color: rgba(52, 211, 153, 0.36) !important; }
           .teacher-dark [class*="border-white"] { border-color: rgba(71, 85, 105, 0.7) !important; }
           .teacher-dark input, .teacher-dark select { color-scheme: dark; }
-          .teacher-dark input, .teacher-dark select { background-color: rgba(51, 65, 85, 0.7) !important; color: #ecfdf5 !important; border-color: rgba(52, 211, 153, 0.35) !important; }
+          .teacher-dark input, .teacher-dark select { background-color: rgba(51, 65, 85, 0.5) !important; color: #ecfdf5 !important; border-color: rgba(52, 211, 153, 0.35) !important; }
           .teacher-dark input::placeholder { color: rgba(167, 243, 208, 0.5) !important; }
         `}</style>
       )}

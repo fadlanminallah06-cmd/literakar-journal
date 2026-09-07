@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useId, useCallback, useRef, type CSSProperties } from "react";
 import { useAuth } from "@/context/AuthContext";
+import Avatar from "@/lib/AvatarComponent";
 import { db } from "@/lib/firebase";
 import {
   collection,
@@ -2351,11 +2352,15 @@ export default function StudentDashboard() {
       </div>
 
       <div className="relative max-w-5xl mx-auto">
-        <header className={`relative overflow-hidden flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 mb-4 sm:mb-6 p-3.5 sm:p-4 rounded-2xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
+        <header className={`relative overflow-hidden flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-4 lg:gap-5 mb-4 sm:mb-6 p-3.5 sm:p-4 lg:p-5 rounded-2xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
           <div className={`pointer-events-none absolute inset-x-0 top-0 h-0.5 ${darkMode ? "bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400" : "bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-300"}`} />
-          <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 w-full sm:w-auto">
-            <div className={`flex w-10 h-10 sm:w-11 sm:h-11 rounded-2xl items-center justify-center shrink-0 ${darkMode ? "bg-emerald-900/60 text-emerald-300" : "bg-emerald-100 text-emerald-700"}`}>
-              <BookOpen className="w-4 h-4 sm:w-5 sm:h-5" />
+          <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 w-full sm:flex-1">
+            <div className={`flex w-10 h-10 sm:w-11 sm:h-11 rounded-2xl items-center justify-center shrink-0 overflow-hidden ${darkMode ? "bg-emerald-900/60" : "bg-emerald-100"}`}>
+              <Avatar
+                gender={userProfile?.gender}
+                name={displayName}
+                className="w-full h-full"
+              />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
@@ -2371,8 +2376,8 @@ export default function StudentDashboard() {
               <p className={`mt-1 max-w-xl text-xs font-medium leading-relaxed sm:text-sm ${theme.bodyText}`}>
                 Setiap halaman yang kamu baca menumbuhkan cerita, karakter, dan masa depan bersama Literakar.
               </p>
-              <div className={`mt-2 flex w-full max-w-xl items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 backdrop-blur-sm lg:max-w-2xl lg:px-4 lg:py-2 ${
-                darkMode ? "border-slate-600 bg-slate-900/40" : "border-emerald-200/80 bg-white/55"
+              <div className={`mt-2 flex w-full max-w-xl items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 shadow-sm backdrop-blur-sm lg:max-w-2xl lg:px-4 lg:py-2 ${
+                darkMode ? "border-cyan-700/70 bg-gradient-to-r from-cyan-950/70 via-slate-900/60 to-amber-950/40 shadow-cyan-950/30" : "border-cyan-200 bg-gradient-to-r from-cyan-50 via-white to-amber-50 shadow-cyan-900/10"
               }`}>
                 {weatherLoading ? (
                   <div className={`flex min-w-0 items-center gap-2.5 text-xs ${theme.bodyText}`}>
@@ -2410,30 +2415,9 @@ export default function StudentDashboard() {
                   </div>
                 )}
               </div>
-              {weather?.hourly.length ? (
-                <div className="mt-2 w-full max-w-xl lg:max-w-2xl">
-                  <p className={`mb-1.5 text-[10px] font-medium lg:mb-1 ${theme.mutedText}`}>Prakiraan BMKG per 3 jam · dapat berubah</p>
-                  <div className="flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                    {weather.hourly.map((hour) => {
-                      const hourInfo = getWeatherInfo(hour.weatherCode);
-                      const HourIcon = hourInfo.Icon;
-                      return (
-                        <div key={hour.time} className={`min-w-[4.25rem] shrink-0 rounded-xl border px-2 py-2 text-center lg:min-w-[3.75rem] lg:px-1.5 lg:py-1.5 ${darkMode ? "border-slate-600 bg-slate-900/35" : "border-emerald-200/80 bg-white/45"}`}>
-                          <p className={`text-[10px] font-semibold ${theme.mutedText}`}>{hour.time.slice(11, 16)}</p>
-                          <HourIcon className={`mx-auto my-1 h-4 w-4 ${hourInfo.color}`} aria-label={hour.description} />
-                          <p className={`text-xs font-bold ${theme.headingText}`}>{Math.round(hour.temperature)}°</p>
-                          <p className={`mt-0.5 flex items-center justify-center gap-0.5 text-[9px] ${theme.mutedText}`}>
-                            <Droplets className="h-2.5 w-2.5" aria-hidden="true" /> {hour.humidity}%
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : null}
             </div>
           </div>
-          <div className="flex items-center justify-end gap-2 shrink-0 w-full sm:w-auto">
+          <div className="flex items-center justify-end gap-2 shrink-0 w-full sm:w-auto sm:self-start lg:pt-0.5">
             <button
               type="button"
               onClick={() => void handleManualRefresh()}

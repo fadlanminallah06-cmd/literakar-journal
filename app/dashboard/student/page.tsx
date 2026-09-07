@@ -1393,6 +1393,14 @@ export default function StudentDashboard() {
   };
 
   useEffect(() => {
+    document.querySelector<HTMLElement>(`[data-dashboard-tab="${activeTab}"]`)?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "center",
+    });
+  }, [activeTab]);
+
+  useEffect(() => {
     const controller = new AbortController();
     const loadWeather = async () => {
       try {
@@ -2467,6 +2475,7 @@ export default function StudentDashboard() {
             {tabs.map((t) => (
               <button
                 key={t.key}
+                data-dashboard-tab={t.key}
                 onClick={() => setActiveTab(t.key)}
                 className={`shrink-0 whitespace-nowrap px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-150 flex items-center gap-1.5 sm:gap-2 ${
                   activeTab === t.key ? theme.navActive : theme.navInactive

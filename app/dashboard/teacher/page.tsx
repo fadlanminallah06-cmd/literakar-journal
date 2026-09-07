@@ -1034,6 +1034,14 @@ export default function TeacherDashboard() {
     const nextIndex = endX < startX ? currentIndex + 1 : currentIndex - 1;
     if (nextIndex >= 0 && nextIndex < tabKeys.length) setActiveTab(tabKeys[nextIndex]);
   };
+
+  useEffect(() => {
+    document.querySelector<HTMLElement>(`[data-dashboard-tab="${activeTab}"]`)?.scrollIntoView({
+      behavior: "smooth",
+      block: "nearest",
+      inline: "center",
+    });
+  }, [activeTab]);
   // Loading state untuk tombol "Muat Ulang" manual.
   const [isRefreshingData, setIsRefreshingData] = useState(false);
 
@@ -2234,6 +2242,7 @@ export default function TeacherDashboard() {
             {tabs.map((t) => (
               <button
                 key={t.key}
+                data-dashboard-tab={t.key}
                 onClick={() => setActiveTab(t.key)}
                 className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold tracking-wide transition ${
                   activeTab === t.key

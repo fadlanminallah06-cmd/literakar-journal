@@ -2351,7 +2351,7 @@ export default function StudentDashboard() {
         <div className={`absolute -bottom-24 -right-24 w-72 h-72 rounded-full blur-3xl ${theme.blobB}`} />
       </div>
 
-      <div className="relative max-w-5xl mx-auto">
+      <div className="relative w-full max-w-6xl xl:max-w-7xl 2xl:max-w-[96rem] mx-auto lg:px-2">
         <header className={`relative overflow-hidden flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-4 lg:gap-5 mb-4 sm:mb-6 p-3.5 sm:p-4 lg:p-5 rounded-2xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
           <div className={`pointer-events-none absolute inset-x-0 top-0 h-0.5 ${darkMode ? "bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400" : "bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-300"}`} />
           <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 w-full sm:flex-1">
@@ -2484,7 +2484,7 @@ export default function StudentDashboard() {
         {/* ---- Tab: Beranda ---- */}
         {activeTab === "beranda" && (
           <div className="space-y-4 sm:space-y-6">
-            <div className={`p-4 sm:p-6 rounded-3xl shadow-md border backdrop-blur-sm flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between ${theme.panel}`}>
+            <div className={`p-4 sm:p-6 lg:p-7 rounded-3xl shadow-md border backdrop-blur-sm flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between ${theme.panel}`}>
               <div>
                 <h2 className={`text-lg sm:text-xl font-bold tracking-tight ${theme.headingText}`}>Halo, {displayName} 👋</h2>
                 <p className={`text-sm mt-1 ${theme.bodyText}`}>Satu halaman hari ini, satu langkah lebih dekat menuju versi terbaik dirimu.</p>
@@ -2496,7 +2496,7 @@ export default function StudentDashboard() {
 
             {/* Indikator: peringkat siswa di kelasnya sendiri, berdasarkan leaderboard */}
             {myClassRank && (
-              <div className={`p-3.5 sm:p-4 rounded-2xl shadow-md border backdrop-blur-sm flex flex-col gap-3 sm:flex-row sm:items-center ${theme.panel}`}>
+              <div className={`p-3.5 sm:p-4 lg:p-5 rounded-2xl shadow-md border backdrop-blur-sm flex flex-col gap-3 sm:flex-row sm:items-center ${theme.panel}`}>
                 <div className="flex items-center gap-3 min-w-0">
                   <div
                     className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 ${
@@ -2661,7 +2661,7 @@ export default function StudentDashboard() {
 
             {/* Fitur: rekomendasi buku berdasarkan judul buku yang paling sering dicatat */}
             {favoriteBookInfo && recommendedBooks.length > 0 && (
-              <div className={`p-4 sm:p-6 rounded-3xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
+              <div className={`p-4 sm:p-6 lg:p-7 rounded-3xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
                 <div className="flex items-center gap-3 mb-4">
                   <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center shrink-0 ${darkMode ? "bg-emerald-900/60 text-emerald-300" : "bg-emerald-100 text-emerald-700"}`}>
                     <Sparkles className="w-5 h-5" />
@@ -2691,14 +2691,14 @@ export default function StudentDashboard() {
             {/* Fitur #5: grafik progres membaca pribadi */}
             <MyProgressChart journals={journals} dark={darkMode} />
 
-            <div className={`p-4 sm:p-6 rounded-3xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
+            <div className={`p-4 sm:p-6 lg:p-7 rounded-3xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
               <h3 className={`text-sm font-semibold mb-3 ${darkMode ? "text-emerald-300/80" : "text-emerald-800/70"}`}>Jurnal Terbaru</h3>
               {journals.length === 0 ? (
                 <p className={`text-sm ${theme.bodyText}`}>
                   Kamu belum punya jurnal. Yuk mulai isi jurnal pertamamu di tab &quot;Isi Jurnal Membaca&quot;!
                 </p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
                   {journals.slice(0, 3).map((j) => (
                     <div key={j.id} className={`flex justify-between items-center gap-2 p-3 rounded-xl transition-colors ${theme.panelSoft}`}>
                       <span className={`text-sm font-semibold truncate ${theme.headingText}`}>{j.bookTitle}</span>
@@ -2713,7 +2713,7 @@ export default function StudentDashboard() {
 
         {/* ---- Tab: Badge Saya ---- */}
         {activeTab === "badge" && (
-          <div className={`p-4 sm:p-6 rounded-3xl shadow-md border backdrop-blur-sm space-y-5 ${theme.panel}`}>
+          <div className={`p-4 sm:p-6 lg:p-7 rounded-3xl shadow-md border backdrop-blur-sm space-y-5 ${theme.panel}`}>
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
                 <h2 className={`text-lg font-bold tracking-tight ${theme.headingText}`}>Badge Saya</h2>
@@ -2831,7 +2831,7 @@ export default function StudentDashboard() {
 
         {/* ---- Tab: Leaderboard ---- */}
         {activeTab === "leaderboard" && (
-          <div className={`p-4 sm:p-6 rounded-3xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
+          <div className={`p-4 sm:p-6 lg:p-7 rounded-3xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
               <div className="min-w-0 flex-1">
                 <h2 className={`text-base sm:text-lg font-bold tracking-tight flex items-start gap-2 ${theme.headingText}`}>
@@ -2973,7 +2973,7 @@ export default function StudentDashboard() {
               globalLeaderboard.length === 0 ? (
                 <p className={`text-sm ${theme.bodyText}`}>Belum ada data jurnal dari siswa manapun.</p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
                   {globalLeaderboard.map((entry, idx) => {
                     const rank = idx + 1;
                     const isMe = entry.studentId === user?.uid;
@@ -3020,7 +3020,7 @@ export default function StudentDashboard() {
             ) : classLeaderboard.length === 0 ? (
               <p className={`text-sm ${theme.bodyText}`}>Belum ada data jurnal untuk kelas ini.</p>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
                 {classLeaderboard.map((entry, idx) => {
                   const rank = idx + 1;
                   const isMe = entry.studentId === user?.uid;
@@ -3068,7 +3068,7 @@ export default function StudentDashboard() {
 
         {/* ---- Tab: Isi Jurnal Membaca ---- */}
         {activeTab === "jurnal" && (
-          <div className={`p-4 sm:p-6 rounded-3xl shadow-md border backdrop-blur-sm space-y-6 ${theme.panel}`}>
+          <div className={`p-4 sm:p-6 lg:p-7 rounded-3xl shadow-md border backdrop-blur-sm space-y-6 ${theme.panel}`}>
             <div>
               <h2 className={`text-lg font-bold tracking-tight ${theme.headingText}`}>
                 {editingJournalId ? "Edit & Kirim Ulang Jurnal" : "Isi Jurnal Membaca"}
@@ -3277,7 +3277,7 @@ export default function StudentDashboard() {
 
         {/* ---- Tab: Riwayat Jurnal ---- */}
         {activeTab === "riwayat" && (
-          <div className={`p-4 sm:p-6 rounded-3xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
+          <div className={`p-4 sm:p-6 lg:p-7 rounded-3xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <h2 className={`text-lg font-bold tracking-tight ${theme.headingText}`}>Riwayat Jurnal Saya</h2>
               {/* Fitur #2: pencarian & filter status */}
@@ -3310,7 +3310,7 @@ export default function StudentDashboard() {
             ) : filteredRiwayat.length === 0 ? (
               <p className={`text-sm ${theme.bodyText}`}>Tidak ada jurnal yang cocok dengan pencarian/filter ini.</p>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-4 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 lg:items-start">
                 {filteredRiwayat.map((j) => {
                   const statusBadge = getStatusBadge(j.status);
                   const journalStatus = normalizeStatus(j.status);

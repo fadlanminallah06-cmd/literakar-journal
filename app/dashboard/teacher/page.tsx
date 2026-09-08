@@ -686,20 +686,20 @@ function StatCard({
   const c = STAT_COLOR_MAP[color];
   return (
     <div
-      className={`group relative overflow-hidden bg-white/85 backdrop-blur-sm p-4 rounded-2xl ring-1 ${c.ring} shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] transition-all hover:shadow-[0_1px_2px_rgba(6,95,70,0.04),0_14px_28px_-14px_rgba(6,95,70,0.22)] hover:-translate-y-0.5 flex flex-col gap-1.5`}
+      className={`group relative overflow-hidden bg-white/85 backdrop-blur-sm p-4 lg:p-5 rounded-2xl ring-1 ${c.ring} shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] transition-all hover:shadow-[0_1px_2px_rgba(6,95,70,0.04),0_14px_28px_-14px_rgba(6,95,70,0.22)] hover:-translate-y-0.5 flex flex-col gap-1.5 lg:gap-2`}
     >
       <div
         className={`pointer-events-none absolute -right-6 -top-6 w-20 h-20 rounded-full bg-gradient-to-br ${c.glow} to-transparent blur-xl`}
       />
       {icon && (
-        <div className={`relative w-8 h-8 rounded-xl ${c.chip} flex items-center justify-center`}>
+        <div className={`relative w-8 h-8 lg:w-10 lg:h-10 rounded-xl ${c.chip} flex items-center justify-center`}>
           {icon}
         </div>
       )}
-      <span className="relative text-xl sm:text-2xl font-bold text-emerald-900 tabular-nums leading-tight">
+      <span className="relative text-xl sm:text-2xl lg:text-[2rem] font-bold text-emerald-900 tabular-nums leading-tight">
         {value}
       </span>
-      <span className="relative text-[11px] sm:text-xs font-medium text-emerald-700/70 leading-snug">
+      <span className="relative text-[11px] sm:text-xs lg:text-sm font-medium text-emerald-700/70 leading-snug">
         {label}
       </span>
       {sub && <span className="relative text-[10px] sm:text-xs text-emerald-700/50">{sub}</span>}
@@ -2118,25 +2118,25 @@ export default function TeacherDashboard() {
       )}
       <CuteBackground mouse={mousePos} />
 
-      <div className="relative w-full max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6 box-border print:hidden">
+      <div className="relative w-full max-w-6xl xl:max-w-7xl 2xl:max-w-[96rem] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 box-border print:hidden">
         {/* ---- Header ---- */}
-        <header className="sticky top-2 z-30 w-full mb-4 sm:mb-6">
+        <header className="sticky top-2 z-30 w-full mb-4 sm:mb-6 lg:mb-8">
           <div className="relative overflow-hidden rounded-[28px] border border-emerald-200/80 bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-500 p-[1px] shadow-[0_18px_42px_-20px_rgba(16,185,129,0.9)]">
-            <div className="relative flex flex-col gap-3 overflow-hidden rounded-[27px] bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.2),_transparent_28%),linear-gradient(135deg,rgba(5,46,22,0.94),rgba(6,95,70,0.92),rgba(13,148,136,0.9))] px-3.5 py-3.5 text-white backdrop-blur-md sm:px-5 sm:py-4 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-6 lg:gap-y-3">
+            <div className="relative flex flex-col gap-3 overflow-hidden rounded-[27px] bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.2),_transparent_28%),linear-gradient(135deg,rgba(5,46,22,0.94),rgba(6,95,70,0.92),rgba(13,148,136,0.9))] px-3.5 py-3.5 text-white backdrop-blur-md sm:px-5 sm:py-4 lg:px-7 lg:py-5 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-8 lg:gap-y-4">
               <div className="absolute -right-10 -top-10 h-28 w-28 rounded-full bg-white/10 blur-3xl sm:h-36 sm:w-36" />
               <div className="absolute -bottom-12 left-1/4 h-24 w-24 rounded-full bg-emerald-200/10 blur-3xl sm:h-28 sm:w-28" />
 
               <div className="relative flex items-start justify-between gap-2.5 sm:gap-3">
                 <div className="flex min-w-0 items-center gap-2.5 sm:gap-4">
                   <div className="relative shrink-0">
-                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/10 shadow-lg shadow-emerald-950/20 backdrop-blur-sm sm:h-14 sm:w-14 sm:rounded-[18px]">
-                      <Image src="/asset/literakarmascot.png" alt="Literakar Mascot" width={52} height={52} className="h-9 w-9 object-cover sm:h-12 sm:w-12" />
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/20 bg-white/10 shadow-lg shadow-emerald-950/20 backdrop-blur-sm sm:h-14 sm:w-14 lg:h-16 lg:w-16 sm:rounded-[18px]">
+                      <Image src="/asset/literakarmascot.png" alt="Literakar Mascot" width={52} height={52} className="h-9 w-9 object-cover sm:h-12 sm:w-12 lg:h-14 lg:w-14" />
                     </div>
                   </div>
 
                   <div className="min-w-0 flex-1">
                     <p className="text-[9px] uppercase tracking-[0.16em] text-emerald-50/80 sm:text-[10px] sm:tracking-[0.2em]">{todayLabel}</p>
-                    <h1 className="mt-0.5 text-lg font-bold leading-tight tracking-tight text-white sm:mt-1 sm:text-2xl">
+                    <h1 className="mt-0.5 text-lg font-bold leading-tight tracking-tight text-white sm:mt-1 sm:text-2xl lg:text-3xl">
                       Selamat Datang, Guru {teacherName}!
                     </h1>
                   </div>
@@ -2149,7 +2149,7 @@ export default function TeacherDashboard() {
                     disabled={isRefreshingData}
                     aria-label="Muat ulang data"
                     title="Muat ulang data"
-                    className={`flex h-8 w-8 items-center justify-center rounded-xl border transition active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-9 ${darkMode ? "border-emerald-700 bg-slate-700 text-emerald-300 hover:bg-slate-600" : "border-white/20 bg-white/10 text-white hover:bg-white/15"}`}
+                    className={`flex h-8 w-8 items-center justify-center rounded-xl border transition active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-9 lg:h-10 lg:w-10 ${darkMode ? "border-emerald-700 bg-slate-700 text-emerald-300 hover:bg-slate-600" : "border-white/20 bg-white/10 text-white hover:bg-white/15"}`}
                   >
                     <RefreshCw className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${isRefreshingData ? "animate-spin" : ""}`} />
                   </button>
@@ -2158,7 +2158,7 @@ export default function TeacherDashboard() {
                     onClick={toggleDarkMode}
                     aria-label={darkMode ? "Aktifkan mode terang" : "Aktifkan mode gelap"}
                     title={darkMode ? "Mode terang" : "Mode gelap"}
-                    className={`flex h-8 w-8 items-center justify-center rounded-xl border transition active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 sm:h-9 sm:w-9 ${darkMode ? "border-emerald-700 bg-slate-700 text-amber-300 hover:bg-slate-600" : "border-white/20 bg-white/10 text-white hover:bg-white/15"}`}
+                    className={`flex h-8 w-8 items-center justify-center rounded-xl border transition active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 sm:h-9 sm:w-9 lg:h-10 lg:w-10 ${darkMode ? "border-emerald-700 bg-slate-700 text-amber-300 hover:bg-slate-600" : "border-white/20 bg-white/10 text-white hover:bg-white/15"}`}
                   >
                     {darkMode ? <Sun className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Moon className="h-3.5 w-3.5 sm:h-4 sm:w-4" />}
                   </button>
@@ -2167,7 +2167,7 @@ export default function TeacherDashboard() {
                     onClick={logout}
                     aria-label="Keluar"
                     title="Keluar"
-                    className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-white transition hover:bg-white/15 active:scale-[0.98] sm:h-9 sm:w-9"
+                    className="flex h-8 w-8 items-center justify-center rounded-xl border border-white/20 bg-white/10 text-white transition hover:bg-white/15 active:scale-[0.98] sm:h-9 sm:w-9 lg:h-10 lg:w-10"
                   >
                     <LogOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </button>
@@ -2241,14 +2241,14 @@ export default function TeacherDashboard() {
           </div>
         </header>
 
-        <nav className="mb-5 sm:mb-6 w-full max-w-full overflow-x-auto rounded-2xl bg-white/80 backdrop-blur-sm p-1.5 shadow-sm shadow-emerald-900/5 border border-white [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <div className="flex min-w-max gap-1.5">
+        <nav className="mb-5 sm:mb-6 lg:mb-8 w-full max-w-full overflow-x-auto rounded-2xl bg-white/80 backdrop-blur-sm p-1.5 lg:p-2 shadow-sm shadow-emerald-900/5 border border-white [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex min-w-max gap-1.5 lg:gap-2 lg:min-w-0 lg:justify-between">
             {tabs.map((t) => (
               <button
                 key={t.key}
                 data-dashboard-tab={t.key}
                 onClick={() => setActiveTab(t.key)}
-                className={`shrink-0 whitespace-nowrap flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold tracking-wide transition ${
+                className={`shrink-0 whitespace-nowrap flex items-center justify-center gap-1.5 px-3 sm:px-4 lg:px-5 py-2 lg:py-2.5 rounded-xl text-xs sm:text-sm font-semibold tracking-wide transition lg:flex-1 ${
                   activeTab === t.key
                     ? "bg-emerald-600 text-white shadow-sm shadow-emerald-900/20"
                     : "text-emerald-800/70 hover:bg-emerald-50"
@@ -2272,8 +2272,8 @@ export default function TeacherDashboard() {
 
         {/* ---- Tab: Rekap Kelas ---- */}
         {activeTab === "ringkasan" && (
-          <div className="space-y-5 sm:space-y-6">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+          <div className="space-y-5 sm:space-y-6 lg:space-y-8">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
               <StatCard
                 label="Total Siswa"
                 value={classStats.totalSiswa}
@@ -2300,7 +2300,7 @@ export default function TeacherDashboard() {
               />
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 lg:gap-5">
               <StatCard
                 label="Total Jurnal"
                 value={classStats.totalJurnal}
@@ -2340,8 +2340,8 @@ export default function TeacherDashboard() {
             </div>
 
             {/* Top Buku & Nilai Karakter */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-5 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
+              <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-5 lg:p-6 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
                 <h3 className="text-sm font-semibold text-emerald-700/70 mb-3">Top 5 Buku Terpopuler</h3>
                 {classStats.topBooks.length === 0 ? (
                   <p className="text-sm text-emerald-700/50">Belum ada data buku.</p>
@@ -2361,7 +2361,7 @@ export default function TeacherDashboard() {
                   </ul>
                 )}
               </div>
-              <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-5 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
+              <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-5 lg:p-6 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
                 <h3 className="text-sm font-semibold text-emerald-700/70 mb-3">
                   Top 5 Nilai Karakter
                 </h3>
@@ -2385,10 +2385,10 @@ export default function TeacherDashboard() {
               </div>
             </div>
 
-            <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
-              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4">
+            <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 lg:p-7 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
+              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4 lg:mb-5">
                 <div>
-                  <h2 className="text-base sm:text-lg font-bold text-emerald-900">Rangkuman Kelas Per Bulan</h2>
+                  <h2 className="text-base sm:text-lg lg:text-xl font-bold text-emerald-900">Rangkuman Kelas Per Bulan</h2>
                   <p className="text-xs text-emerald-700/60 mt-1">
                     Siswa aktif adalah siswa yang mengirim jurnal pada bulan terpilih.
                   </p>
@@ -2433,27 +2433,27 @@ export default function TeacherDashboard() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="text-left text-emerald-700/60 border-b border-emerald-100">
-                          <th className="py-2 pr-3">Kelas</th>
-                          <th className="py-2 pr-3">Total Siswa</th>
-                          <th className="py-2 pr-3">Siswa Aktif</th>
-                          <th className="py-2 pr-3">Total Jurnal</th>
-                          <th className="py-2 pr-3">Tervalidasi</th>
-                          <th className="py-2 pr-3">Perlu Revisi</th>
-                          <th className="py-2 pr-3">Menunggu</th>
-                          <th className="py-2">Halaman</th>
+                          <th className="py-2 lg:py-3 pr-3">Kelas</th>
+                          <th className="py-2 lg:py-3 pr-3">Total Siswa</th>
+                          <th className="py-2 lg:py-3 pr-3">Siswa Aktif</th>
+                          <th className="py-2 lg:py-3 pr-3">Total Jurnal</th>
+                          <th className="py-2 lg:py-3 pr-3">Tervalidasi</th>
+                          <th className="py-2 lg:py-3 pr-3">Perlu Revisi</th>
+                          <th className="py-2 lg:py-3 pr-3">Menunggu</th>
+                          <th className="py-2 lg:py-3">Halaman</th>
                         </tr>
                       </thead>
                       <tbody>
                         {classSummaries.map((summary) => (
                           <tr key={summary.classCode} className="border-b border-emerald-50 last:border-0 hover:bg-emerald-50/40 transition-colors">
-                            <td className="py-2 pr-3 font-semibold text-emerald-900">{summary.classCode}</td>
-                            <td className="py-2 pr-3 text-emerald-800/80">{summary.totalStudents}</td>
-                            <td className="py-2 pr-3 text-emerald-800/80">{summary.activeStudents}</td>
-                            <td className="py-2 pr-3 text-emerald-800/80">{summary.totalJournals}</td>
-                            <td className="py-2 pr-3 text-emerald-800/80">{summary.approvedCount}</td>
-                            <td className="py-2 pr-3 text-emerald-800/80">{summary.revisionCount}</td>
-                            <td className="py-2 pr-3 text-emerald-800/80">{summary.pendingCount}</td>
-                            <td className="py-2 text-emerald-800/80">{summary.totalPagesRead}</td>
+                            <td className="py-2 lg:py-3 pr-3 font-semibold text-emerald-900">{summary.classCode}</td>
+                            <td className="py-2 lg:py-3 pr-3 text-emerald-800/80">{summary.totalStudents}</td>
+                            <td className="py-2 lg:py-3 pr-3 text-emerald-800/80">{summary.activeStudents}</td>
+                            <td className="py-2 lg:py-3 pr-3 text-emerald-800/80">{summary.totalJournals}</td>
+                            <td className="py-2 lg:py-3 pr-3 text-emerald-800/80">{summary.approvedCount}</td>
+                            <td className="py-2 lg:py-3 pr-3 text-emerald-800/80">{summary.revisionCount}</td>
+                            <td className="py-2 lg:py-3 pr-3 text-emerald-800/80">{summary.pendingCount}</td>
+                            <td className="py-2 lg:py-3 text-emerald-800/80">{summary.totalPagesRead}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -2464,9 +2464,9 @@ export default function TeacherDashboard() {
             </div>
 
             {/* Daftar siswa */}
-            <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
+            <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 lg:p-7 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                <h2 className="text-base sm:text-lg font-bold text-emerald-900">Aktivitas per Siswa</h2>
+                <h2 className="text-base sm:text-lg lg:text-xl font-bold text-emerald-900">Aktivitas per Siswa</h2>
                 <div className="flex flex-col sm:flex-row gap-2">
                   <select
                     value={classFilter}
@@ -2500,7 +2500,7 @@ export default function TeacherDashboard() {
                   Tidak ada siswa yang cocok dengan filter/pencarian.
                 </p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
                   {filteredStudents.map((s) => (
                     <button
                       key={s.key}
@@ -2531,16 +2531,16 @@ export default function TeacherDashboard() {
 
         {/* ---- Tab: Leaderboard ---- */}
         {activeTab === "leaderboard" && (
-          <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
+          <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 lg:p-7 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
             <div className="mb-4">
-              <h2 className="text-base sm:text-lg font-bold text-emerald-900 flex items-center gap-2">
+              <h2 className="text-base sm:text-lg lg:text-xl font-bold text-emerald-900 flex items-center gap-2">
                 <Trophy className="w-5 h-5 text-amber-500" />
                 Leaderboard Pembaca Terajin
               </h2>
-              <p className="text-xs text-emerald-700/60 mt-1 leading-relaxed break-words text-justify">
+              <p className="text-xs text-emerald-700/60 mt-1 leading-relaxed break-words text-justify lg:max-w-2xl">
                 Menu ini menampilkan Top 100 siswa dengan jumlah jurnal terbanyak dari seluruh kelas.
               </p>
-              <div className={`relative mt-3 overflow-hidden rounded-2xl border px-3.5 py-3 shadow-sm sm:max-w-xl sm:px-4 ${darkMode ? "border-emerald-700/60 bg-gradient-to-r from-emerald-950/80 via-slate-800 to-amber-950/50 shadow-black/20" : "border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-amber-50 shadow-emerald-900/10"}`}>
+              <div className={`relative mt-3 overflow-hidden rounded-2xl border px-3.5 py-3 shadow-sm sm:max-w-xl lg:max-w-md sm:px-4 ${darkMode ? "border-emerald-700/60 bg-gradient-to-r from-emerald-950/80 via-slate-800 to-amber-950/50 shadow-black/20" : "border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-amber-50 shadow-emerald-900/10"}`}>
                 <div className={`pointer-events-none absolute -right-5 -top-8 h-24 w-24 rounded-full blur-2xl ${darkMode ? "bg-amber-500/10" : "bg-amber-200/30"}`} />
                 <div className="relative flex items-center gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-900/20">
@@ -2596,7 +2596,7 @@ export default function TeacherDashboard() {
             {(leaderboardSubTab === "semua" ? leaderboard : classLeaderboard).length === 0 ? (
               <p className="text-sm text-emerald-700/60">Belum ada data jurnal siswa.</p>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
                 {(leaderboardSubTab === "semua" ? leaderboard : classLeaderboard).map((entry, index) => (
                   <div
                     key={entry.studentId}
@@ -2634,17 +2634,17 @@ export default function TeacherDashboard() {
 
         {/* ---- Tab: Perlu Pendampingan ---- */}
         {activeTab === "pendampingan" && (
-          <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
-            <h2 className="text-base sm:text-lg font-bold mb-1 text-emerald-900 flex items-center gap-2">
+          <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 lg:p-7 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
+            <h2 className="text-base sm:text-lg lg:text-xl font-bold mb-1 text-emerald-900 flex items-center gap-2">
               <HeartHandshake className="w-5 h-5 text-orange-500" />
               Siswa yang Perlu Pendampingan
             </h2>
-            <p className="text-xs leading-relaxed text-emerald-700/50 mb-4 text-justify">
+            <p className="text-xs leading-relaxed text-emerald-700/50 mb-4 text-justify lg:max-w-3xl">
               Termasuk siswa yang tidak aktif membaca, belum pernah mengirim jurnal sama sekali,
               jumlah jurnal jauh di bawah rata-rata, atau tumpukan jurnal belum divalidasi/masih
               perlu revisi.
             </p>
-            <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_12rem]">
+            <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_12rem] lg:max-w-2xl">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-500" aria-hidden="true" />
                 <input
@@ -2686,7 +2686,7 @@ export default function TeacherDashboard() {
                       <h3 id={`mentoring-class-${classCode}`} className="text-sm font-bold text-emerald-900">Kelas {classCode}</h3>
                       <span className="text-[11px] text-emerald-700/60">{students.length} siswa</span>
                     </div>
-                    <div className="space-y-3">
+                    <div className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0 lg:items-start">
                     {students.map((s) => (
                   <div key={s.key} className="border border-orange-200 bg-orange-50/80 p-3 sm:p-4 rounded-2xl">
                     <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:justify-between sm:items-start sm:gap-4">
@@ -2734,12 +2734,12 @@ export default function TeacherDashboard() {
 
         {/* ---- Tab: Daftar Jurnal ---- */}
         {activeTab === "jurnal" && (
-          <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
-            <h2 className="text-base sm:text-lg font-bold mb-1 text-emerald-900 flex items-center gap-2">
+          <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 lg:p-7 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
+            <h2 className="text-base sm:text-lg lg:text-xl font-bold mb-1 text-emerald-900 flex items-center gap-2">
               <NotebookText className="w-5 h-5 text-emerald-600" />
               Daftar Jurnal Siswa
             </h2>
-            <p className="text-xs text-emerald-700/50 mb-4">
+            <p className="text-xs text-emerald-700/50 mb-4 lg:max-w-2xl">
               Untuk menandai jurnal &quot;Perlu Revisi&quot;, isi dulu kolom umpan balik dengan
               alasannya (misalnya typo atau ringkasan kurang lengkap), baru klik tombol Perlu
               Revisi.
@@ -2859,7 +2859,7 @@ export default function TeacherDashboard() {
                         Pilih semua jurnal kelas ini
                       </label>
                     </div>
-                    <div className="space-y-4">
+                    <div className="space-y-4 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 lg:items-start">
                 {classJournals.map((j) => {
                   const statusInfo = getStatusInfo(j.status);
                   const isBusy = journalActionLoading === j.id;
@@ -3041,12 +3041,12 @@ export default function TeacherDashboard() {
         {/* ---- Tab: Kelola Data ---- */}
         {activeTab === "kelola" && (
           <div className="space-y-4">
-            <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
-              <h2 className="text-base sm:text-lg font-bold text-emerald-900 flex items-center gap-2">
+            <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 lg:p-7 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
+              <h2 className="text-base sm:text-lg lg:text-xl font-bold text-emerald-900 flex items-center gap-2">
                 <Settings2 className="w-5 h-5 text-emerald-600" />
                 Kelola Data Siswa
               </h2>
-              <p className="text-xs text-emerald-700/60 mt-1">
+              <p className="text-xs text-emerald-700/60 mt-1 lg:max-w-2xl">
                 Ubah profil siswa atau hapus data profil beserta seluruh jurnalnya.
                 Penghapusan akun login Firebase memerlukan backend Admin SDK.
               </p>
@@ -3064,7 +3064,7 @@ export default function TeacherDashboard() {
 
 
 
-            <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
+            <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 lg:p-7 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
               <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
                 <Search className="w-5 h-5 text-emerald-700/60 shrink-0" />
                 <input
@@ -3072,7 +3072,7 @@ export default function TeacherDashboard() {
                   placeholder="Cari nama siswa..."
                   value={managementStudentSearch}
                   onChange={(e) => setManagementStudentSearch(e.target.value)}
-                  className="flex-1 px-4 py-2 text-sm border border-emerald-200 rounded-xl bg-emerald-50/50 outline-none focus:ring-2 focus:ring-emerald-400"
+                  className="flex-1 px-4 py-2 text-sm border border-emerald-200 rounded-xl bg-emerald-50/50 outline-none focus:ring-2 focus:ring-emerald-400 lg:max-w-md"
                 />
               </div>
 
@@ -3137,7 +3137,7 @@ export default function TeacherDashboard() {
               ) : groupedStudentsByClass.length === 0 ? (
                 <p className="text-sm text-emerald-700/60">Tidak ada siswa yang cocok dengan pencarian &quot;{managementStudentSearch}&quot;.</p>
               ) : (
-                <div className="space-y-6">
+                <div className="space-y-6 lg:grid lg:grid-cols-2 lg:gap-6 lg:space-y-0 lg:items-start">
                   {groupedStudentsByClass.map(({ classCode, students }) => {
                     const allSelectedInClass = students.every((s) => selectedStudentsForDelete.has(s.uid));
                     const someSelectedInClass = students.some((s) => selectedStudentsForDelete.has(s.uid)) && !allSelectedInClass;
@@ -3300,12 +3300,12 @@ export default function TeacherDashboard() {
 
         {/* ---- Tab: Laporan ---- */}
         {activeTab === "laporan" && (
-          <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70 space-y-4">
-            <h2 className="text-base sm:text-lg font-bold text-emerald-900 flex items-center gap-2">
+          <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 lg:p-7 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70 space-y-4">
+            <h2 className="text-base sm:text-lg lg:text-xl font-bold text-emerald-900 flex items-center gap-2">
               <FileBarChart2 className="w-5 h-5 text-emerald-600" />
               Laporan
             </h2>
-            <p className="text-sm text-emerald-700/70">
+            <p className="text-sm text-emerald-700/70 lg:max-w-3xl">
               Pilih jenis rekapan lalu unduh sebagai CSV / Excel, atau cetak ringkasan. File CSV
               yang diunduh berisi rincian per buku: nama siswa, kelas, jumlah buku, judul buku,
               penulis, genre, halaman, dan nilai karakter.
@@ -3332,7 +3332,7 @@ export default function TeacherDashboard() {
               ))}
             </div>
 
-            <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50/80 via-white to-white p-3 shadow-[0_1px_2px_rgba(6,95,70,0.04),0_10px_25px_-18px_rgba(6,95,70,0.2)] sm:p-4">
+            <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50/80 via-white to-white p-3 lg:p-5 shadow-[0_1px_2px_rgba(6,95,70,0.04),0_10px_25px_-18px_rgba(6,95,70,0.2)] sm:p-4">
               <div className="mb-3 flex items-center justify-between gap-2 border-b border-emerald-100 pb-2">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-600/80">
@@ -3474,7 +3474,7 @@ export default function TeacherDashboard() {
             </div>
 
             {/* Section khusus Buku & Nilai Karakter */}
-            <div className="rounded-2xl border border-emerald-100 bg-white p-4 shadow-[0_1px_2px_rgba(6,95,70,0.04),0_10px_24px_-18px_rgba(6,95,70,0.28)] sm:p-5">
+            <div className="rounded-2xl border border-emerald-100 bg-white p-4 lg:p-6 shadow-[0_1px_2px_rgba(6,95,70,0.04),0_10px_24px_-18px_rgba(6,95,70,0.28)] sm:p-5">
               <div className="mb-4 flex items-center justify-between gap-2 border-b border-emerald-100 pb-2.5">
                 <h3 className="text-sm font-semibold text-emerald-900">
                   Buku & Nilai Karakter ({reportPeriodLabel})
@@ -3483,8 +3483,8 @@ export default function TeacherDashboard() {
                   Ringkasan
                 </span>
               </div>
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3.5">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:gap-6">
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3.5 lg:p-4">
                   <h4 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700/70">
                     Top 10 Buku Paling Banyak Dibaca (Siswa)
                   </h4>
@@ -3506,7 +3506,7 @@ export default function TeacherDashboard() {
                     </ul>
                   )}
                 </div>
-                <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-3.5">
+                <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-3.5 lg:p-4">
                   <h4 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-amber-700/80">
                     Top 10 Nilai Karakter Paling Sering Disebut (Siswa)
                   </h4>
@@ -3531,7 +3531,7 @@ export default function TeacherDashboard() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-emerald-100 bg-white p-4 shadow-[0_1px_2px_rgba(6,95,70,0.04),0_10px_24px_-18px_rgba(6,95,70,0.28)] sm:p-5">
+            <div className="rounded-2xl border border-emerald-100 bg-white p-4 lg:p-6 shadow-[0_1px_2px_rgba(6,95,70,0.04),0_10px_24px_-18px_rgba(6,95,70,0.28)] sm:p-5">
               <div className="mb-4 flex items-center justify-between gap-2 border-b border-emerald-100 pb-2.5">
                 <h3 className="text-sm font-semibold text-emerald-900">Pratinjau</h3>
                 <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
@@ -3557,29 +3557,29 @@ export default function TeacherDashboard() {
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="text-left text-emerald-700/60 border-b border-emerald-100">
-                              <th className="py-2 pr-2">Kelas</th>
-                              <th className="py-2 pr-2">Total Siswa</th>
-                              <th className="py-2 pr-2">Siswa Aktif</th>
-                              <th className="py-2 pr-2">Total Jurnal</th>
-                              <th className="py-2 pr-2">Tervalidasi</th>
-                              <th className="py-2 pr-2">Perlu Revisi</th>
-                              <th className="py-2 pr-2">Menunggu</th>
-                              <th className="py-2 pr-2">Halaman</th>
-                              <th className="py-2">Buku Selesai</th>
+                              <th className="py-2 lg:py-3 pr-2">Kelas</th>
+                              <th className="py-2 lg:py-3 pr-2">Total Siswa</th>
+                              <th className="py-2 lg:py-3 pr-2">Siswa Aktif</th>
+                              <th className="py-2 lg:py-3 pr-2">Total Jurnal</th>
+                              <th className="py-2 lg:py-3 pr-2">Tervalidasi</th>
+                              <th className="py-2 lg:py-3 pr-2">Perlu Revisi</th>
+                              <th className="py-2 lg:py-3 pr-2">Menunggu</th>
+                              <th className="py-2 lg:py-3 pr-2">Halaman</th>
+                              <th className="py-2 lg:py-3">Buku Selesai</th>
                             </tr>
                           </thead>
                           <tbody>
                             {reportClassSummaries.map((summary) => (
                               <tr key={summary.classCode} className="border-b border-emerald-50 last:border-0 hover:bg-emerald-50/40 transition-colors">
-                                <td className="py-2 pr-2 font-semibold text-emerald-900">{summary.classCode}</td>
-                                <td className="py-2 pr-2 text-emerald-800/80">{summary.totalStudents}</td>
-                                <td className="py-2 pr-2 text-emerald-800/80">{summary.activeStudents}</td>
-                                <td className="py-2 pr-2 text-emerald-800/80">{summary.totalJournals}</td>
-                                <td className="py-2 pr-2 text-emerald-800/80">{summary.approvedCount}</td>
-                                <td className="py-2 pr-2 text-emerald-800/80">{summary.revisionCount}</td>
-                                <td className="py-2 pr-2 text-emerald-800/80">{summary.pendingCount}</td>
-                                <td className="py-2 pr-2 text-emerald-800/80">{summary.totalPagesRead}</td>
-                                <td className="py-2 text-emerald-800/80">{summary.booksFinished}</td>
+                                <td className="py-2 lg:py-3 pr-2 font-semibold text-emerald-900">{summary.classCode}</td>
+                                <td className="py-2 lg:py-3 pr-2 text-emerald-800/80">{summary.totalStudents}</td>
+                                <td className="py-2 lg:py-3 pr-2 text-emerald-800/80">{summary.activeStudents}</td>
+                                <td className="py-2 lg:py-3 pr-2 text-emerald-800/80">{summary.totalJournals}</td>
+                                <td className="py-2 lg:py-3 pr-2 text-emerald-800/80">{summary.approvedCount}</td>
+                                <td className="py-2 lg:py-3 pr-2 text-emerald-800/80">{summary.revisionCount}</td>
+                                <td className="py-2 lg:py-3 pr-2 text-emerald-800/80">{summary.pendingCount}</td>
+                                <td className="py-2 lg:py-3 pr-2 text-emerald-800/80">{summary.totalPagesRead}</td>
+                                <td className="py-2 lg:py-3 text-emerald-800/80">{summary.booksFinished}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -3704,7 +3704,7 @@ export default function TeacherDashboard() {
                           <h4 className="text-xs font-semibold text-emerald-700/70 mb-2">
                             Rincian Jurnal ({reportPeriodLabel})
                           </h4>
-                          <div className="space-y-2">
+                          <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0 lg:items-start">
                             {reportSelectedStudentSummary.journals
                               .slice()
                               .sort(
@@ -3772,7 +3772,7 @@ export default function TeacherDashboard() {
                 ))}
             </div>
 
-            <div className="rounded-2xl border border-emerald-100 bg-white p-4 shadow-[0_1px_2px_rgba(6,95,70,0.04),0_10px_24px_-18px_rgba(6,95,70,0.28)] sm:p-5">
+            <div className="rounded-2xl border border-emerald-100 bg-white p-4 lg:p-6 shadow-[0_1px_2px_rgba(6,95,70,0.04),0_10px_24px_-18px_rgba(6,95,70,0.28)] sm:p-5">
               <div className="mb-3 flex items-center justify-between gap-2 border-b border-emerald-100 pb-2.5">
                 <h3 className="text-sm font-semibold text-emerald-900">Pratinjau Detail Rekapan</h3>
                 <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
@@ -3783,11 +3783,11 @@ export default function TeacherDashboard() {
                 Geser ke kanan untuk melihat semua kolom.
               </p>
               <div className="overflow-x-auto rounded-xl ring-1 ring-emerald-100">
-                <table className="w-full min-w-[1200px] text-xs text-slate-700">
+                <table className="w-full min-w-[1200px] text-xs lg:text-[13px] text-slate-700">
                   <thead>
                     <tr className="text-left text-slate-700 border-b border-emerald-100 bg-emerald-50/70">
                       {DETAILED_HEADERS.map((header) => (
-                        <th key={header} className="py-2 pr-3 pl-2 align-top first:pl-3 text-slate-700">{header}</th>
+                        <th key={header} className="py-2 lg:py-2.5 pr-3 pl-2 align-top first:pl-3 text-slate-700">{header}</th>
                       ))}
                     </tr>
                   </thead>
@@ -3795,7 +3795,7 @@ export default function TeacherDashboard() {
                     {printableRows.map((row, rowIndex) => (
                       <tr key={`${String(row[0])}-${rowIndex}`} className="border-b border-emerald-50 odd:bg-white even:bg-emerald-50/30 text-slate-700">
                         {row.map((field, fieldIndex) => (
-                          <td key={`${rowIndex}-${fieldIndex}`} className="py-2 pr-3 pl-2 align-top first:pl-3 text-slate-700">{field}</td>
+                          <td key={`${rowIndex}-${fieldIndex}`} className="py-2 lg:py-2.5 pr-3 pl-2 align-top first:pl-3 text-slate-700">{field}</td>
                         ))}
                       </tr>
                     ))}
@@ -3866,13 +3866,13 @@ export default function TeacherDashboard() {
           onClick={() => setSelectedStudent(null)}
         >
           <div
-            className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl max-w-2xl w-full max-h-[92vh] sm:max-h-[90vh] overflow-y-auto p-5 sm:p-6"
+            className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl max-w-2xl lg:max-w-3xl w-full max-h-[92vh] sm:max-h-[90vh] overflow-y-auto p-5 sm:p-6 lg:p-8"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-emerald-100 sm:hidden" />
             <div className="flex justify-between items-start mb-4">
               <div className="min-w-0">
-                <h2 className="text-lg font-bold text-emerald-900 truncate">{selectedStudentData.name}</h2>
+                <h2 className="text-lg lg:text-xl font-bold text-emerald-900 truncate">{selectedStudentData.name}</h2>
                 <p className="text-sm text-emerald-700/70">
                   Kelas {selectedStudentData.classCode}
                   {selectedStudentData.gender
@@ -3927,7 +3927,7 @@ export default function TeacherDashboard() {
             </div>
 
             <h3 className="text-sm font-semibold text-emerald-800 mb-2">Riwayat Jurnal</h3>
-            <div className="space-y-3">
+            <div className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0 lg:items-start">
               {selectedStudentData.journals.length === 0 ? (
                 <p className="text-sm text-emerald-700/60">Belum ada jurnal.</p>
               ) : (

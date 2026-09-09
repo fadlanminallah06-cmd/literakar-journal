@@ -137,6 +137,7 @@ interface LeaderboardEntry {
   studentName: string;
   classCode: string;
   journalCount: number;
+  totalPagesRead: number;
   booksFinished: number;
 }
 
@@ -2538,7 +2539,7 @@ export default function TeacherDashboard() {
                 Leaderboard Pembaca Terajin
               </h2>
               <p className="text-xs text-emerald-700/60 mt-1 leading-relaxed break-words text-justify lg:max-w-2xl">
-                Menu ini menampilkan Top 100 siswa dengan jumlah jurnal terbanyak dari seluruh kelas.
+                Menu ini menampilkan Top 100 siswa dengan urutan berdasarkan jumlah jurnal, halaman dibaca, dan buku selesai dari seluruh kelas.
               </p>
               <div className={`relative mt-3 overflow-hidden rounded-2xl border px-3.5 py-3 shadow-sm sm:max-w-xl lg:max-w-md sm:px-4 ${darkMode ? "border-emerald-700/60 bg-gradient-to-r from-emerald-950/80 via-slate-800 to-amber-950/50 shadow-black/20" : "border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-amber-50 shadow-emerald-900/10"}`}>
                 <div className={`pointer-events-none absolute -right-5 -top-8 h-24 w-24 rounded-full blur-2xl ${darkMode ? "bg-amber-500/10" : "bg-amber-200/30"}`} />
@@ -2600,7 +2601,7 @@ export default function TeacherDashboard() {
                 {(leaderboardSubTab === "semua" ? leaderboard : classLeaderboard).map((entry, index) => (
                   <div
                     key={entry.studentId}
-                    className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${
+                    className={`flex flex-col gap-2.5 p-3 rounded-xl border transition-colors sm:flex-row sm:items-center sm:gap-3 ${
                       index === 0
                         ? "border-amber-200 bg-gradient-to-r from-amber-50 to-emerald-50/50"
                         : "border-emerald-100 bg-emerald-50/50"
@@ -2621,8 +2622,9 @@ export default function TeacherDashboard() {
                       <p className="text-sm font-bold text-emerald-900 truncate">{entry.studentName}</p>
                       <p className="text-xs text-emerald-700/60">Kelas {entry.classCode}</p>
                     </div>
-                    <div className="text-right shrink-0">
+                    <div className="w-full text-left sm:w-auto sm:text-right shrink-0">
                       <p className="text-sm font-bold text-emerald-900">{entry.journalCount} jurnal</p>
+                      <p className="text-xs text-emerald-700/60">{entry.totalPagesRead} halaman</p>
                       <p className="text-xs text-emerald-700/60">{entry.booksFinished} buku selesai</p>
                     </div>
                   </div>
@@ -3993,7 +3995,7 @@ function buildLeaderboard(journalsInput: Journal[], limit = 10, refreshKey?: str
   const snapshotCutoff = getLatestMondaySnapshotCutoff(windowRef);
   const statsByStudent = new Map<
     string,
-    { studentName: string; classCode: string; journalCount: number; finishedTitles: Set<string> }
+    { studentName: string; classCode: string; journalCount: number; totalPagesRead: number; finishedTitles: Set<string> }
   >();
 
   journalsInput.forEach((journal) => {
@@ -4006,9 +4008,12 @@ function buildLeaderboard(journalsInput: Journal[], limit = 10, refreshKey?: str
       studentName: journal.studentName || "Siswa",
       classCode: journal.classCode || "-",
       journalCount: 0,
+      totalPagesRead: 0,
       finishedTitles: new Set<string>(),
     };
     stats.journalCount += 1;
+    const pages = Math.max(0, getLatestPageForJournal(journal) - Number(journal.startPage));
+    if (pages > 0) stats.totalPagesRead += pages;
     if (journal.finished && journal.bookTitle) {
       stats.finishedTitles.add(journal.bookTitle.trim().toLowerCase());
     }
@@ -4021,8 +4026,9 @@ function buildLeaderboard(journalsInput: Journal[], limit = 10, refreshKey?: str
       studentName: stats.studentName,
       classCode: stats.classCode,
       journalCount: stats.journalCount,
+      totalPagesRead: stats.totalPagesRead,
       booksFinished: stats.finishedTitles.size,
     }))
-    .sort((a, b) => b.journalCount - a.journalCount || b.booksFinished - a.booksFinished)
+    .sort((a, b) => b.journalCount - a.journalCount || b.totalPagesRead - a.totalPagesRead || b.booksFinished - a.booksFinished)
     .slice(0, limit);
 }

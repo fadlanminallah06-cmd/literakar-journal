@@ -85,6 +85,7 @@ interface LeaderboardEntry {
   studentName: string;
   classCode: string;
   journalCount: number;
+  totalPagesRead: number;
   booksFinished: number;
 }
 
@@ -281,12 +282,13 @@ function normalizeStatus(status: string): NormalizedStatus {
   return "pending";
 }
 
-/** Satu sumber kebenaran untuk urutan leaderboard: jumlah jurnal terbanyak dulu
- *  (indikator kerajinan), lalu jumlah buku selesai. Dipakai untuk leaderboard
- *  global maupun leaderboard per kelas supaya hasilnya konsisten. */
+/** Satu sumber kebenaran untuk urutan leaderboard: jumlah jurnal terbanyak dulu,
+ *  lalu halaman terbanyak dibaca, lalu jumlah buku selesai. Dipakai untuk
+ *  leaderboard global maupun per kelas supaya hasilnya konsisten. */
 function sortLeaderboardEntries(entries: LeaderboardEntry[]): LeaderboardEntry[] {
   return [...entries].sort((a, b) => {
     if (b.journalCount !== a.journalCount) return b.journalCount - a.journalCount;
+    if (b.totalPagesRead !== a.totalPagesRead) return b.totalPagesRead - a.totalPagesRead;
     return b.booksFinished - a.booksFinished;
   });
 }
@@ -1486,7 +1488,7 @@ export default function StudentDashboard() {
       const querySnapshot = await getDocs(collection(db, "journals"));
       const statsMap = new Map<
         string,
-        { studentName: string; classCode: string; journalCount: number; finishedTitles: Set<string> }
+        { studentName: string; classCode: string; journalCount: number; totalPagesRead: number; finishedTitles: Set<string> }
       >();
       const activeStudentIds = new Set<string>();
 
@@ -1502,9 +1504,12 @@ export default function StudentDashboard() {
           studentName: data.studentName || "Siswa",
           classCode: data.classCode || "-",
           journalCount: 0,
+          totalPagesRead: 0,
           finishedTitles: new Set<string>(),
         };
         existing.journalCount += 1;
+        const pages = Math.max(0, Number(data.endPage) - Number(data.startPage));
+        if (pages > 0) existing.totalPagesRead += pages;
         if (data.finished && data.bookTitle) {
           existing.finishedTitles.add(data.bookTitle.trim().toLowerCase());
         }
@@ -1516,6 +1521,7 @@ export default function StudentDashboard() {
         studentName: stats.studentName,
         classCode: stats.classCode,
         journalCount: stats.journalCount,
+        totalPagesRead: stats.totalPagesRead,
         booksFinished: stats.finishedTitles.size,
       }));
 
@@ -2840,8 +2846,8 @@ export default function StudentDashboard() {
                 </h2>
                 <p className={`text-xs mt-1 leading-relaxed break-words text-justify ${theme.mutedText}`}>
                   {leaderboardSubTab === "semua"
-                    ? "Menu ini menampilkan Top 100 siswa dengan jumlah jurnal terbanyak dari seluruh kelas."
-                    : "Peringkat siswa dengan jurnal terbanyak di kelas Anda saat ini."}
+                    ? "Menu ini menampilkan Top 100 siswa dengan urutan berdasarkan jumlah jurnal, halaman dibaca, dan buku selesai dari seluruh kelas."
+                    : "Peringkat siswa di kelas Anda saat ini dihitung berdasarkan jumlah jurnal, halaman dibaca, dan buku selesai."}
                 </p>
                 <div className={`mt-3 rounded-2xl border p-3 shadow-sm backdrop-blur-sm ${darkMode ? "border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-emerald-500/10" : "border-amber-200 bg-gradient-to-r from-amber-50 via-white to-emerald-50"}`}>
                   <div className="flex items-center justify-between gap-3">
@@ -2981,7 +2987,7 @@ export default function StudentDashboard() {
                       <div
                         key={entry.studentId}
                         id={`leaderboard-student-${entry.studentId}`}
-                        className={`flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-xl border transition-all duration-200 ${
+                        className={`flex flex-col gap-2.5 p-2.5 rounded-xl border transition-all duration-200 sm:flex-row sm:items-center sm:gap-3 sm:p-3 ${
                           isMe
                             ? darkMode
                               ? "bg-gradient-to-r from-emerald-900/60 via-emerald-800/40 to-teal-900/50 border-emerald-500 shadow-[0_10px_24px_-18px_rgba(16,185,129,0.95)]"
@@ -3008,8 +3014,9 @@ export default function StudentDashboard() {
                           </p>
                           <p className={`text-xs ${theme.mutedText}`}>Kelas {entry.classCode}</p>
                         </div>
-                        <div className="text-right shrink-0">
+                        <div className="w-full text-left sm:w-auto sm:text-right shrink-0">
                           <p className={`text-xs sm:text-sm font-bold ${theme.headingText}`}>{entry.journalCount} jurnal</p>
+                          <p className={`text-[10px] sm:text-xs ${theme.mutedText}`}>{entry.totalPagesRead} halaman</p>
                           <p className={`text-[10px] sm:text-xs ${theme.mutedText}`}>{entry.booksFinished} buku selesai</p>
                         </div>
                       </div>
@@ -3028,7 +3035,7 @@ export default function StudentDashboard() {
                     <div
                       key={entry.studentId}
                       id={`leaderboard-student-${entry.studentId}`}
-                      className={`flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 rounded-xl border transition-all duration-200 ${
+                      className={`flex flex-col gap-2.5 p-2.5 rounded-xl border transition-all duration-200 sm:flex-row sm:items-center sm:gap-3 sm:p-3 ${
                         isMe
                           ? darkMode
                             ? "bg-gradient-to-r from-emerald-900/60 via-emerald-800/40 to-teal-900/50 border-emerald-500 shadow-[0_10px_24px_-18px_rgba(16,185,129,0.95)]"
@@ -3054,8 +3061,9 @@ export default function StudentDashboard() {
                           {isMe && <span className="ml-1.5 text-xs font-normal text-emerald-500">(Kamu)</span>}
                         </p>
                       </div>
-                      <div className="text-right shrink-0">
+                      <div className="w-full text-left sm:w-auto sm:text-right shrink-0">
                         <p className={`text-xs sm:text-sm font-bold ${theme.headingText}`}>{entry.journalCount} jurnal</p>
+                        <p className={`text-[10px] sm:text-xs ${theme.mutedText}`}>{entry.totalPagesRead} halaman</p>
                         <p className={`text-[10px] sm:text-xs ${theme.mutedText}`}>{entry.booksFinished} buku selesai</p>
                       </div>
                     </div>

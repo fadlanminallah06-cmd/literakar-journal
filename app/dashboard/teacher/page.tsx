@@ -1024,10 +1024,16 @@ export default function TeacherDashboard() {
     if (!window.matchMedia("(hover: none) and (pointer: coarse)").matches) return;
     const target = event.target as HTMLElement;
     if (target.closest("nav, button, input, textarea, select, a")) return;
+    if (target.closest("[data-weather-scroll='true']")) return;
     swipeStartX.current = event.touches[0]?.clientX ?? null;
   };
 
   const handleSwipeEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest("[data-weather-scroll='true']")) {
+      swipeStartX.current = null;
+      return;
+    }
     const startX = swipeStartX.current;
     swipeStartX.current = null;
     if (startX === null) return;
@@ -2217,7 +2223,7 @@ export default function TeacherDashboard() {
                 )}
               </div>
               {weather?.hourly.length ? (
-                <div className="relative w-full sm:max-w-xl lg:max-w-none lg:flex-1">
+                <div className="relative w-full sm:max-w-xl lg:max-w-none lg:flex-1" data-weather-scroll="true">
                   <p className="mb-1.5 text-[10px] font-medium text-emerald-50/70 lg:mb-1">Prakiraan BMKG per 3 jam · dapat berubah</p>
                   <div className="flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     {weather.hourly.map((hour) => {

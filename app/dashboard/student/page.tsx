@@ -1379,10 +1379,16 @@ export default function StudentDashboard() {
     if (!window.matchMedia("(hover: none) and (pointer: coarse)").matches) return;
     const target = event.target as HTMLElement;
     if (target.closest("nav, button, input, textarea, select, a")) return;
+    if (target.closest("[data-weather-scroll='true']")) return;
     swipeStartX.current = event.touches[0]?.clientX ?? null;
   };
 
   const handleSwipeEnd = (event: React.TouchEvent<HTMLDivElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest("[data-weather-scroll='true']")) {
+      swipeStartX.current = null;
+      return;
+    }
     const startX = swipeStartX.current;
     swipeStartX.current = null;
     if (startX === null) return;
@@ -2382,7 +2388,7 @@ export default function StudentDashboard() {
               <p className={`mt-1 max-w-xl text-xs font-medium leading-relaxed sm:text-sm ${theme.bodyText}`}>
                 Setiap halaman yang kamu baca menumbuhkan cerita, karakter, dan masa depan bersama Literakar.
               </p>
-              <div className={`mt-2 flex w-full max-w-xl items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 shadow-sm backdrop-blur-sm lg:max-w-2xl lg:px-4 lg:py-2 ${
+              <div data-weather-scroll="true" className={`mt-2 flex w-full max-w-xl items-center justify-between gap-3 rounded-2xl border px-3 py-2.5 shadow-sm backdrop-blur-sm lg:max-w-2xl lg:px-4 lg:py-2 ${
                 darkMode ? "border-cyan-700/70 bg-gradient-to-r from-cyan-950/70 via-slate-900/60 to-amber-950/40 shadow-cyan-950/30" : "border-cyan-200 bg-gradient-to-r from-cyan-50 via-white to-amber-50 shadow-cyan-900/10"
               }`}>
                 {weatherLoading ? (

@@ -2555,7 +2555,7 @@ export default function TeacherDashboard() {
             <div className="mb-4">
               <h2 className="text-base sm:text-lg lg:text-xl font-bold text-emerald-900 flex items-center gap-2">
                 <Trophy className="w-5 h-5 text-amber-500" />
-                Leaderboard Pembaca Terajin
+                Leaderboard Penakluk Literasi
               </h2>
               <p className="text-xs text-emerald-700/60 mt-1 leading-relaxed break-words text-justify lg:max-w-2xl">
                 Menu ini menampilkan Top 100 siswa dengan urutan berdasarkan jumlah jurnal, halaman dibaca, dan buku selesai dari seluruh kelas.

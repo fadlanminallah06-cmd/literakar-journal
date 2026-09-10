@@ -2883,7 +2883,8 @@ export default function StudentDashboard() {
               <div className="min-w-0 flex-1">
                 <h2 className={`text-base sm:text-lg font-bold tracking-tight flex items-start gap-2 ${theme.headingText}`}>
                   <Trophy className="w-5 h-5 text-amber-500 shrink-0" />
-                  <span className="min-w-0 break-words">Leaderboard Pembaca Terajin</span>
+                  <span className="min-w-0 break-words">Leaderboard Penakluk Literasi
+                  </span>
                 </h2>
                 <p className={`text-xs mt-1 leading-relaxed break-words text-justify ${theme.mutedText}`}>
                   {leaderboardSubTab === "semua"

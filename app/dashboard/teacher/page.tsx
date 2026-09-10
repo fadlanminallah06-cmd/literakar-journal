@@ -141,10 +141,19 @@ interface LeaderboardEntry {
   booksFinished: number;
 }
 
+interface ClassLeaderboardEntry {
+  classCode: string;
+  totalStudents: number;
+  activeStudents: number;
+  journalCount: number;
+  totalPagesRead: number;
+  booksFinished: number;
+}
+
 type TabKey = "ringkasan" | "leaderboard" | "pendampingan" | "jurnal" | "laporan" | "kelola";
 type ReportView = "kelas" | "siswa";
 type ReportPeriod = "all" | "month";
-type LeaderboardSubTab = "semua" | "kelas";
+type LeaderboardSubTab = "semua" | "kelas" | "kelas-terajin";
 
 interface WeatherData {
   temperature: number;
@@ -1745,6 +1754,10 @@ export default function TeacherDashboard() {
     () => buildLeaderboard(journals.filter((journal) => journal.classCode === effectiveLeaderboardClass), Number.MAX_SAFE_INTEGER, leaderboardRefreshKey),
     [journals, effectiveLeaderboardClass, leaderboardRefreshKey]
   );
+  const classLeaderboardRanking = useMemo(
+    () => buildClassLeaderboard(journals, allStudents, leaderboardRefreshKey),
+    [allStudents, journals, leaderboardRefreshKey]
+  );
   const groupedJournalsByClass = useMemo(() => {
     const grouped = new Map<string, Journal[]>();
     journals.forEach((journal) => {
@@ -2085,7 +2098,7 @@ export default function TeacherDashboard() {
   const weatherInfo = weather ? getWeatherInfo(weather.weatherCode) : null;
   const tabs: { key: TabKey; label: string; shortLabel: string; icon: React.ReactNode }[] = [
     { key: "ringkasan", label: "Rekap Seluruh Siswa", shortLabel: "Rekap", icon: <LayoutGrid className="w-4 h-4" /> },
-    { key: "leaderboard", label: "Leaderboard", shortLabel: "Papan Skor", icon: <Trophy className="w-4 h-4" /> },
+    { key: "leaderboard", label: "Leaderboard", shortLabel: "Leaderboard", icon: <Trophy className="w-4 h-4" /> },
     {
       key: "pendampingan",
       label: `Perlu Pendampingan${studentsNeedingAttention.length ? ` (${studentsNeedingAttention.length})` : ""}`,
@@ -2554,8 +2567,8 @@ export default function TeacherDashboard() {
                     <Users className="h-5 w-5" aria-hidden="true" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className={`text-[10px] font-bold uppercase tracking-[0.08em] ${darkMode ? "text-emerald-300/80" : "text-emerald-700/70"}`}>Siswa aktif di platform</p>
-                    <p className={`mt-0.5 text-lg font-extrabold leading-tight sm:text-xl ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>{totalRegisteredStudents} siswa</p>
+                    <p className={`text-[10px] font-bold uppercase tracking-[0.08em] ${darkMode ? "text-emerald-300/80" : "text-emerald-700/70"}`}>Murid aktif di platform</p>
+                    <p className={`mt-0.5 text-lg font-extrabold leading-tight sm:text-xl ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>{totalRegisteredStudents} Murid</p>
                   </div>
                   <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold ${darkMode ? "border-amber-500/50 bg-amber-500/15 text-amber-200" : "border-amber-300 bg-amber-100 text-amber-800"}`}>Top 100</span>
                 </div>
@@ -2565,19 +2578,19 @@ export default function TeacherDashboard() {
               </p>
             </div>
 
-            <div className="flex gap-2 mb-4 p-1 rounded-xl bg-emerald-900/5 w-full sm:w-fit">
-              {(["semua", "kelas"] as LeaderboardSubTab[]).map((view) => (
+            <div className="flex flex-wrap gap-2 mb-4 p-1 rounded-xl bg-emerald-900/5 w-full sm:w-fit">
+              {(["semua", "kelas", "kelas-terajin"] as LeaderboardSubTab[]).map((view) => (
                 <button
                   key={view}
                   type="button"
                   onClick={() => setLeaderboardSubTab(view)}
-                  className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-semibold transition ${
+                  className={`flex-1 sm:flex-none px-2.5 sm:px-4 py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold leading-tight transition ${
                     leaderboardSubTab === view
                       ? "bg-emerald-600 text-white shadow-sm"
                       : "text-emerald-800/70 hover:bg-emerald-50"
                   }`}
                 >
-                  {view === "semua" ? "Semua Siswa" : "Per Kelas"}
+                  {view === "semua" ? "Murid Rajin" : view === "kelas" ? "Murid Rajin di Kelas-Mu" : "Kelas Rajin"}
                 </button>
               ))}
             </div>
@@ -2600,42 +2613,84 @@ export default function TeacherDashboard() {
               </div>
             )}
 
-            {(leaderboardSubTab === "semua" ? leaderboard : classLeaderboard).length === 0 ? (
-              <p className="text-sm text-emerald-700/60">Belum ada data jurnal siswa.</p>
+            {leaderboardSubTab === "kelas-terajin" ? (
+              classLeaderboardRanking.length === 0 ? (
+                <p className="text-sm text-emerald-700/60">Belum ada data kelas yang membaca buku.</p>
+              ) : (
+                <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
+                  {classLeaderboardRanking.map((entry, index) => (
+                    <div
+                      key={entry.classCode}
+                      className={`flex flex-col gap-2.5 p-3 rounded-xl border transition-colors sm:flex-row sm:items-center sm:gap-3 ${
+                        index === 0
+                          ? "border-amber-200 bg-gradient-to-r from-amber-50 to-emerald-50/50"
+                          : "border-emerald-100 bg-emerald-50/50"
+                      }`}
+                    >
+                      <div className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center font-bold text-sm ${
+                        index === 0
+                          ? "bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-500 text-white"
+                          : index === 1
+                          ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white"
+                          : index === 2
+                          ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white"
+                          : "bg-emerald-200 text-emerald-800"
+                      }`}>
+                        {index < 3 ? <Crown className="w-4 h-4" /> : index + 1}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-emerald-900">Kelas {entry.classCode}</p>
+                        <p className="text-xs text-emerald-700/60">
+                          {entry.activeStudents} siswa aktif · {entry.totalStudents} siswa total
+                        </p>
+                      </div>
+                      <div className="w-full text-left sm:w-auto sm:text-right shrink-0">
+                        <p className="text-sm font-bold text-emerald-900">{entry.journalCount} jurnal</p>
+                        <p className="text-xs text-emerald-700/60">{entry.totalPagesRead} halaman</p>
+                        <p className="text-xs text-emerald-700/60">{entry.booksFinished} buku selesai</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
             ) : (
-              <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
-                {(leaderboardSubTab === "semua" ? leaderboard : classLeaderboard).map((entry, index) => (
-                  <div
-                    key={entry.studentId}
-                    className={`flex flex-col gap-2.5 p-3 rounded-xl border transition-colors sm:flex-row sm:items-center sm:gap-3 ${
-                      index === 0
-                        ? "border-amber-200 bg-gradient-to-r from-amber-50 to-emerald-50/50"
-                        : "border-emerald-100 bg-emerald-50/50"
-                    }`}
-                  >
-                    <div className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center font-bold text-sm ${
-                      index === 0
-                        ? "bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-500 text-white"
-                        : index === 1
-                        ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white"
-                        : index === 2
-                        ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white"
-                        : "bg-emerald-200 text-emerald-800"
-                    }`}>
-                      {index < 3 ? <Crown className="w-4 h-4" /> : index + 1}
+              (leaderboardSubTab === "semua" ? leaderboard : classLeaderboard).length === 0 ? (
+                <p className="text-sm text-emerald-700/60">Belum ada data jurnal siswa.</p>
+              ) : (
+                <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
+                  {(leaderboardSubTab === "semua" ? leaderboard : classLeaderboard).map((entry, index) => (
+                    <div
+                      key={entry.studentId}
+                      className={`flex flex-col gap-2.5 p-3 rounded-xl border transition-colors sm:flex-row sm:items-center sm:gap-3 ${
+                        index === 0
+                          ? "border-amber-200 bg-gradient-to-r from-amber-50 to-emerald-50/50"
+                          : "border-emerald-100 bg-emerald-50/50"
+                      }`}
+                    >
+                      <div className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center font-bold text-sm ${
+                        index === 0
+                          ? "bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-500 text-white"
+                          : index === 1
+                          ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white"
+                          : index === 2
+                          ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white"
+                          : "bg-emerald-200 text-emerald-800"
+                      }`}>
+                        {index < 3 ? <Crown className="w-4 h-4" /> : index + 1}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-emerald-900 truncate">{entry.studentName}</p>
+                        <p className="text-xs text-emerald-700/60">Kelas {entry.classCode}</p>
+                      </div>
+                      <div className="w-full text-left sm:w-auto sm:text-right shrink-0">
+                        <p className="text-sm font-bold text-emerald-900">{entry.journalCount} jurnal</p>
+                        <p className="text-xs text-emerald-700/60">{entry.totalPagesRead} halaman</p>
+                        <p className="text-xs text-emerald-700/60">{entry.booksFinished} buku selesai</p>
+                      </div>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold text-emerald-900 truncate">{entry.studentName}</p>
-                      <p className="text-xs text-emerald-700/60">Kelas {entry.classCode}</p>
-                    </div>
-                    <div className="w-full text-left sm:w-auto sm:text-right shrink-0">
-                      <p className="text-sm font-bold text-emerald-900">{entry.journalCount} jurnal</p>
-                      <p className="text-xs text-emerald-700/60">{entry.totalPagesRead} halaman</p>
-                      <p className="text-xs text-emerald-700/60">{entry.booksFinished} buku selesai</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )
             )}
           </div>
         )}
@@ -4037,4 +4092,85 @@ function buildLeaderboard(journalsInput: Journal[], limit = 10, refreshKey?: str
     }))
     .sort((a, b) => b.journalCount - a.journalCount || b.totalPagesRead - a.totalPagesRead || b.booksFinished - a.booksFinished)
     .slice(0, limit);
+}
+
+function buildClassLeaderboard(journalsInput: Journal[], allStudents: RosterStudent[], refreshKey?: string): ClassLeaderboardEntry[] {
+  const windowRef = refreshKey ? new Date(refreshKey) : new Date();
+  const snapshotCutoff = getLatestMondaySnapshotCutoff(windowRef);
+  const statsByClass = new Map<
+    string,
+    {
+      classCode: string;
+      totalStudents: number;
+      activeStudents: Set<string>;
+      journalCount: number;
+      totalPagesRead: number;
+      finishedTitles: Set<string>;
+    }
+  >();
+
+  allStudents.forEach((student) => {
+    const classCode = student.classCode || "-";
+    if (!statsByClass.has(classCode)) {
+      statsByClass.set(classCode, {
+        classCode,
+        totalStudents: 0,
+        activeStudents: new Set<string>(),
+        journalCount: 0,
+        totalPagesRead: 0,
+        finishedTitles: new Set<string>(),
+      });
+    }
+
+    statsByClass.get(classCode)!.totalStudents += 1;
+  });
+
+  journalsInput.forEach((journal) => {
+    if (journal.status !== "approved") return;
+
+    const createdAt = toDateSafe(journal.createdAt);
+    if (!createdAt || createdAt > snapshotCutoff) return;
+
+    const classCode = journal.classCode || "-";
+    if (!statsByClass.has(classCode)) {
+      statsByClass.set(classCode, {
+        classCode,
+        totalStudents: 0,
+        activeStudents: new Set<string>(),
+        journalCount: 0,
+        totalPagesRead: 0,
+        finishedTitles: new Set<string>(),
+      });
+    }
+
+    const stats = statsByClass.get(classCode)!;
+    stats.journalCount += 1;
+
+    const pages = Math.max(0, getLatestPageForJournal(journal) - Number(journal.startPage));
+    if (pages > 0) stats.totalPagesRead += pages;
+
+    const studentIdentity = journal.studentId || journal.studentName || `legacy-${journal.id}`;
+    stats.activeStudents.add(studentIdentity);
+
+    if (journal.finished && journal.bookTitle) {
+      stats.finishedTitles.add(journal.bookTitle.trim().toLowerCase());
+    }
+  });
+
+  return Array.from(statsByClass.values())
+    .map((stats) => ({
+      classCode: stats.classCode,
+      totalStudents: stats.totalStudents,
+      activeStudents: stats.activeStudents.size,
+      journalCount: stats.journalCount,
+      totalPagesRead: stats.totalPagesRead,
+      booksFinished: stats.finishedTitles.size,
+    }))
+    .sort(
+      (a, b) =>
+        b.journalCount - a.journalCount ||
+        b.totalPagesRead - a.totalPagesRead ||
+        b.booksFinished - a.booksFinished ||
+        a.classCode.localeCompare(b.classCode)
+    );
 }

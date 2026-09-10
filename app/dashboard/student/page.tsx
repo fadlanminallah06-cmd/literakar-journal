@@ -89,11 +89,19 @@ interface LeaderboardEntry {
   booksFinished: number;
 }
 
+interface ClassLeaderboardEntry {
+  classCode: string;
+  activeStudents: number;
+  journalCount: number;
+  totalPagesRead: number;
+  booksFinished: number;
+}
+
 type TabKey = "beranda" | "jurnal" | "riwayat" | "badge" | "pohon" | "leaderboard";
 type BadgeFilter = "semua" | "terkunci" | "didapat";
 type RiwayatStatusFilter = "semua" | "pending" | "revision" | "approved";
 type NormalizedStatus = "pending" | "revision" | "approved";
-type LeaderboardSubTab = "semua" | "kelas";
+type LeaderboardSubTab = "semua" | "kelas" | "kelas-terajin";
 
 type TreeStage = "small" | "young" | "big";
 
@@ -2139,6 +2147,33 @@ export default function StudentDashboard() {
     return sortLeaderboardEntries(leaderboard.filter((e) => e.classCode === studentClassCode));
   }, [leaderboard, studentClassCode]);
 
+  const classLeaderboardRanking = useMemo<ClassLeaderboardEntry[]>(() => {
+    const statsByClass = new Map<string, ClassLeaderboardEntry>();
+
+    leaderboard.forEach((entry) => {
+      const existing = statsByClass.get(entry.classCode) || {
+        classCode: entry.classCode,
+        activeStudents: 0,
+        journalCount: 0,
+        totalPagesRead: 0,
+        booksFinished: 0,
+      };
+
+      existing.activeStudents += 1;
+      existing.journalCount += entry.journalCount;
+      existing.totalPagesRead += entry.totalPagesRead;
+      existing.booksFinished += entry.booksFinished;
+      statsByClass.set(entry.classCode, existing);
+    });
+
+    return Array.from(statsByClass.values()).sort((a, b) => {
+      if (b.journalCount !== a.journalCount) return b.journalCount - a.journalCount;
+      if (b.totalPagesRead !== a.totalPagesRead) return b.totalPagesRead - a.totalPagesRead;
+      if (b.booksFinished !== a.booksFinished) return b.booksFinished - a.booksFinished;
+      return a.classCode.localeCompare(b.classCode);
+    });
+  }, [leaderboard]);
+
   const myLeaderboardPosition = useMemo(() => {
     const entries = leaderboardSubTab === "semua" ? leaderboard : classLeaderboard;
     const rankIndex = entries.findIndex((entry) => entry.studentId === user?.uid);
@@ -2853,7 +2888,9 @@ export default function StudentDashboard() {
                 <p className={`text-xs mt-1 leading-relaxed break-words text-justify ${theme.mutedText}`}>
                   {leaderboardSubTab === "semua"
                     ? "Menu ini menampilkan Top 100 siswa dengan urutan berdasarkan jumlah jurnal, halaman dibaca, dan buku selesai dari seluruh kelas."
-                    : "Peringkat siswa di kelas Anda saat ini dihitung berdasarkan jumlah jurnal, halaman dibaca, dan buku selesai."}
+                    : leaderboardSubTab === "kelas"
+                    ? "Peringkat siswa di kelas Anda saat ini dihitung berdasarkan jumlah jurnal, halaman dibaca, dan buku selesai."
+                    : "Peringkat kelas terbaik/terajin membaca dihitung dari akumulasi jurnal, halaman dibaca, dan buku selesai seluruh siswa di setiap kelas."}
                 </p>
                 <div className={`mt-3 rounded-2xl border p-3 shadow-sm backdrop-blur-sm ${darkMode ? "border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-emerald-500/10" : "border-amber-200 bg-gradient-to-r from-amber-50 via-white to-emerald-50"}`}>
                   <div className="flex items-center justify-between gap-3">
@@ -2891,16 +2928,17 @@ export default function StudentDashboard() {
             </div>
 
             {/* Sub-tab: Semua Kelas vs Per Kelas */}
-            <div className={`flex gap-2 mb-4 p-1 rounded-xl w-full sm:w-fit ${darkMode ? "bg-slate-900/40" : "bg-emerald-900/5"}`}>
+            <div className={`flex flex-wrap gap-2 mb-4 p-1 rounded-xl w-full sm:w-fit ${darkMode ? "bg-slate-900/40" : "bg-emerald-900/5"}`}>
               {([
-                ["semua", "Semua Kelas"],
-                ["kelas", "Per Kelas"],
+                ["semua", "Murid Rajin"],
+                ["kelas", "Murid Rajin di Kelas-Mu"],
+                ["kelas-terajin", "Kelas Rajin"],
               ] as [LeaderboardSubTab, string][]).map(([key, label]) => (
                 <button
                   key={key}
                   type="button"
                   onClick={() => setLeaderboardSubTab(key)}
-                  className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-semibold transition ${
+                  className={`flex-1 sm:flex-none px-2.5 sm:px-4 py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold leading-tight transition ${
                     leaderboardSubTab === key
                       ? "bg-emerald-600 text-white shadow-sm"
                       : darkMode
@@ -2922,56 +2960,106 @@ export default function StudentDashboard() {
               </div>
             )}
 
-            {myLeaderboardPosition && (
-              myLeaderboardPosition.isVisible ? (
-              <button
-                type="button"
-                onClick={() => {
-                  document.getElementById(`leaderboard-student-${user?.uid}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-                }}
-                className={`mb-4 flex w-full items-center justify-between gap-3 rounded-2xl border p-3 text-left transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 shadow-[0_12px_28px_-18px_rgba(16,185,129,0.8)] ${
-                  darkMode ? "border-emerald-500/40 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white hover:shadow-[0_14px_30px_-18px_rgba(16,185,129,0.9)]" : "border-emerald-300 bg-gradient-to-r from-emerald-50 via-white to-teal-50 text-emerald-900 hover:shadow-[0_14px_30px_-18px_rgba(16,185,129,0.7)]"
-                }`}
-              >
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${darkMode ? "bg-white/10 text-emerald-100" : "bg-emerald-100 text-emerald-700"}`}>
-                    <Trophy className="h-5 w-5" />
-                  </div>
-                  <span className="min-w-0">
-                    <span className={`block text-[10px] font-bold uppercase tracking-[0.16em] ${darkMode ? "text-emerald-100/80" : "text-emerald-700"}`}>
-                      Posisi kamu saat ini
-                    </span>
-                    <span className={`mt-0.5 block text-sm font-bold ${darkMode ? "text-white" : "text-emerald-900"}`}>
-                      {getRankLabel(myLeaderboardPosition.rank)} dari {myLeaderboardPosition.total} siswa
-                    </span>
-                    <span className={`mt-0.5 block text-[11px] ${darkMode ? "text-emerald-100/80" : "text-emerald-700/80"}`}>
-                      {myLeaderboardPosition.isVisible ? "Klik untuk melihat posisi kamu" : "Posisi ini belum masuk Top 100"}
-                    </span>
-                  </span>
-                </div>
-                <ChevronRight className="h-5 w-5 shrink-0 text-current" aria-hidden="true" />
-              </button>
+            {leaderboardSubTab === "kelas-terajin" ? (
+              classLeaderboardRanking.length === 0 ? (
+                <p className={`text-sm ${theme.bodyText}`}>Belum ada data kelas yang membaca buku.</p>
               ) : (
-                <div className={`mb-4 flex w-full items-center justify-between gap-3 rounded-2xl border p-3 text-left shadow-sm ${
-                  darkMode ? "border-amber-500/40 bg-amber-900/20" : "border-amber-300 bg-amber-50"
-                }`}>
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${darkMode ? "bg-amber-500/15 text-amber-300" : "bg-amber-100 text-amber-700"}`}>
-                      <Award className="h-5 w-5" />
-                    </div>
-                    <span className="min-w-0">
-                      <span className={`block text-[10px] font-bold uppercase tracking-[0.16em] ${darkMode ? "text-amber-300" : "text-amber-700"}`}>
-                        Posisi kamu saat ini
-                      </span>
-                      <span className={`mt-0.5 block text-sm font-bold ${theme.headingText}`}>
-                        {getRankLabel(myLeaderboardPosition.rank)}
-                      </span>
-                      <span className={`mt-0.5 block text-[11px] ${theme.mutedText}`}>
-                        Posisi kamu belum masuk Top 100 leaderboard.
-                      </span>
-                    </span>
-                  </div>
+                <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
+                  {classLeaderboardRanking.map((entry, idx) => {
+                    const rank = idx + 1;
+                    const isMyClass = entry.classCode === studentClassCode;
+                    return (
+                      <div
+                        key={entry.classCode}
+                        className={`flex flex-col gap-2.5 p-2.5 rounded-xl border transition-all duration-200 sm:flex-row sm:items-center sm:gap-3 sm:p-3 ${
+                          isMyClass
+                            ? darkMode
+                              ? "bg-gradient-to-r from-emerald-900/60 via-emerald-800/40 to-teal-900/50 border-emerald-500 shadow-[0_10px_24px_-18px_rgba(16,185,129,0.95)]"
+                              : "bg-gradient-to-r from-emerald-100 via-white to-teal-50 border-emerald-300 shadow-[0_10px_24px_-18px_rgba(16,185,129,0.8)]"
+                            : darkMode
+                            ? "bg-slate-700/40 border-slate-700"
+                            : "bg-emerald-50/50 border-emerald-100"
+                        }`}
+                      >
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <div
+                            className={`w-10 h-10 sm:w-11 sm:h-11 shrink-0 rounded-full flex flex-col items-center justify-center font-bold text-[10px] sm:text-[11px] ${getRankBadgeStyle(rank, darkMode)}`}
+                          >
+                            {rank <= 3 ? <Crown className="w-4 h-4" /> : rank}
+                          </div>
+                          <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-amber-500/80">
+                            {rank <= 3 ? getRankLabel(rank) : "Peringkat"}
+                          </div>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-xs sm:text-sm font-bold truncate ${theme.headingText}`}>
+                            Kelas {entry.classCode}
+                            {isMyClass && <span className="ml-1.5 text-xs font-normal text-emerald-500">(Kelasmu)</span>}
+                          </p>
+                          <p className={`text-xs ${theme.mutedText}`}>{entry.activeStudents} siswa aktif</p>
+                        </div>
+                        <div className="w-full text-left sm:w-auto sm:text-right shrink-0">
+                          <p className={`text-xs sm:text-sm font-bold ${theme.headingText}`}>{entry.journalCount} jurnal</p>
+                          <p className={`text-[10px] sm:text-xs ${theme.mutedText}`}>{entry.totalPagesRead} halaman</p>
+                          <p className={`text-[10px] sm:text-xs ${theme.mutedText}`}>{entry.booksFinished} buku selesai</p>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
+              )
+            ) : (
+              myLeaderboardPosition && (
+                myLeaderboardPosition.isVisible ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      document.getElementById(`leaderboard-student-${user?.uid}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    }}
+                    className={`mb-4 flex w-full items-center justify-between gap-3 rounded-2xl border p-3 text-left transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 shadow-[0_12px_28px_-18px_rgba(16,185,129,0.8)] ${
+                      darkMode ? "border-emerald-500/40 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white hover:shadow-[0_14px_30px_-18px_rgba(16,185,129,0.9)]" : "border-emerald-300 bg-gradient-to-r from-emerald-50 via-white to-teal-50 text-emerald-900 hover:shadow-[0_14px_30px_-18px_rgba(16,185,129,0.7)]"
+                    }`}
+                  >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${darkMode ? "bg-white/10 text-emerald-100" : "bg-emerald-100 text-emerald-700"}`}>
+                        <Trophy className="h-5 w-5" />
+                      </div>
+                      <span className="min-w-0">
+                        <span className={`block text-[10px] font-bold uppercase tracking-[0.16em] ${darkMode ? "text-emerald-100/80" : "text-emerald-700"}`}>
+                          Posisi kamu saat ini
+                        </span>
+                        <span className={`mt-0.5 block text-sm font-bold ${darkMode ? "text-white" : "text-emerald-900"}`}>
+                          {getRankLabel(myLeaderboardPosition.rank)} dari {myLeaderboardPosition.total} siswa
+                        </span>
+                        <span className={`mt-0.5 block text-[11px] ${darkMode ? "text-emerald-100/80" : "text-emerald-700/80"}`}>
+                          {myLeaderboardPosition.isVisible ? "Klik untuk melihat posisi kamu" : "Posisi ini belum masuk Top 100"}
+                        </span>
+                      </span>
+                    </div>
+                    <ChevronRight className="h-5 w-5 shrink-0 text-current" aria-hidden="true" />
+                  </button>
+                ) : (
+                  <div className={`mb-4 flex w-full items-center justify-between gap-3 rounded-2xl border p-3 text-left shadow-sm ${
+                    darkMode ? "border-amber-500/40 bg-amber-900/20" : "border-amber-300 bg-amber-50"
+                  }`}>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${darkMode ? "bg-amber-500/15 text-amber-300" : "bg-amber-100 text-amber-700"}`}>
+                        <Award className="h-5 w-5" />
+                      </div>
+                      <span className="min-w-0">
+                        <span className={`block text-[10px] font-bold uppercase tracking-[0.16em] ${darkMode ? "text-amber-300" : "text-amber-700"}`}>
+                          Posisi kamu saat ini
+                        </span>
+                        <span className={`mt-0.5 block text-sm font-bold ${theme.headingText}`}>
+                          {getRankLabel(myLeaderboardPosition.rank)}
+                        </span>
+                        <span className={`mt-0.5 block text-[11px] ${theme.mutedText}`}>
+                          Posisi kamu belum masuk Top 100 leaderboard.
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                )
               )
             )}
 

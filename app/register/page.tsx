@@ -234,7 +234,7 @@ export default function RegisterPage() {
                   }`}
                 >
                   <BookOpen className="w-5 h-5" />
-                  <span className="text-sm font-semibold">Siswa</span>
+                  <span className="text-sm font-semibold">Murid</span>
                 </button>
                 <button
                   type="button"

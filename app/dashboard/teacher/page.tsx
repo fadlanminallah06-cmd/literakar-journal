@@ -76,6 +76,7 @@ interface Journal {
   id: string;
   studentId?: string;
   studentName: string;
+  gender?: "laki-laki" | "perempuan" | "";
   bookTitle: string;
   author: string;
   startPage: number;
@@ -136,6 +137,7 @@ interface LeaderboardEntry {
   studentId: string;
   studentName: string;
   classCode: string;
+  gender?: string;
   journalCount: number;
   totalPagesRead: number;
   booksFinished: number;
@@ -150,7 +152,7 @@ interface ClassLeaderboardEntry {
   booksFinished: number;
 }
 
-type TabKey = "ringkasan" | "leaderboard" | "pendampingan" | "jurnal" | "laporan" | "kelola";
+type TabKey = "ringkasan" | "jurnal" | "pendampingan" | "leaderboard" | "laporan" | "kelola";
 type ReportView = "kelas" | "siswa";
 type ReportPeriod = "all" | "month";
 type LeaderboardSubTab = "semua" | "kelas" | "kelas-terajin";
@@ -567,7 +569,7 @@ function getTopCharacters(journalsInput: Journal[], limit = 10): [string, number
  * jumlah siswa pada laporan selalu sinkron dengan daftar siswa aktif di roster.
  */
 const DETAILED_HEADERS = [
-  "Nama Siswa",
+  "Nama Murid",
   "Kelas",
   "Gender",
   "Jumlah Buku Selesai",
@@ -1020,6 +1022,8 @@ export default function TeacherDashboard() {
   const [journalClassFilter, setJournalClassFilter] = useState("all");
   // id jurnal yang sedang dihapus -> mencegah klik ganda dan memberi feedback visual
   const [deleteJournalLoading, setDeleteJournalLoading] = useState<string | null>(null);
+  const [leaderboardLoading, setLeaderboardLoading] = useState(false);
+  const [leaderboardError, setLeaderboardError] = useState("");
   const [leaderboardSubTab, setLeaderboardSubTab] = useState<LeaderboardSubTab>("semua");
   const [selectedLeaderboardClass, setSelectedLeaderboardClass] = useState("");
   const [leaderboardRefreshKey, setLeaderboardRefreshKey] = useState<string>(() => new Date().toISOString());
@@ -1034,12 +1038,13 @@ export default function TeacherDashboard() {
     const target = event.target as HTMLElement;
     if (target.closest("nav, button, input, textarea, select, a")) return;
     if (target.closest("[data-weather-scroll='true']")) return;
+    if (target.closest("[data-stats-scroll='true']")) return;
     swipeStartX.current = event.touches[0]?.clientX ?? null;
   };
 
   const handleSwipeEnd = (event: React.TouchEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
-    if (target.closest("[data-weather-scroll='true']")) {
+    if (target.closest("[data-weather-scroll='true']") || target.closest("[data-stats-scroll='true']")) {
       swipeStartX.current = null;
       return;
     }
@@ -1049,7 +1054,7 @@ export default function TeacherDashboard() {
     const endX = event.changedTouches[0]?.clientX;
     if (endX === undefined || Math.abs(endX - startX) < 70) return;
 
-    const tabKeys: TabKey[] = ["ringkasan", "leaderboard", "pendampingan", "jurnal", "laporan", "kelola"];
+    const tabKeys: TabKey[] = ["ringkasan", "jurnal", "pendampingan", "leaderboard", "laporan", "kelola"];
     const currentIndex = tabKeys.indexOf(activeTab);
     const nextIndex = endX < startX ? currentIndex + 1 : currentIndex - 1;
     if (nextIndex >= 0 && nextIndex < tabKeys.length) setActiveTab(tabKeys[nextIndex]);
@@ -1741,18 +1746,18 @@ export default function TeacherDashboard() {
     };
   }, [fetchClassJournals, user, userProfile?.role]);
 
-  const leaderboard = useMemo(() => buildLeaderboard(journals, 100, leaderboardRefreshKey), [journals, leaderboardRefreshKey]);
+  const leaderboard = useMemo(() => buildLeaderboard(journals, 100, leaderboardRefreshKey, allStudents), [allStudents, journals, leaderboardRefreshKey]);
   const totalRegisteredStudents = allStudents.length;
   const leaderboardClasses = useMemo(
-    () => Array.from(new Set(leaderboard.map((entry) => entry.classCode).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
-    [leaderboard]
+    () => Array.from(new Set(allStudents.map((student) => student.classCode).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
+    [allStudents]
   );
   const effectiveLeaderboardClass = selectedLeaderboardClass && leaderboardClasses.includes(selectedLeaderboardClass)
     ? selectedLeaderboardClass
     : leaderboardClasses[0] || "";
   const classLeaderboard = useMemo(
-    () => buildLeaderboard(journals.filter((journal) => journal.classCode === effectiveLeaderboardClass), Number.MAX_SAFE_INTEGER, leaderboardRefreshKey),
-    [journals, effectiveLeaderboardClass, leaderboardRefreshKey]
+    () => buildLeaderboard(journals.filter((journal) => journal.classCode === effectiveLeaderboardClass), Number.MAX_SAFE_INTEGER, leaderboardRefreshKey, allStudents),
+    [allStudents, journals, effectiveLeaderboardClass, leaderboardRefreshKey]
   );
   const classLeaderboardRanking = useMemo(
     () => buildClassLeaderboard(journals, allStudents, leaderboardRefreshKey),
@@ -2011,7 +2016,7 @@ export default function TeacherDashboard() {
 
   /** Export khusus daftar Buku & Nilai Karakter pada periode terpilih */
   const handleExportBooksAndCharacters = () => {
-    const bookHeaders = ["Peringkat", "Judul Buku", "Nama Siswa", "Jumlah Siswa Membaca", "Tanggal Upload", "Divalidasi Oleh"];
+    const bookHeaders = ["Peringkat", "Judul Buku", "Nama Murid", "Jumlah Murid Membaca", "Tanggal Upload", "Divalidasi Oleh"];
     const bookRows = reportTopBooks.map(([title, count], idx) => {
       const matchingJournals = reportPeriodJournals.filter(
         (journal) => journal.bookTitle.trim().toLowerCase() === title.trim().toLowerCase()
@@ -2030,7 +2035,7 @@ export default function TeacherDashboard() {
       ];
     });
 
-    const charHeaders = ["Peringkat", "Nilai Karakter", "Nama Siswa", "Jumlah Siswa Menyebutkan", "Tanggal Upload", "Divalidasi Oleh"];
+    const charHeaders = ["Peringkat", "Nilai Karakter", "Nama Murid", "Jumlah Murid Menyebutkan", "Tanggal Upload", "Divalidasi Oleh"];
     const charRows = reportTopCharacters.map(([val, count], idx) => {
       const matchingJournals = reportPeriodJournals.filter((journal) =>
         getCharacterList(journal).some((character) => character.trim().toLowerCase() === val.trim().toLowerCase())
@@ -2051,11 +2056,11 @@ export default function TeacherDashboard() {
 
     // Gabungkan jadi satu file dengan separator section
     const lines: string[] = [];
-    lines.push("=== DAFTAR BUKU TERPOPULER (BERDASARKAN JUMLAH SISWA) ===");
+    lines.push("=== DAFTAR BUKU TERPOPULER (BERDASARKAN JUMLAH MURID) ===");
     lines.push(bookHeaders.map((h) => `"${h}"`).join(","));
     bookRows.forEach((r) => lines.push(r.map((f) => `"${String(f ?? "").replace(/"/g, '""')}"`).join(",")));
     lines.push("");
-    lines.push("=== DAFTAR NILAI KARAKTER TERBANYAK (BERDASARKAN JUMLAH SISWA) ===");
+    lines.push("=== DAFTAR NILAI KARAKTER TERBANYAK (BERDASARKAN JUMLAH MURID) ===");
     lines.push(charHeaders.map((h) => `"${h}"`).join(","));
     charRows.forEach((r) => lines.push(r.map((f) => `"${String(f ?? "").replace(/"/g, '""')}"`).join(",")));
 
@@ -2098,14 +2103,14 @@ export default function TeacherDashboard() {
   const weatherInfo = weather ? getWeatherInfo(weather.weatherCode) : null;
   const tabs: { key: TabKey; label: string; shortLabel: string; icon: React.ReactNode }[] = [
     { key: "ringkasan", label: "Rekap Seluruh Siswa", shortLabel: "Rekap", icon: <LayoutGrid className="w-4 h-4" /> },
-    { key: "leaderboard", label: "Leaderboard", shortLabel: "Leaderboard", icon: <Trophy className="w-4 h-4" /> },
+    { key: "jurnal", label: "Daftar Jurnal", shortLabel: "Jurnal", icon: <NotebookText className="w-4 h-4" /> },
     {
       key: "pendampingan",
       label: `Perlu Pendampingan${studentsNeedingAttention.length ? ` (${studentsNeedingAttention.length})` : ""}`,
       shortLabel: "Pendampingan",
       icon: <HeartHandshake className="w-4 h-4" />,
     },
-    { key: "jurnal", label: "Daftar Jurnal", shortLabel: "Jurnal", icon: <NotebookText className="w-4 h-4" /> },
+    { key: "leaderboard", label: "Leaderboard", shortLabel: "Leaderboard", icon: <Trophy className="w-4 h-4" /> },
     { key: "laporan", label: "Laporan", shortLabel: "Laporan", icon: <FileBarChart2 className="w-4 h-4" /> },
     { key: "kelola", label: "Kelola Data", shortLabel: "Kelola", icon: <Settings2 className="w-4 h-4" /> },
   ];
@@ -2163,16 +2168,6 @@ export default function TeacherDashboard() {
                 </div>
 
                 <div className="flex items-center gap-1.5 shrink-0 sm:gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void handleManualRefresh()}
-                    disabled={isRefreshingData}
-                    aria-label="Muat ulang data"
-                    title="Muat ulang data"
-                    className={`flex h-8 w-8 items-center justify-center rounded-xl border transition active:scale-[0.98] focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 disabled:cursor-not-allowed disabled:opacity-50 sm:h-9 sm:w-9 lg:h-10 lg:w-10 ${darkMode ? "border-emerald-700 bg-slate-700 text-emerald-300 hover:bg-slate-600" : "border-white/20 bg-white/10 text-white hover:bg-white/15"}`}
-                  >
-                    <RefreshCw className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${isRefreshingData ? "animate-spin" : ""}`} />
-                  </button>
                   <button
                     type="button"
                     onClick={toggleDarkMode}
@@ -2291,320 +2286,548 @@ export default function TeacherDashboard() {
         )}
 
         {/* ---- Tab: Rekap Kelas ---- */}
+        {/* ---- Tab: Rekap Kelas (Enhanced UI) ---- */}
         {activeTab === "ringkasan" && (
-          <div className="space-y-5 sm:space-y-6 lg:space-y-8">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 lg:gap-5">
-              <StatCard
-                label="Total Siswa"
-                value={classStats.totalSiswa}
-                icon={<Users className="w-4 h-4" />}
-                color="blue"
-              />
-              <StatCard
-                label="Jurnal Bulan Ini"
-                value={classStats.jurnalBulanIni}
-                icon={<CalendarCheck className="w-4 h-4" />}
-                color="yellow"
-              />
-              <StatCard
-                label="Total Halaman Dibaca"
-                value={classStats.totalHalaman}
-                icon={<Library className="w-4 h-4" />}
-                color="emerald"
-              />
-              <StatCard
-                label="Total Buku Selesai"
-                value={classStats.totalBukuSelesai}
-                icon={<BookOpen className="w-4 h-4" />}
-                color="orange"
+  <div className="space-y-4 sm:space-y-6 lg:space-y-8 animate-in fade-in duration-500">
+    {/* Header Section dengan Glassmorphism */}
+    <div className="relative overflow-hidden rounded-3xl bg-white/40 backdrop-blur-md border border-white/60 shadow-[0_8px_30px_-12px_rgba(6,95,70,0.15)] p-4 sm:p-6">
+      <div className="absolute -top-24 -right-24 w-64 h-64 bg-emerald-200/30 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-teal-200/30 rounded-full blur-3xl pointer-events-none" />
+      
+      <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-bold text-emerald-900 tracking-tight">
+            Rekap Seluruh Siswa
+          </h2>
+          <p className="text-sm text-emerald-700/70 mt-1">
+            Pantau perkembangan literasi siswa secara real-time
+          </p>
+        </div>
+        <div className="flex items-center gap-2 text-xs sm:text-sm text-emerald-600 bg-emerald-50/80 px-3 py-1.5 rounded-full border border-emerald-100 w-fit">
+          <CalendarCheck className="w-4 h-4" />
+          <span className="font-medium">{todayLabel}</span>
+        </div>
+      </div>
+    </div>
+
+    {/* Stats Grid - Mobile Optimized */}
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+      <StatCard
+        label="Total Murid"
+        value={classStats.totalSiswa}
+        icon={<Users className="w-4 h-4" />}
+        color="blue"
+      />
+      <StatCard
+        label="Jurnal Bulan Ini"
+        value={classStats.jurnalBulanIni}
+        icon={<CalendarCheck className="w-4 h-4" />}
+        color="yellow"
+      />
+      <StatCard
+        label="Total Halaman Dibaca"
+        value={classStats.totalHalaman}
+        icon={<Library className="w-4 h-4" />}
+        color="emerald"
+      />
+      <StatCard
+        label="Total Buku Selesai"
+        value={classStats.totalBukuSelesai}
+        icon={<BookOpen className="w-4 h-4" />}
+        color="orange"
+      />
+    </div>
+
+    {/* Secondary Stats - Horizontal Scroll di Mobile */}
+    <div className="relative" data-stats-scroll="true">
+      <div className="flex overflow-x-auto gap-3 pb-2 snap-x snap-mandatory [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:grid md:grid-cols-3 lg:grid-cols-6 md:pb-0">
+        <div className="min-w-[140px] md:min-w-0 snap-start">
+          <StatCard
+            label="Total Jurnal"
+            value={classStats.totalJurnal}
+            icon={<BookOpen className="w-4 h-4" />}
+            color="emerald"
+          />
+        </div>
+        <div className="min-w-[140px] md:min-w-0 snap-start">
+          <StatCard
+            label="Sudah Divalidasi"
+            value={classStats.totalTervalidasi}
+            icon={<CheckCircle2 className="w-4 h-4" />}
+            color="emerald"
+          />
+        </div>
+        <div className="min-w-[140px] md:min-w-0 snap-start">
+          <StatCard
+            label="Perlu Revisi"
+            value={classStats.totalRevisi}
+            icon={<AlertTriangle className="w-4 h-4" />}
+            color="orange"
+          />
+        </div>
+        <div className="min-w-[140px] md:min-w-0 snap-start">
+          <StatCard
+            label="Menunggu Validasi"
+            value={classStats.totalMenunggu}
+            icon={<Clock className="w-4 h-4" />}
+            color="yellow"
+          />
+        </div>
+        <div className="min-w-[140px] md:min-w-0 snap-start">
+          <StatCard
+            label="Perlu Feedback"
+            value={missingValidationFeedbackByClass.reduce((total, [, count]) => total + count, 0)}
+            icon={<Mail className="w-4 h-4" />}
+            color="blue"
+          />
+        </div>
+        <div className="min-w-[140px] md:min-w-0 snap-start">
+          <StatCard
+            label="Rata-rata/Murid"
+            value={classStats.rataRata.toFixed(1)}
+            icon={<TrendingUp className="w-4 h-4" />}
+            color="blue"
+          />
+        </div>
+      </div>
+    </div>
+
+    {/* Top Buku & Nilai Karakter - Enhanced Cards */}
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
+      <div className="group relative overflow-hidden bg-white/80 backdrop-blur-sm p-5 rounded-3xl shadow-[0_4px_20px_-8px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/50 hover:shadow-[0_8px_30px_-12px_rgba(6,95,70,0.25)] transition-all duration-300 hover:-translate-y-1">
+        <div className="absolute -right-4 -top-4 w-24 h-24 bg-emerald-100/50 rounded-full blur-2xl group-hover:bg-emerald-200/60 transition-colors" />
+        <div className="relative">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="p-2 bg-emerald-100 rounded-xl text-emerald-600">
+              <BookOpen className="w-5 h-5" />
+            </div>
+            <h3 className="text-sm font-bold text-emerald-800">Top 5 Buku Terpopuler</h3>
+          </div>
+          {classStats.topBooks.length === 0 ? (
+            <div className="text-center py-8 bg-emerald-50/50 rounded-2xl border border-dashed border-emerald-200">
+              <BookOpen className="w-8 h-8 text-emerald-300 mx-auto mb-2" />
+              <p className="text-sm text-emerald-700/50">Belum ada data buku</p>
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {classStats.topBooks.map(([title, count], idx) => (
+                <li 
+                  key={`${title}-${count}`} 
+                  className="flex items-center justify-between gap-3 p-3 rounded-xl bg-emerald-50/50 hover:bg-emerald-100/50 transition-colors border border-transparent hover:border-emerald-100"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
+                      idx === 0 ? "bg-amber-100 text-amber-700" :
+                      idx === 1 ? "bg-slate-100 text-slate-600" :
+                      idx === 2 ? "bg-orange-100 text-orange-600" :
+                      "bg-emerald-100 text-emerald-600"
+                    }`}>
+                      {idx + 1}
+                    </span>
+                    <span className="font-semibold text-emerald-900 truncate text-sm">{title}</span>
+                  </div>
+                  <span className="text-xs font-medium text-emerald-600 bg-emerald-100/80 px-2.5 py-1 rounded-full shrink-0">
+                    {count} siswa
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+
+      <div className="group relative overflow-hidden bg-white/80 backdrop-blur-sm p-5 rounded-3xl shadow-[0_4px_20px_-8px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/50 hover:shadow-[0_8px_30px_-12px_rgba(6,95,70,0.25)] transition-all duration-300 hover:-translate-y-1">
+        <div className="absolute -right-4 -top-4 w-24 h-24 bg-amber-100/50 rounded-full blur-2xl group-hover:bg-amber-200/60 transition-colors" />
+        <div className="relative">
+          <div className="flex items-center gap-2 mb-4">
+            <div className="p-2 bg-amber-100 rounded-xl text-amber-600">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <h3 className="text-sm font-bold text-emerald-800">Top 5 Nilai Karakter</h3>
+          </div>
+          {classStats.topCharacters.length === 0 ? (
+            <div className="text-center py-8 bg-amber-50/50 rounded-2xl border border-dashed border-amber-200">
+              <Sparkles className="w-8 h-8 text-amber-300 mx-auto mb-2" />
+              <p className="text-sm text-emerald-700/50">Belum ada data nilai karakter</p>
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {classStats.topCharacters.map(([val, count], idx) => (
+                <li 
+                  key={`${val}-${count}`} 
+                  className="flex items-center justify-between gap-3 p-3 rounded-xl bg-amber-50/50 hover:bg-amber-100/50 transition-colors border border-transparent hover:border-amber-100"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
+                      idx === 0 ? "bg-amber-200 text-amber-800" :
+                      idx === 1 ? "bg-slate-100 text-slate-600" :
+                      idx === 2 ? "bg-orange-100 text-orange-600" :
+                      "bg-emerald-100 text-emerald-600"
+                    }`}>
+                      {idx + 1}
+                    </span>
+                    <span className="font-semibold text-emerald-900 truncate text-sm">{val}</span>
+                  </div>
+                  <span className="text-xs font-medium text-amber-700 bg-amber-100/80 px-2.5 py-1 rounded-full shrink-0">
+                    {count} siswa
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
+
+    {/* Rangkuman Kelas Per Bulan - Enhanced Table */}
+    <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-[0_4px_20px_-8px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/50 overflow-hidden">
+      <div className="p-4 sm:p-6 border-b border-emerald-100/80 bg-gradient-to-r from-emerald-50/50 to-transparent">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-bold text-emerald-900 flex items-center gap-2">
+              <LayoutGrid className="w-5 h-5 text-emerald-600" />
+              Rangkuman Kelas Per Bulan
+            </h2>
+            <p className="text-xs text-emerald-700/60 mt-1">
+              Murid aktif adalah murid yang mengirim jurnal pada bulan terpilih
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <div className="relative">
+              <label className="text-[10px] uppercase tracking-wider text-emerald-600 font-semibold mb-1 block">Bulan</label>
+              <input
+                type="month"
+                value={classSummaryMonth}
+                onChange={(e) => setClassSummaryMonth(e.target.value)}
+                className="w-full sm:w-40 p-2.5 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition-all shadow-sm"
               />
             </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4 lg:gap-5">
-              <StatCard
-                label="Total Jurnal"
-                value={classStats.totalJurnal}
-                icon={<BookOpen className="w-4 h-4" />}
-                color="emerald"
-              />
-              <StatCard
-                label="Sudah Divalidasi"
-                value={classStats.totalTervalidasi}
-                icon={<CheckCircle2 className="w-4 h-4" />}
-                color="emerald"
-              />
-              <StatCard
-                label="Perlu Revisi"
-                value={classStats.totalRevisi}
-                icon={<AlertTriangle className="w-4 h-4" />}
-                color="orange"
-              />
-              <StatCard
-                label="Menunggu Validasi"
-                value={classStats.totalMenunggu}
-                icon={<Clock className="w-4 h-4" />}
-                color="yellow"
-              />
-              <StatCard
-                label="Perlu Memberi Feedback Jurnal"
-                value={missingValidationFeedbackByClass.reduce((total, [, count]) => total + count, 0)}
-                icon={<Mail className="w-4 h-4" />}
-                color="blue"
-              />
-              <StatCard
-                label="Rata-rata Jurnal/Siswa"
-                value={classStats.rataRata.toFixed(1)}
-                icon={<TrendingUp className="w-4 h-4" />}
-                color="blue"
-              />
-            </div>
-
-            {/* Top Buku & Nilai Karakter */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6">
-              <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-5 lg:p-6 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
-                <h3 className="text-sm font-semibold text-emerald-700/70 mb-3">Top 5 Buku Terpopuler</h3>
-                {classStats.topBooks.length === 0 ? (
-                  <p className="text-sm text-emerald-700/50">Belum ada data buku.</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {classStats.topBooks.map(([title, count], idx) => (
-                      <li key={`${title}-${count}`} className="flex items-center justify-between gap-2 text-sm">
-                        <span className="flex items-center gap-2 min-w-0">
-                          <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold flex items-center justify-center shrink-0">
-                            {idx + 1}
-                          </span>
-                          <span className="font-medium text-emerald-900 truncate">{title}</span>
-                        </span>
-                        <span className="text-xs text-emerald-700/60 shrink-0">{count} siswa</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-              <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-5 lg:p-6 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
-                <h3 className="text-sm font-semibold text-emerald-700/70 mb-3">
-                  Top 5 Nilai Karakter
-                </h3>
-                {classStats.topCharacters.length === 0 ? (
-                  <p className="text-sm text-emerald-700/50">Belum ada data nilai karakter.</p>
-                ) : (
-                  <ul className="space-y-2">
-                    {classStats.topCharacters.map(([val, count], idx) => (
-                      <li key={`${val}-${count}`} className="flex items-center justify-between gap-2 text-sm">
-                        <span className="flex items-center gap-2 min-w-0">
-                          <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-700 text-xs font-bold flex items-center justify-center shrink-0">
-                            {idx + 1}
-                          </span>
-                          <span className="font-medium text-emerald-900 truncate">{val}</span>
-                        </span>
-                        <span className="text-xs text-emerald-700/60 shrink-0">{count} siswa</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 lg:p-7 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
-              <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-4 lg:mb-5">
-                <div>
-                  <h2 className="text-base sm:text-lg lg:text-xl font-bold text-emerald-900">Rangkuman Kelas Per Bulan</h2>
-                  <p className="text-xs text-emerald-700/60 mt-1">
-                    Siswa aktif adalah siswa yang mengirim jurnal pada bulan terpilih.
-                  </p>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <div>
-                    <label className="text-xs text-emerald-700/70 mb-1 block">Bulan rekap</label>
-                    <input
-                      type="month"
-                      value={classSummaryMonth}
-                      onChange={(e) => setClassSummaryMonth(e.target.value)}
-                      className="w-full p-2 text-sm bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs text-emerald-700/70 mb-1 block">Pilih kelas</label>
-                    <select
-                      value={classSummaryClass}
-                      onChange={(e) => setClassSummaryClass(e.target.value)}
-                      className="w-full p-2 text-sm bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
-                    >
-                      <option value="all">Semua kelas</option>
-                      {availableClasses.map((classCode) => (
-                        <option key={classCode} value={classCode}>{classCode}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-              {classSummaries.length === 0 ? (
-                <p className="text-sm text-emerald-700/60">Belum ada data siswa untuk kelas atau bulan ini.</p>
-              ) : (
-                <>
-                  {/* Mobile: kartu ringkas per kelas */}
-                  <div className="grid grid-cols-1 xs:grid-cols-2 gap-2.5 md:hidden">
-                    {classSummaries.map((summary) => (
-                      <ClassSummaryCard key={summary.classCode} summary={summary} />
-                    ))}
-                  </div>
-                  {/* Desktop: tabel */}
-                  <div className="hidden md:block overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left text-emerald-700/60 border-b border-emerald-100">
-                          <th className="py-2 lg:py-3 pr-3">Kelas</th>
-                          <th className="py-2 lg:py-3 pr-3">Total Siswa</th>
-                          <th className="py-2 lg:py-3 pr-3">Siswa Aktif</th>
-                          <th className="py-2 lg:py-3 pr-3">Total Jurnal</th>
-                          <th className="py-2 lg:py-3 pr-3">Tervalidasi</th>
-                          <th className="py-2 lg:py-3 pr-3">Perlu Revisi</th>
-                          <th className="py-2 lg:py-3 pr-3">Menunggu</th>
-                          <th className="py-2 lg:py-3">Halaman</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {classSummaries.map((summary) => (
-                          <tr key={summary.classCode} className="border-b border-emerald-50 last:border-0 hover:bg-emerald-50/40 transition-colors">
-                            <td className="py-2 lg:py-3 pr-3 font-semibold text-emerald-900">{summary.classCode}</td>
-                            <td className="py-2 lg:py-3 pr-3 text-emerald-800/80">{summary.totalStudents}</td>
-                            <td className="py-2 lg:py-3 pr-3 text-emerald-800/80">{summary.activeStudents}</td>
-                            <td className="py-2 lg:py-3 pr-3 text-emerald-800/80">{summary.totalJournals}</td>
-                            <td className="py-2 lg:py-3 pr-3 text-emerald-800/80">{summary.approvedCount}</td>
-                            <td className="py-2 lg:py-3 pr-3 text-emerald-800/80">{summary.revisionCount}</td>
-                            <td className="py-2 lg:py-3 pr-3 text-emerald-800/80">{summary.pendingCount}</td>
-                            <td className="py-2 lg:py-3 text-emerald-800/80">{summary.totalPagesRead}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Daftar siswa */}
-            <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 lg:p-7 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                <h2 className="text-base sm:text-lg lg:text-xl font-bold text-emerald-900">Aktivitas per Siswa</h2>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <select
-                    value={classFilter}
-                    onChange={(e) => setClassFilter(e.target.value)}
-                    className="px-3 py-2 text-sm bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
-                  >
-                    <option value="all">Semua Kelas</option>
-                    {availableClasses.map((c) => (
-                      <option key={c} value={c}>
-                        Kelas {c}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
-                    <input
-                      type="text"
-                      placeholder="Cari nama siswa..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-9 pr-3 py-2 text-sm bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 w-full sm:w-52"
-                    />
-                  </div>
-                </div>
-              </div>
-              <p className="text-xs text-emerald-700/50 mb-3">
-                Klik nama siswa untuk melihat detail lengkap & grafik perkembangan.
-              </p>
-              {filteredStudents.length === 0 ? (
-                <p className="text-emerald-700/60 text-sm">
-                  Tidak ada siswa yang cocok dengan filter/pencarian.
-                </p>
-              ) : (
-                <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
-                  {filteredStudents.map((s) => (
-                    <button
-                      key={s.key}
-                      onClick={() => setSelectedStudent(s.key)}
-                      className="w-full flex flex-col sm:flex-row sm:justify-between sm:items-center gap-1 p-3 rounded-xl bg-emerald-50/70 hover:bg-emerald-100/70 active:scale-[0.99] transition text-left"
-                    >
-                      <div className="flex min-w-0 items-center gap-2">
-                        <Avatar gender={s.gender} name={s.name} className="h-9 w-9" />
-                        <div className="min-w-0">
-                          <span className="font-semibold text-emerald-900">{s.name}</span>
-                          <span className="text-xs text-emerald-700/50 ml-2">
-                            Kelas {s.classCode}
-                            {s.gender ? ` · ${formatGender(s.gender)}` : ""}
-                          </span>
-                        </div>
-                      </div>
-                      <span className="text-xs text-emerald-700/70 shrink-0">
-                        {s.totalJournals} jurnal · {s.totalPagesRead} hlm · {s.booksFinished} buku
-                        selesai
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
+            <div className="relative">
+              <label className="text-[10px] uppercase tracking-wider text-emerald-600 font-semibold mb-1 block">Kelas</label>
+              <select
+                value={classSummaryClass}
+                onChange={(e) => setClassSummaryClass(e.target.value)}
+                className="w-full sm:w-40 p-2.5 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition-all shadow-sm"
+              >
+                <option value="all">Semua kelas</option>
+                {availableClasses.map((classCode) => (
+                  <option key={classCode} value={classCode}>{classCode}</option>
+                ))}
+              </select>
             </div>
           </div>
-        )}
+        </div>
+      </div>
 
-        {/* ---- Tab: Leaderboard ---- */}
-        {activeTab === "leaderboard" && (
-          <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 lg:p-7 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
-            <div className="mb-4">
-              <h2 className="text-base sm:text-lg lg:text-xl font-bold text-emerald-900 flex items-center gap-2">
-                <Trophy className="w-5 h-5 text-amber-500" />
-                Leaderboard Penakluk Literasi
-              </h2>
-              <p className="text-xs text-emerald-700/60 mt-1 leading-relaxed break-words text-justify lg:max-w-2xl">
-                Menu ini menampilkan Top 100 siswa dengan urutan berdasarkan jumlah jurnal, halaman dibaca, dan buku selesai dari seluruh kelas.
-              </p>
-              <div className={`relative mt-3 overflow-hidden rounded-2xl border px-3.5 py-3 shadow-sm sm:max-w-xl lg:max-w-md sm:px-4 ${darkMode ? "border-emerald-700/60 bg-gradient-to-r from-emerald-950/80 via-slate-800 to-amber-950/50 shadow-black/20" : "border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-amber-50 shadow-emerald-900/10"}`}>
-                <div className={`pointer-events-none absolute -right-5 -top-8 h-24 w-24 rounded-full blur-2xl ${darkMode ? "bg-amber-500/10" : "bg-amber-200/30"}`} />
-                <div className="relative flex items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-md shadow-emerald-900/20">
-                    <Users className="h-5 w-5" aria-hidden="true" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className={`text-[10px] font-bold uppercase tracking-[0.08em] ${darkMode ? "text-emerald-300/80" : "text-emerald-700/70"}`}>Murid aktif di platform</p>
-                    <p className={`mt-0.5 text-lg font-extrabold leading-tight sm:text-xl ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>{totalRegisteredStudents} Murid</p>
-                  </div>
-                  <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold ${darkMode ? "border-amber-500/50 bg-amber-500/15 text-amber-200" : "border-amber-300 bg-amber-100 text-amber-800"}`}>Top 100</span>
-                </div>
-              </div>
-              <p className="text-[11px] mt-1 leading-relaxed font-medium text-amber-700 break-words text-justify">
-                Jumlah progres membaca dan peringkat diperbarui tiap Senin pagi pukul 08.00 WIB.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2 mb-4 p-1 rounded-xl bg-emerald-900/5 w-full sm:w-fit">
-              {(["semua", "kelas", "kelas-terajin"] as LeaderboardSubTab[]).map((view) => (
-                <button
-                  key={view}
-                  type="button"
-                  onClick={() => setLeaderboardSubTab(view)}
-                  className={`flex-1 sm:flex-none px-2.5 sm:px-4 py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold leading-tight transition ${
-                    leaderboardSubTab === view
-                      ? "bg-emerald-600 text-white shadow-sm"
-                      : "text-emerald-800/70 hover:bg-emerald-50"
-                  }`}
+      <div className="p-4 sm:p-6">
+        {classSummaries.length === 0 ? (
+          <div className="text-center py-12 bg-emerald-50/30 rounded-2xl border border-dashed border-emerald-200">
+            <Users className="w-12 h-12 text-emerald-300 mx-auto mb-3" />
+            <p className="text-emerald-700/60 font-medium">Belum ada data murid untuk kelas atau bulan ini</p>
+          </div>
+        ) : (
+          <>
+            {/* Mobile: Enhanced Cards */}
+            <div className="grid grid-cols-1 xs:grid-cols-2 gap-3 md:hidden">
+              {classSummaries.map((summary, idx) => (
+                <div 
+                  key={summary.classCode} 
+                  className="relative overflow-hidden rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50/80 to-white p-4 shadow-sm hover:shadow-md transition-all duration-300 animate-in fade-in slide-in-from-bottom-4"
+                  style={{ animationDelay: `${idx * 50}ms` }}
                 >
-                  {view === "semua" ? "Murid Rajin" : view === "kelas" ? "Murid Rajin di Kelas-Mu" : "Kelas Rajin"}
-                </button>
+                  <div className="absolute -right-2 -top-2 w-16 h-16 bg-emerald-100/30 rounded-full blur-xl" />
+                  <div className="relative">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="inline-flex items-center gap-2 text-sm font-bold text-emerald-900">
+                        <span className="w-8 h-8 rounded-lg bg-emerald-600 text-white text-xs flex items-center justify-center shadow-sm">
+                          {summary.classCode.slice(0, 2)}
+                        </span>
+                        {summary.classCode}
+                      </span>
+                      <span className="text-[10px] font-medium text-emerald-600 bg-emerald-100 px-2 py-1 rounded-full">
+                        {summary.activeStudents}/{summary.totalStudents} aktif
+                      </span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2 mb-3">
+                      <div className="bg-white/80 rounded-lg p-2 text-center border border-emerald-50">
+                        <p className="text-lg font-bold text-emerald-900">{summary.totalJournals}</p>
+                        <p className="text-[10px] text-emerald-600 font-medium uppercase tracking-wide">Jurnal</p>
+                      </div>
+                      <div className="bg-white/80 rounded-lg p-2 text-center border border-emerald-50">
+                        <p className="text-lg font-bold text-emerald-700">{summary.approvedCount}</p>
+                        <p className="text-[10px] text-emerald-600 font-medium uppercase tracking-wide">Valid</p>
+                      </div>
+                      <div className="bg-white/80 rounded-lg p-2 text-center border border-emerald-50">
+                        <p className="text-lg font-bold text-orange-600">{summary.revisionCount}</p>
+                        <p className="text-[10px] text-emerald-600 font-medium uppercase tracking-wide">Revisi</p>
+                      </div>
+                      <div className="bg-white/80 rounded-lg p-2 text-center border border-emerald-50">
+                        <p className="text-lg font-bold text-yellow-600">{summary.pendingCount}</p>
+                        <p className="text-[10px] text-emerald-600 font-medium uppercase tracking-wide">Tunggu</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center justify-between text-xs text-emerald-700/80 border-t border-emerald-100 pt-2">
+                      <span className="flex items-center gap-1">
+                        <Library className="w-3 h-3" />
+                        {summary.totalPagesRead} hlm
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <BookOpen className="w-3 h-3" />
+                        {summary.booksFinished} buku
+                      </span>
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
 
+            {/* Desktop: Enhanced Table */}
+            <div className="hidden md:block overflow-hidden rounded-2xl border border-emerald-100">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-emerald-700/80 border-b border-emerald-100 bg-emerald-50/50">
+                    <th className="py-3 px-4 font-semibold">Kelas</th>
+                    <th className="py-3 px-4 font-semibold">Total Murid</th>
+                    <th className="py-3 px-4 font-semibold">Murid Aktif</th>
+                    <th className="py-3 px-4 font-semibold">Total Jurnal</th>
+                    <th className="py-3 px-4 font-semibold">Tervalidasi</th>
+                    <th className="py-3 px-4 font-semibold">Perlu Revisi</th>
+                    <th className="py-3 px-4 font-semibold">Menunggu</th>
+                    <th className="py-3 px-4 font-semibold">Halaman</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {classSummaries.map((summary, idx) => (
+                    <tr 
+                      key={summary.classCode} 
+                      className="border-b border-emerald-50 last:border-0 hover:bg-emerald-50/40 transition-colors animate-in fade-in"
+                      style={{ animationDelay: `${idx * 30}ms` }}
+                    >
+                      <td className="py-3 px-4 font-bold text-emerald-900">{summary.classCode}</td>
+                      <td className="py-3 px-4 text-emerald-800/80">{summary.totalStudents}</td>
+                      <td className="py-3 px-4">
+                        <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          {summary.activeStudents}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-emerald-800/80 font-medium">{summary.totalJournals}</td>
+                      <td className="py-3 px-4 text-emerald-700 font-medium">{summary.approvedCount}</td>
+                      <td className="py-3 px-4 text-orange-600 font-medium">{summary.revisionCount}</td>
+                      <td className="py-3 px-4 text-yellow-600 font-medium">{summary.pendingCount}</td>
+                      <td className="py-3 px-4 text-emerald-800/80">{summary.totalPagesRead}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+
+    {/* Daftar Siswa - Enhanced List */}
+    <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-[0_4px_20px_-8px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/50 overflow-hidden">
+      <div className="p-4 sm:p-6 border-b border-emerald-100/80 bg-gradient-to-r from-emerald-50/50 to-transparent">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-bold text-emerald-900 flex items-center gap-2">
+              <Users className="w-5 h-5 text-emerald-600" />
+              Aktivitas per Murid
+            </h2>
+            <p className="text-xs text-emerald-700/60 mt-1">
+              Klik nama murid untuk melihat detail lengkap & grafik perkembangan
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            <select
+              value={classFilter}
+              onChange={(e) => setClassFilter(e.target.value)}
+              className="w-full sm:w-36 p-2.5 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 shadow-sm"
+            >
+              <option value="all">Semua Kelas</option>
+              {availableClasses.map((c) => (
+                <option key={c} value={c}>Kelas {c}</option>
+              ))}
+            </select>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
+              <input
+                type="text"
+                placeholder="Cari nama murid..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full sm:w-52 pl-9 pr-3 py-2.5 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 shadow-sm placeholder:text-emerald-400"
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="p-4 sm:p-6">
+        {filteredStudents.length === 0 ? (
+          <div className="text-center py-12 bg-emerald-50/30 rounded-2xl border border-dashed border-emerald-200">
+            <Search className="w-12 h-12 text-emerald-300 mx-auto mb-3" />
+            <p className="text-emerald-700/60 font-medium">Tidak ada murid yang cocok dengan filter/pencarian</p>
+          </div>
+        ) : (
+          <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
+            {filteredStudents.map((s, idx) => (
+              <button
+                key={s.key}
+                onClick={() => setSelectedStudent(s.key)}
+                className="group w-full flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 p-4 rounded-2xl bg-emerald-50/50 hover:bg-emerald-100/70 border border-emerald-100/50 hover:border-emerald-200 transition-all duration-300 hover:shadow-md active:scale-[0.98] text-left animate-in fade-in slide-in-from-bottom-2"
+                style={{ animationDelay: `${idx * 30}ms` }}
+              >
+                <div className="flex min-w-0 items-center gap-3">
+                  <div className="relative">
+                    <Avatar gender={s.gender} name={s.name} className="h-10 w-10 ring-2 ring-white shadow-sm" />
+                    {s.pendingCount + s.revisionCount > 0 && (
+                      <span className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-400 rounded-full border-2 border-white flex items-center justify-center">
+                        <span className="text-[8px] font-bold text-white">{s.pendingCount + s.revisionCount}</span>
+                      </span>
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <span className="font-bold text-emerald-900 group-hover:text-emerald-700 transition-colors block truncate">
+                      {s.name}
+                    </span>
+                    <span className="text-xs text-emerald-700/60 flex items-center gap-1 mt-0.5">
+                      <span className="truncate">Kelas {s.classCode}</span>
+                      {s.gender && (
+                        <>
+                          <span>·</span>
+                          <span>{formatGender(s.gender)}</span>
+                        </>
+                      )}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 text-xs shrink-0 pl-13 sm:pl-0">
+                  <div className="flex flex-col items-end">
+                    <span className="font-bold text-emerald-900">{s.totalJournals}</span>
+                    <span className="text-[10px] text-emerald-600 uppercase tracking-wide">Jurnal</span>
+                  </div>
+                  <div className="w-px h-8 bg-emerald-200" />
+                  <div className="flex flex-col items-end">
+                    <span className="font-bold text-emerald-700">{s.totalPagesRead}</span>
+                    <span className="text-[10px] text-emerald-600 uppercase tracking-wide">Halaman</span>
+                  </div>
+                  <div className="w-px h-8 bg-emerald-200" />
+                  <div className="flex flex-col items-end">
+                    <span className="font-bold text-orange-600">{s.booksFinished}</span>
+                    <span className="text-[10px] text-emerald-600 uppercase tracking-wide">Buku</span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-emerald-400 group-hover:text-emerald-600 group-hover:translate-x-1 transition-all ml-1" />
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+)}
+
+        {/* ---- Tab: Leaderboard ---- */}
+        {activeTab === "leaderboard" && (
+          <div className={`p-3 sm:p-6 lg:p-7 rounded-3xl shadow-md border backdrop-blur-sm ${darkMode ? "border-slate-700 bg-slate-900/40" : "border-emerald-100 bg-white/85"}`}>
+            <div className="flex flex-col gap-3 sm:gap-4 mb-4 sm:mb-6">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2.5 sm:gap-3 mb-2 sm:mb-3">
+                  <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 ${
+                    darkMode
+                      ? "bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30"
+                      : "bg-gradient-to-br from-amber-100 to-orange-100 border border-amber-200"
+                  }`}>
+                    <Trophy className={`w-4 h-4 sm:w-6 sm:h-6 ${darkMode ? "text-amber-400" : "text-amber-600"}`} />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className={`text-base sm:text-xl font-bold tracking-tight truncate ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
+                      Leaderboard Penakluk Literasi
+                    </h2>
+                    <p className={`text-[11px] sm:text-xs mt-0.5 truncate ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
+                      {leaderboardSubTab === "semua"
+                        ? "Top 100 Murid Terajin Membaca"
+                        : leaderboardSubTab === "kelas"
+                        ? `Kelas ${effectiveLeaderboardClass || "-"}`
+                        : "Kelas terajin membaca"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className={`rounded-xl sm:rounded-2xl border p-2.5 sm:p-4 ${
+                  darkMode
+                    ? "bg-gradient-to-r from-amber-900/20 via-orange-900/10 to-emerald-900/20 border-amber-500/20"
+                    : "bg-gradient-to-r from-amber-50 via-orange-50/50 to-emerald-50 border-amber-200/60"
+                }`}>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 sm:gap-x-4 sm:gap-y-2">
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <Users className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${darkMode ? "text-amber-400" : "text-amber-600"}`} />
+                      <span className={`text-xs sm:text-sm font-semibold ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
+                        {totalRegisteredStudents} <span className={`${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"} font-normal`}>Murid Aktif</span>
+                      </span>
+                    </div>
+                    <div className={`hidden sm:block w-px h-4 ${darkMode ? "bg-slate-600" : "bg-emerald-200"}`} />
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <Clock className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${darkMode ? "text-emerald-400" : "text-emerald-600"}`} />
+                      <span className={`text-[10px] sm:text-xs ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
+                        Update Senin 08:00
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className={`mb-4 sm:mb-6 p-1 sm:p-1.5 rounded-xl sm:rounded-2xl overflow-x-auto ${
+              darkMode ? "bg-slate-900/50 border border-slate-700/50" : "bg-emerald-900/5 border border-emerald-100"
+            }`}>
+              <div className="flex gap-1 min-w-max sm:min-w-0 sm:grid sm:grid-cols-3">
+                {([
+                  ["semua", "Murid Rajin", "Top 100"],
+                  ["kelas", "Kelas Saya", effectiveLeaderboardClass || "-"],
+                  ["kelas-terajin", "Kelas Rajin", "Antar kelas"]
+                ] as [LeaderboardSubTab, string, string][]).map(([key, label, desc]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setLeaderboardSubTab(key)}
+                    className={`flex-1 px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl text-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 min-w-[100px] sm:min-w-0 ${
+                      leaderboardSubTab === key
+                        ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/25"
+                        : darkMode
+                        ? "text-emerald-300/70 hover:bg-slate-800 hover:text-emerald-200"
+                        : "text-emerald-800/70 hover:bg-white hover:text-emerald-900"
+                    }`}
+                  >
+                    <span className="block text-xs sm:text-sm font-bold truncate">{label}</span>
+                    <span className={`hidden sm:block text-[10px] sm:text-[11px] mt-0.5 truncate ${
+                      leaderboardSubTab === key ? "text-emerald-100/80" : darkMode ? "text-emerald-300/60" : "text-emerald-700/60"
+                    }`}>
+                      {desc}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {leaderboardSubTab === "kelas" && leaderboardClasses.length > 0 && (
-              <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-2">
-                <label htmlFor="teacher-leaderboard-class" className="text-xs font-semibold text-emerald-700/70">
+              <div className="mb-4 sm:mb-6 flex flex-col gap-2 sm:flex-row sm:items-center">
+                <label htmlFor="teacher-leaderboard-class" className={`text-xs font-semibold ${darkMode ? "text-emerald-300/80" : "text-emerald-700/70"}`}>
                   Pilih Kelas
                 </label>
                 <select
                   id="teacher-leaderboard-class"
                   value={effectiveLeaderboardClass}
                   onChange={(event) => setSelectedLeaderboardClass(event.target.value)}
-                  className="w-full sm:w-48 px-3 py-2 text-sm bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
+                  className={`w-full sm:w-48 px-3 py-2 text-sm border rounded-xl outline-none transition focus:ring-2 focus:ring-emerald-400 ${
+                    darkMode
+                      ? "border-slate-600 bg-slate-800/60 text-emerald-100"
+                      : "border-emerald-200 bg-emerald-50/50 text-emerald-900"
+                  }`}
                 >
                   {leaderboardClasses.map((classCode) => (
                     <option key={classCode} value={classCode}>Kelas {classCode}</option>
@@ -2613,82 +2836,214 @@ export default function TeacherDashboard() {
               </div>
             )}
 
-            {leaderboardSubTab === "kelas-terajin" ? (
+            {leaderboardError && (
+              <div className="mb-3 sm:mb-4 text-xs sm:text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg sm:rounded-xl px-3 py-2 sm:px-4 sm:py-3 flex items-center gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                <span className="line-clamp-2">{leaderboardError}</span>
+              </div>
+            )}
+
+            {leaderboardLoading ? (
+              <div className="space-y-2 sm:space-y-3">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div
+                    key={i}
+                    className={`h-16 sm:h-20 rounded-xl sm:rounded-2xl animate-pulse ${
+                      darkMode ? "bg-slate-700/50" : "bg-emerald-100/50"
+                    }`}
+                  />
+                ))}
+              </div>
+            ) : leaderboardSubTab === "kelas-terajin" ? (
               classLeaderboardRanking.length === 0 ? (
-                <p className="text-sm text-emerald-700/60">Belum ada data kelas yang membaca buku.</p>
+                <div className={`text-center py-8 sm:py-12 rounded-xl sm:rounded-2xl border-2 border-dashed ${
+                  darkMode ? "border-slate-700" : "border-emerald-200"
+                }`}>
+                  <Library className={`w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 sm:mb-3 ${darkMode ? "text-slate-600" : "text-emerald-300"}`} />
+                  <p className={`text-xs sm:text-sm font-medium px-4 ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
+                    Belum ada data kelas yang membaca buku
+                  </p>
+                </div>
               ) : (
-                <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
-                  {classLeaderboardRanking.map((entry, index) => (
-                    <div
-                      key={entry.classCode}
-                      className={`flex flex-col gap-2.5 p-3 rounded-xl border transition-colors sm:flex-row sm:items-center sm:gap-3 ${
-                        index === 0
-                          ? "border-amber-200 bg-gradient-to-r from-amber-50 to-emerald-50/50"
-                          : "border-emerald-100 bg-emerald-50/50"
-                      }`}
-                    >
-                      <div className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center font-bold text-sm ${
-                        index === 0
-                          ? "bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-500 text-white"
-                          : index === 1
-                          ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white"
-                          : index === 2
-                          ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white"
-                          : "bg-emerald-200 text-emerald-800"
-                      }`}>
-                        {index < 3 ? <Crown className="w-4 h-4" /> : index + 1}
+                <div className="space-y-2 sm:space-y-3">
+                  {classLeaderboardRanking.map((entry, idx) => {
+                    const rank = idx + 1;
+                    const isTop3 = rank <= 3;
+
+                    return (
+                      <div
+                        key={entry.classCode}
+                        className={`relative overflow-hidden rounded-xl sm:rounded-2xl border p-3 sm:p-4 transition-all duration-200 hover:shadow-md ${
+                          darkMode
+                            ? "bg-slate-800/50 border-slate-700 hover:border-slate-600"
+                            : "bg-white/60 border-emerald-100 hover:border-emerald-200"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 sm:gap-4">
+                          <div className={`relative shrink-0 ${isTop3 ? "w-11 h-11 sm:w-14 sm:h-14" : "w-9 h-9 sm:w-12 sm:h-12"}`}>
+                            {isTop3 && (
+                              <div className={`absolute inset-0 rounded-xl sm:rounded-2xl blur-md sm:blur-lg opacity-30 sm:opacity-40 ${
+                                rank === 1 ? "bg-yellow-400" : rank === 2 ? "bg-slate-400" : "bg-amber-500"
+                              }`} />
+                            )}
+                            <div className={`relative w-full h-full rounded-xl sm:rounded-2xl flex flex-col items-center justify-center font-bold ${
+                              rank === 1
+                                ? "bg-gradient-to-br from-yellow-300 to-amber-500 text-white shadow-md sm:shadow-lg"
+                                : rank === 2
+                                ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white shadow-md sm:shadow-lg"
+                                : rank === 3
+                                ? "bg-gradient-to-br from-amber-400 to-orange-600 text-white shadow-md sm:shadow-lg"
+                                : darkMode
+                                ? "bg-slate-700 text-slate-300"
+                                : "bg-emerald-100 text-emerald-700"
+                            }`}>
+                              {isTop3 ? (
+                                <>
+                                  <Crown className="w-3.5 h-3.5 sm:w-5 sm:h-5 mb-0.5" />
+                                  <span className="text-[9px] sm:text-[10px] font-bold">{rank}</span>
+                                </>
+                              ) : (
+                                <span className="text-sm sm:text-base">{rank}</span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex-1 min-w-0 py-0.5 sm:py-1">
+                            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                              <h3 className={`text-sm sm:text-base font-bold truncate ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
+                                Kelas {entry.classCode}
+                              </h3>
+                            </div>
+                            <p className={`text-[11px] sm:text-xs mt-0.5 sm:mt-1 ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
+                              {entry.activeStudents} Murid Aktif · {entry.totalStudents} total
+                            </p>
+                          </div>
+
+                          <div className="text-right shrink-0 py-0.5 sm:py-1">
+                            <p className={`text-base sm:text-lg font-bold ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
+                              {entry.journalCount}
+                              <span className={`text-[10px] sm:text-xs font-normal ml-0.5 sm:ml-1 ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
+                                jurnal
+                              </span>
+                            </p>
+                            <div className={`flex items-center justify-end gap-1.5 sm:gap-3 mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
+                              <span className="whitespace-nowrap">{entry.totalPagesRead} hlm</span>
+                              <span className="hidden xs:inline">•</span>
+                              <span className="whitespace-nowrap">{entry.booksFinished} buku</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {isTop3 && (
+                          <div className={`mt-2 sm:mt-3 h-1 sm:h-1.5 rounded-full overflow-hidden ${darkMode ? "bg-slate-700" : "bg-emerald-100"}`}>
+                            <div
+                              className={`h-full rounded-full ${
+                                rank === 1 ? "bg-gradient-to-r from-yellow-400 to-amber-500" : rank === 2 ? "bg-gradient-to-r from-slate-400 to-slate-500" : "bg-gradient-to-r from-amber-400 to-orange-500"
+                              }`}
+                              style={{ width: `${Math.min(100, (entry.journalCount / Math.max(classLeaderboardRanking[0]?.journalCount || 1, 1)) * 100)}%` }}
+                            />
+                          </div>
+                        )}
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold text-emerald-900">Kelas {entry.classCode}</p>
-                        <p className="text-xs text-emerald-700/60">
-                          {entry.activeStudents} siswa aktif · {entry.totalStudents} siswa total
-                        </p>
-                      </div>
-                      <div className="w-full text-left sm:w-auto sm:text-right shrink-0">
-                        <p className="text-sm font-bold text-emerald-900">{entry.journalCount} jurnal</p>
-                        <p className="text-xs text-emerald-700/60">{entry.totalPagesRead} halaman</p>
-                        <p className="text-xs text-emerald-700/60">{entry.booksFinished} buku selesai</p>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )
             ) : (
               (leaderboardSubTab === "semua" ? leaderboard : classLeaderboard).length === 0 ? (
-                <p className="text-sm text-emerald-700/60">Belum ada data jurnal siswa.</p>
+                <div className={`text-center py-8 sm:py-12 rounded-xl sm:rounded-2xl border-2 border-dashed ${
+                  darkMode ? "border-slate-700" : "border-emerald-200"
+                }`}>
+                  <BookOpen className={`w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 sm:mb-3 ${darkMode ? "text-slate-600" : "text-emerald-300"}`} />
+                  <p className={`text-xs sm:text-sm font-medium px-4 ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
+                    {leaderboardSubTab === "semua"
+                      ? "Belum ada data jurnal dari murid manapun"
+                      : "Belum ada data jurnal untuk kelas ini"}
+                  </p>
+                </div>
               ) : (
-                <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
-                  {(leaderboardSubTab === "semua" ? leaderboard : classLeaderboard).map((entry, index) => (
-                    <div
-                      key={entry.studentId}
-                      className={`flex flex-col gap-2.5 p-3 rounded-xl border transition-colors sm:flex-row sm:items-center sm:gap-3 ${
-                        index === 0
-                          ? "border-amber-200 bg-gradient-to-r from-amber-50 to-emerald-50/50"
-                          : "border-emerald-100 bg-emerald-50/50"
-                      }`}
-                    >
-                      <div className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center font-bold text-sm ${
-                        index === 0
-                          ? "bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-500 text-white"
-                          : index === 1
-                          ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white"
-                          : index === 2
-                          ? "bg-gradient-to-br from-amber-500 to-orange-600 text-white"
-                          : "bg-emerald-200 text-emerald-800"
-                      }`}>
-                        {index < 3 ? <Crown className="w-4 h-4" /> : index + 1}
+                <div className="space-y-2 sm:space-y-3">
+                  {(leaderboardSubTab === "semua" ? leaderboard : classLeaderboard).map((entry, idx) => {
+                    const rank = idx + 1;
+                    const isTop3 = rank <= 3;
+
+                    return (
+                      <div
+                        key={entry.studentId}
+                        className={`relative rounded-xl sm:rounded-2xl border p-2.5 sm:p-4 transition-all duration-200 hover:shadow-md ${
+                          isTop3
+                            ? darkMode
+                              ? "bg-slate-800/80 border-slate-700 hover:border-slate-600"
+                              : "bg-white border-emerald-100 hover:border-emerald-200"
+                            : darkMode
+                            ? "bg-slate-800/50 border-slate-700/50 hover:border-slate-600"
+                            : "bg-white/60 border-emerald-100/80 hover:border-emerald-200"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 sm:gap-4">
+                          <div className={`relative shrink-0 ${isTop3 ? "w-11 h-11 sm:w-14 sm:h-14" : "w-9 h-9 sm:w-11 sm:h-11"}`}>
+                            {isTop3 && (
+                              <div className={`absolute inset-0 rounded-xl sm:rounded-2xl blur-md sm:blur-lg opacity-30 sm:opacity-40 ${
+                                rank === 1 ? "bg-yellow-400" : rank === 2 ? "bg-slate-400" : "bg-amber-500"
+                              }`} />
+                            )}
+                            <div className={`relative w-full h-full rounded-xl sm:rounded-2xl flex flex-col items-center justify-center font-bold ${
+                              rank === 1
+                                ? "bg-gradient-to-br from-yellow-300 to-amber-500 text-white shadow-md sm:shadow-lg"
+                                : rank === 2
+                                ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white shadow-md sm:shadow-lg"
+                                : rank === 3
+                                ? "bg-gradient-to-br from-amber-400 to-orange-600 text-white shadow-md sm:shadow-lg"
+                                : darkMode
+                                ? "bg-slate-700 text-slate-300"
+                                : "bg-emerald-100 text-emerald-700"
+                            }`}>
+                              {isTop3 ? (
+                                <>
+                                  <Crown className="w-3.5 h-3.5 sm:w-5 sm:h-5 mb-0.5" />
+                                  <span className="text-[9px] sm:text-[10px] font-bold">{rank}</span>
+                                </>
+                              ) : (
+                                <span className="text-sm sm:text-base">{rank}</span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 sm:gap-2.5">
+                              <Avatar
+                                gender={entry.gender}
+                                name={entry.studentName}
+                                className="w-8 h-8 sm:w-10 sm:h-10"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 sm:gap-2">
+                                  <h3 className={`text-xs sm:text-sm font-bold truncate ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
+                                    {entry.studentName}
+                                  </h3>
+                                </div>
+                                <p className={`text-[10px] sm:text-xs mt-0.5 truncate ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
+                                  Kelas {entry.classCode}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <p className={`text-sm sm:text-lg font-bold ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
+                              {entry.journalCount}
+                              <span className={`text-[10px] sm:text-xs font-normal ml-0.5 sm:ml-1 ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>jurnal</span>
+                            </p>
+                            <div className={`flex items-center justify-end gap-1 sm:gap-2 mt-0.5 text-[9px] sm:text-[11px] ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
+                              <span className="whitespace-nowrap">{entry.totalPagesRead} hlm</span>
+                              <span className="hidden xs:inline">•</span>
+                              <span className="whitespace-nowrap">{entry.booksFinished} buku</span>
+                            </div>
+                          </div>
+                        </div>
                       </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-bold text-emerald-900 truncate">{entry.studentName}</p>
-                        <p className="text-xs text-emerald-700/60">Kelas {entry.classCode}</p>
-                      </div>
-                      <div className="w-full text-left sm:w-auto sm:text-right shrink-0">
-                        <p className="text-sm font-bold text-emerald-900">{entry.journalCount} jurnal</p>
-                        <p className="text-xs text-emerald-700/60">{entry.totalPagesRead} halaman</p>
-                        <p className="text-xs text-emerald-700/60">{entry.booksFinished} buku selesai</p>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )
             )}
@@ -2700,10 +3055,10 @@ export default function TeacherDashboard() {
           <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 lg:p-7 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
             <h2 className="text-base sm:text-lg lg:text-xl font-bold mb-1 text-emerald-900 flex items-center gap-2">
               <HeartHandshake className="w-5 h-5 text-orange-500" />
-              Siswa yang Perlu Pendampingan
+              Murid yang Perlu Pendampingan
             </h2>
             <p className="text-xs leading-relaxed text-emerald-700/50 mb-4 text-justify lg:max-w-3xl">
-              Termasuk siswa yang tidak aktif membaca, belum pernah mengirim jurnal sama sekali,
+              Termasuk murid yang tidak aktif membaca, belum pernah mengirim jurnal sama sekali,
               jumlah jurnal jauh di bawah rata-rata, atau tumpukan jurnal belum divalidasi/masih
               perlu revisi.
             </p>
@@ -2715,14 +3070,14 @@ export default function TeacherDashboard() {
                   value={mentoringSearch}
                   onChange={(event) => setMentoringSearch(event.target.value)}
                   placeholder="Cari nama siswa..."
-                  aria-label="Cari nama siswa yang perlu pendampingan"
+                  aria-label="Cari nama murid yang perlu pendampingan"
                   className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2.5 pl-9 text-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400"
                 />
               </div>
               <select
                 value={mentoringClassFilter}
                 onChange={(event) => setMentoringClassFilter(event.target.value)}
-                aria-label="Filter kelas siswa yang perlu pendampingan"
+                aria-label="Filter kelas murid yang perlu pendampingan"
                 className="w-full rounded-xl border border-emerald-200 bg-emerald-50/50 px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-emerald-400"
               >
                 <option value="all">Semua Kelas</option>
@@ -2734,12 +3089,12 @@ export default function TeacherDashboard() {
             {studentsNeedingAttention.length === 0 ? (
               <p className="text-emerald-700 text-sm bg-emerald-50 p-3 rounded-xl flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
-                Semua siswa menunjukkan aktivitas membaca yang stabil. Tidak ada yang perlu
+                Semua murid menunjukkan aktivitas membaca yang stabil. Tidak ada yang perlu
                 perhatian khusus saat ini.
               </p>
             ) : groupedStudentsNeedingAttention.length === 0 ? (
               <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">
-                Tidak ada siswa yang cocok dengan pencarian atau filter kelas ini.
+                Tidak ada murid yang cocok dengan pencarian atau filter kelas ini.
               </p>
             ) : (
               <div className="space-y-5">
@@ -2747,7 +3102,7 @@ export default function TeacherDashboard() {
                   <section key={classCode} aria-labelledby={`mentoring-class-${classCode}`}>
                     <div className="mb-2 flex items-center justify-between gap-2 border-b border-emerald-100 pb-2">
                       <h3 id={`mentoring-class-${classCode}`} className="text-sm font-bold text-emerald-900">Kelas {classCode}</h3>
-                      <span className="text-[11px] text-emerald-700/60">{students.length} siswa</span>
+                      <span className="text-[11px] text-emerald-700/60">{students.length} murid</span>
                     </div>
                     <div className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0 lg:items-start">
                     {students.map((s) => (
@@ -2795,309 +3150,525 @@ export default function TeacherDashboard() {
           </div>
         )}
 
-        {/* ---- Tab: Daftar Jurnal ---- */}
+        {/* ---- Tab: Daftar Jurnal (Enhanced) ---- */}
         {activeTab === "jurnal" && (
-          <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 lg:p-7 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
-            <h2 className="text-base sm:text-lg lg:text-xl font-bold mb-1 text-emerald-900 flex items-center gap-2">
-              <NotebookText className="w-5 h-5 text-emerald-600" />
-              Daftar Jurnal Siswa
-            </h2>
-            <p className="text-xs text-emerald-700/50 mb-4 lg:max-w-2xl">
-              Untuk menandai jurnal &quot;Perlu Revisi&quot;, isi dulu kolom umpan balik dengan
-              alasannya (misalnya typo atau ringkasan kurang lengkap), baru klik tombol Perlu
-              Revisi.
-            </p>
-            <div className="mb-4 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
-              <div>
-                <label htmlFor="teacher-journal-class-filter" className="mb-1.5 block text-xs font-semibold text-emerald-700/70">
-                  Filter kelas jurnal
-                </label>
-                <select
-                  id="teacher-journal-class-filter"
-                  value={journalClassFilter}
-                  onChange={(event) => setJournalClassFilter(event.target.value)}
-                  className="w-full rounded-xl border border-emerald-200 bg-emerald-50/50 px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-emerald-400"
-                >
-                  <option value="all">Semua Kelas</option>
-                  {availableClasses.map((classCode) => (
-                    <option key={classCode} value={classCode}>Kelas {classCode}</option>
-                  ))}
-                </select>
+          <div className={`relative overflow-hidden rounded-3xl shadow-xl border backdrop-blur-sm ${darkMode ? "border-slate-700 bg-slate-900/40" : "border-emerald-100 bg-white/90"}`}>
+            {/* Decorative background elements */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-3xl">
+              <div className={`absolute -top-32 -right-32 w-64 h-64 rounded-full blur-3xl opacity-20 ${darkMode ? "bg-emerald-500" : "bg-emerald-300"}`} />
+              <div className={`absolute -bottom-32 -left-32 w-64 h-64 rounded-full blur-3xl opacity-20 ${darkMode ? "bg-teal-500" : "bg-teal-300"}`} />
+            </div>
+
+            <div className="relative p-4 sm:p-6 lg:p-8 space-y-6">
+              {/* Header Section */}
+              <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-dashed ${darkMode ? "border-slate-700" : "border-emerald-200"}`}>
+                <div className="flex items-center gap-4">
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg shrink-0 ${
+                    darkMode
+                      ? "bg-gradient-to-br from-emerald-900 to-emerald-800 text-emerald-300 shadow-emerald-900/50"
+                      : "bg-gradient-to-br from-emerald-100 to-emerald-50 text-emerald-700 shadow-emerald-200/50"
+                  }`}>
+                    <NotebookText className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <h2 className={`text-xl sm:text-2xl font-bold tracking-tight ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
+                      Daftar Jurnal Murid
+                    </h2>
+                    <p className={`text-sm mt-1 ${darkMode ? "text-emerald-300/70" : "text-emerald-700/70"}`}>
+                      Validasi dan berikan feedback pada jurnal bacaan siswa
+                    </p>
+                  </div>
+                </div>
+
+                {/* Quick Stats */}
+                <div className="flex items-center gap-3">
+                  <div className={`px-4 py-2 rounded-xl text-center ${darkMode ? "bg-slate-800 border border-slate-700" : "bg-emerald-50 border border-emerald-100"}`}>
+                    <p className={`text-lg font-bold ${darkMode ? "text-emerald-300" : "text-emerald-700"}`}>{journals.length}</p>
+                    <p className={`text-[10px] uppercase tracking-wide font-semibold ${darkMode ? "text-emerald-400/70" : "text-emerald-600/70"}`}>Total Jurnal</p>
+                  </div>
+                  <div className={`px-4 py-2 rounded-xl text-center ${darkMode ? "bg-slate-800 border border-slate-700" : "bg-orange-50 border border-orange-100"}`}>
+                    <p className={`text-lg font-bold ${darkMode ? "text-orange-300" : "text-orange-600"}`}>
+                      {journals.filter(j => getStatusInfo(j.status).key === "pending").length}
+                    </p>
+                    <p className={`text-[10px] uppercase tracking-wide font-semibold ${darkMode ? "text-orange-400/70" : "text-orange-600/70"}`}>Menunggu</p>
+                  </div>
+                </div>
               </div>
-              {missingValidationFeedbackByClass.length > 0 && (
-                <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-3">
-                  <div className="mb-2 flex items-start gap-2">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                    <div>
-                      <p className="text-xs font-bold text-amber-900">Feedback validasi belum lengkap</p>
-                      <p className="mt-0.5 text-[11px] leading-relaxed text-amber-800/80 text-justify">Periksa jurnal tervalidasi berikut per kelas.</p>
+
+              {/* Info Banner */}
+              <div className={`rounded-2xl border p-4 ${darkMode ? "border-emerald-500/30 bg-gradient-to-r from-emerald-900/30 to-teal-900/20" : "border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50"}`}>
+                <div className="flex items-start gap-3">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${darkMode ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-100 text-emerald-600"}`}>
+                    <AlertTriangle className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1">
+                    <p className={`text-sm font-semibold ${darkMode ? "text-emerald-200" : "text-emerald-800"}`}>
+                      Tips Validasi Cepat
+                    </p>
+                    <p className={`text-xs mt-1 leading-relaxed ${darkMode ? "text-emerald-300/70" : "text-emerald-700/70"}`}>
+                      Untuk menandai jurnal &quot;Perlu Revisi&quot;, isi dulu kolom umpan balik dengan alasannya (misalnya typo atau ringkasan kurang lengkap),
+                      baru klik tombol Perlu Revisi. Gunakan checkbox untuk validasi massal.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Filter & Bulk Actions */}
+              <div className="space-y-4">
+                {/* Class Filter */}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                  <label htmlFor="teacher-journal-class-filter" className={`text-xs font-semibold uppercase tracking-wider ${darkMode ? "text-emerald-400" : "text-emerald-600"}`}>
+                    Filter Kelas
+                  </label>
+                  <select
+                    id="teacher-journal-class-filter"
+                    value={journalClassFilter}
+                    onChange={(event) => setJournalClassFilter(event.target.value)}
+                    className={`flex-1 sm:flex-none sm:w-48 px-4 py-2.5 text-sm border rounded-xl outline-none transition focus:ring-2 focus:ring-emerald-400 ${
+                      darkMode
+                        ? "border-slate-600 bg-slate-800/60 text-emerald-100"
+                        : "border-emerald-200 bg-white text-emerald-900"
+                    }`}
+                  >
+                    <option value="all">Semua Kelas</option>
+                    {availableClasses.map((classCode) => (
+                      <option key={classCode} value={classCode}>Kelas {classCode}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Missing Feedback Warning */}
+                {missingValidationFeedbackByClass.length > 0 && (
+                  <div className={`rounded-2xl border p-4 ${darkMode ? "border-amber-500/30 bg-gradient-to-r from-amber-900/20 to-orange-900/10" : "border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50"}`}>
+                    <div className="flex items-start gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${darkMode ? "bg-amber-500/20 text-amber-400" : "bg-amber-100 text-amber-600"}`}>
+                        <AlertTriangle className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1">
+                        <p className={`text-sm font-semibold ${darkMode ? "text-amber-200" : "text-amber-800"}`}>
+                          Feedback Validasi Belum Lengkap
+                        </p>
+                        <p className={`text-xs mt-1 mb-3 ${darkMode ? "text-amber-300/70" : "text-amber-700/70"}`}>
+                          Periksa jurnal tervalidasi berikut per kelas:
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {missingValidationFeedbackByClass.map(([classCode, count]) => (
+                            <button
+                              key={classCode}
+                              type="button"
+                              onClick={() => jumpToJournalClass(classCode)}
+                              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all hover:scale-105 ${
+                                journalClassFilter === classCode
+                                  ? darkMode ? "border-amber-400 bg-amber-500/30 text-amber-200" : "border-amber-400 bg-amber-200 text-amber-900"
+                                  : darkMode ? "border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20" : "border-amber-200 bg-white/70 text-amber-800 hover:bg-amber-100"
+                              }`}
+                            >
+                              Kelas {classCode}: {count} jurnal
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {missingValidationFeedbackByClass.map(([classCode, count]) => (
-                      <button
-                        key={classCode}
-                        type="button"
-                        onClick={() => jumpToJournalClass(classCode)}
-                        aria-label={`Lihat jurnal kelas ${classCode} yang belum memiliki feedback validasi`}
-                        className={`rounded-lg border px-2 py-1 text-[11px] font-semibold transition ${
-                          journalClassFilter === classCode
-                            ? "border-amber-400 bg-amber-200 text-amber-900"
-                            : "border-amber-200 bg-white/70 text-amber-800 hover:bg-amber-100"
-                        }`}
-                      >
-                        Kelas {classCode}: {count} jurnal
-                      </button>
-                    ))}
+                )}
+
+                {/* Bulk Selection Actions */}
+                {selectedJournalIds.size > 0 && (
+                  <div className={`rounded-2xl border p-4 ${darkMode ? "border-emerald-500/30 bg-emerald-900/20" : "border-emerald-200 bg-emerald-50"}`}>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${darkMode ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-100 text-emerald-600"}`}>
+                          <CheckSquare2 className="w-4 h-4" />
+                        </div>
+                        <p className={`text-sm font-semibold ${darkMode ? "text-emerald-200" : "text-emerald-800"}`}>
+                          {selectedJournalIds.size} jurnal dipilih
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedJournalIds(new Set())}
+                          className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition ${
+                            darkMode ? "border-slate-600 text-emerald-300 hover:bg-slate-700" : "border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+                          }`}
+                        >
+                          Batalkan Pilihan
+                        </button>
+
+                        {selectedPendingJournalCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => void handleBulkApprove()}
+                            disabled={bulkJournalLoading}
+                            className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition flex items-center gap-1"
+                          >
+                            {bulkJournalLoading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                            Validasi {selectedPendingJournalCount}
+                          </button>
+                        )}
+
+                        {selectedApprovedJournalCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => void handleBulkCancelApproval()}
+                            disabled={bulkJournalLoading}
+                            className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition disabled:opacity-50 ${
+                              darkMode ? "border-orange-500/30 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20" : "border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100"
+                            }`}
+                          >
+                            {bulkJournalLoading ? "Memproses..." : `Batalkan ${selectedApprovedJournalCount} Validasi`}
+                          </button>
+                        )}
+
+                        {selectedRevisionJournalCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => void handleBulkCancelRevision()}
+                            disabled={bulkJournalLoading}
+                            className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition disabled:opacity-50 ${
+                              darkMode ? "border-orange-500/30 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20" : "border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100"
+                            }`}
+                          >
+                            {bulkJournalLoading ? "Memproses..." : `Batalkan ${selectedRevisionJournalCount} Revisi`}
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
+                )}
+              </div>
+
+              {/* Journal List */}
+              {journals.length === 0 ? (
+                <div className={`text-center py-12 rounded-2xl border-2 border-dashed ${darkMode ? "border-slate-700 bg-slate-800/30" : "border-emerald-200 bg-emerald-50/30"}`}>
+                  <NotebookText className={`w-12 h-12 mx-auto mb-3 ${darkMode ? "text-slate-600" : "text-emerald-300"}`} />
+                  <p className={`text-sm font-medium ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
+                    Belum ada jurnal dari murid manapun
+                  </p>
+                </div>
+              ) : filteredGroupedJournalsByClass.length === 0 ? (
+                <div className={`text-center py-12 rounded-2xl border-2 border-dashed ${darkMode ? "border-slate-700 bg-slate-800/30" : "border-emerald-200 bg-emerald-50/30"}`}>
+                  <Search className={`w-12 h-12 mx-auto mb-3 ${darkMode ? "text-slate-600" : "text-emerald-300"}`} />
+                  <p className={`text-sm font-medium ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
+                    Tidak ada jurnal pada kelas yang dipilih
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-8">
+                  {filteredGroupedJournalsByClass.map(({ classCode, journals: classJournals }) => {
+                    const classJournalIds = classJournals.map((journal) => journal.id);
+                    const allClassSelected = classJournalIds.every((journalId) => selectedJournalIds.has(journalId));
+                    const someClassSelected = classJournalIds.some((journalId) => selectedJournalIds.has(journalId)) && !allClassSelected;
+
+                    return (
+                      <section
+                        key={classCode}
+                        id={`journal-class-${classCode}`}
+                        className={`rounded-2xl border overflow-hidden ${darkMode ? "border-slate-700 bg-slate-800/30" : "border-emerald-100 bg-emerald-50/20"}`}
+                      >
+                        {/* Class Header */}
+                        <div className={`px-4 py-3 border-b ${darkMode ? "border-slate-700 bg-slate-800/60" : "border-emerald-100 bg-emerald-50/50"}`}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm ${
+                                darkMode ? "bg-emerald-600 text-white" : "bg-emerald-600 text-white"
+                              }`}>
+                                {classCode.slice(0, 2)}
+                              </div>
+                              <div>
+                                <h3 className={`text-sm font-bold ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
+                                  Kelas {classCode}
+                                </h3>
+                                <p className={`text-xs ${darkMode ? "text-emerald-400/70" : "text-emerald-600/70"}`}>
+                                  {classJournals.length} jurnal
+                                </p>
+                              </div>
+                            </div>
+
+                            <label className="flex items-center gap-2 cursor-pointer group">
+                              <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                                allClassSelected
+                                  ? "bg-emerald-500 border-emerald-500"
+                                  : someClassSelected
+                                  ? darkMode ? "bg-emerald-500/50 border-emerald-500" : "bg-emerald-200 border-emerald-400"
+                                  : darkMode ? "border-slate-600 group-hover:border-emerald-500" : "border-emerald-300 group-hover:border-emerald-500"
+                              }`}>
+                                {allClassSelected && (
+                                  <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                                {someClassSelected && !allClassSelected && (
+                                  <div className="w-2 h-0.5 bg-white rounded-full" />
+                                )}
+                              </div>
+                              <input
+                                type="checkbox"
+                                checked={allClassSelected}
+                                onChange={() => handleToggleClassJournals(classJournalIds)}
+                                className="sr-only"
+                              />
+                              <span className={`text-xs font-semibold ${darkMode ? "text-emerald-300 group-hover:text-emerald-200" : "text-emerald-700 group-hover:text-emerald-800"}`}>
+                                Pilih Semua
+                              </span>
+                            </label>
+                          </div>
+                        </div>
+
+                        {/* Journal Cards */}
+                        <div className="p-4 space-y-4 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0">
+                          {classJournals.map((j) => {
+                            const statusInfo = getStatusInfo(j.status);
+                            const isBusy = journalActionLoading === j.id;
+                            const hasValidationFeedback = statusInfo.key === "approved" && Boolean(j.teacherFeedback?.trim());
+                            const isSelected = selectedJournalIds.has(j.id);
+
+                            return (
+                              <div
+                                key={j.id}
+                                id={`journal-card-${j.id}`}
+                                className={`relative rounded-2xl border p-4 transition-all duration-200 ${
+                                  journalInlineError?.id === j.id
+                                    ? "border-red-300 ring-2 ring-red-200"
+                                    : isSelected
+                                    ? darkMode ? "border-emerald-500/50 bg-emerald-900/20" : "border-emerald-300 bg-emerald-50/50"
+                                    : darkMode ? "border-slate-700 bg-slate-800/40 hover:border-slate-600" : "border-emerald-100 bg-white hover:border-emerald-200 hover:shadow-md"
+                                }`}
+                              >
+                                {/* Selection Checkbox */}
+                                <div className="absolute top-4 right-4">
+                                  <label className="cursor-pointer">
+                                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                                      isSelected
+                                        ? "bg-emerald-500 border-emerald-500"
+                                        : darkMode ? "border-slate-600 hover:border-emerald-500" : "border-emerald-300 hover:border-emerald-500"
+                                    }`}>
+                                      {isSelected && (
+                                        <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                        </svg>
+                                      )}
+                                    </div>
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={() => handleToggleJournalSelection(j.id)}
+                                      className="sr-only"
+                                      aria-label={`Pilih jurnal ${j.studentName}`}
+                                    />
+                                  </label>
+                                </div>
+
+                                {/* Status Indicator Bar */}
+                                <div className={`absolute left-0 top-0 bottom-0 w-1 rounded-l-2xl ${statusInfo.dotClass}`} />
+
+                                {/* Student Info */}
+                                <div className="flex items-start gap-3 mb-3 pr-8">
+                                  <Avatar gender={j.gender} name={j.studentName} className="h-10 w-10 shrink-0" />
+                                  <div className="min-w-0 flex-1">
+                                    <button
+                                      onClick={() => setSelectedStudent(getStudentIdentityKey(j.studentId, j.studentName, j.classCode))}
+                                      className={`font-bold text-sm hover:underline text-left truncate block ${darkMode ? "text-emerald-100 hover:text-emerald-200" : "text-emerald-900 hover:text-emerald-700"}`}
+                                    >
+                                      {j.studentName}
+                                    </button>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <span className={`text-xs ${darkMode ? "text-emerald-400/70" : "text-emerald-600/70"}`}>
+                                        Kelas {j.classCode}
+                                      </span>
+                                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${statusInfo.badgeClass}`}>
+                                        {statusInfo.badge}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Book Details */}
+                                <div className={`rounded-xl p-3 mb-3 ${darkMode ? "bg-slate-700/30" : "bg-emerald-50/50"}`}>
+                                  <p className={`text-sm font-semibold ${darkMode ? "text-emerald-200" : "text-emerald-800"}`}>
+                                    {j.bookTitle} <span className={`font-normal ${darkMode ? "text-emerald-400/70" : "text-emerald-600/70"}`}>({j.author})</span>
+                                  </p>
+                                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs">
+                                    <span className={darkMode ? "text-emerald-400/70" : "text-emerald-600/70"}>
+                                      Hal. {j.startPage}-{getLatestPageForJournal(j)}
+                                    </span>
+                                    {j.genre && (
+                                      <span className={darkMode ? "text-emerald-400/70" : "text-emerald-600/70"}>
+                                        · {j.genre}
+                                      </span>
+                                    )}
+                                    {j.finished && (
+                                      <span className="text-emerald-600 font-medium">· Selesai dibaca</span>
+                                    )}
+                                  </div>
+                                  <p className={`text-xs mt-2 ${darkMode ? "text-emerald-300/80" : "text-emerald-700/80"}`}>
+                                    <strong>Nilai Karakter:</strong> {getCharacterList(j).join(", ") || "-"}
+                                  </p>
+                                </div>
+
+                                {/* Summary */}
+                                <div className="mb-3">
+                                  <p className={`text-xs italic leading-relaxed line-clamp-3 ${darkMode ? "text-emerald-300/70" : "text-emerald-700/70"}`}>
+                                    &quot;{j.summary}&quot;
+                                  </p>
+                                </div>
+
+                                {/* Metadata */}
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] mb-3">
+                                  <span className={darkMode ? "text-emerald-400/60" : "text-emerald-600/60"}>
+                                    Upload: {formatTanggal(toDateSafe(j.createdAt))}
+                                  </span>
+                                  {(statusInfo.key === "approved" || statusInfo.key === "revision") && (
+                                    <span className={darkMode ? "text-emerald-400/60" : "text-emerald-600/60"}>
+                                      Update: {formatTanggal(toDateSafe(j.updatedAt || j.createdAt))}
+                                    </span>
+                                  )}
+                                  {j.approvedBy && (
+                                    <span className={darkMode ? "text-emerald-400/60" : "text-emerald-600/60"}>
+                                      Oleh: <span className="font-medium">{j.approvedBy}</span>
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* Feedback Display */}
+                                {statusInfo.key === "revision" && (
+                                  <div className={`rounded-lg border p-2.5 mb-3 text-xs ${darkMode ? "border-orange-500/30 bg-orange-900/20 text-orange-200" : "border-orange-200 bg-orange-50 text-orange-800"}`}>
+                                    <strong>Alasan revisi:</strong> {j.teacherFeedback || "-"}
+                                  </div>
+                                )}
+
+                                {statusInfo.key === "approved" && j.teacherFeedback?.trim() && (
+                                  <div className={`rounded-lg border p-2.5 mb-3 text-xs ${darkMode ? "border-emerald-500/30 bg-emerald-900/20 text-emerald-200" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}>
+                                    <strong>Feedback validasi:</strong> {j.teacherFeedback}
+                                  </div>
+                                )}
+
+                                {statusInfo.key === "approved" && !hasValidationFeedback && (
+                                  <div className={`rounded-lg border p-2.5 mb-3 text-xs flex items-start gap-2 ${darkMode ? "border-amber-500/30 bg-amber-900/20 text-amber-200" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
+                                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                                    <span>Feedback validasi belum ditambahkan.</span>
+                                  </div>
+                                )}
+
+                                {/* Inline Error */}
+                                {journalInlineError?.id === j.id && (
+                                  <div className="rounded-lg border border-red-200 bg-red-50 p-2.5 mb-3 text-xs text-red-700 flex items-start gap-2">
+                                    <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                                    <span>{journalInlineError.message}</span>
+                                  </div>
+                                )}
+
+                                {/* Action Area */}
+                                <div className="space-y-3">
+                                  {/* Feedback Input */}
+                                  <input
+                                    type="text"
+                                    placeholder={
+                                      statusInfo.key === "approved"
+                                        ? "Tambahkan feedback validasi..."
+                                        : "Umpan balik / alasan revisi..."
+                                    }
+                                    className={`w-full p-2.5 text-sm border rounded-xl outline-none focus:ring-2 transition ${
+                                      journalInlineError?.id === j.id
+                                        ? "border-red-300 focus:ring-red-300 focus:border-red-400"
+                                        : darkMode
+                                          ? "border-slate-600 bg-slate-700/50 text-emerald-100 placeholder:text-emerald-400/40 focus:ring-emerald-500 focus:border-emerald-500"
+                                          : "border-emerald-200 bg-white text-emerald-900 placeholder:text-emerald-700/40 focus:ring-emerald-400 focus:border-emerald-400"
+                                    }`}
+                                    value={feedbackInput[j.id] ?? j.teacherFeedback ?? ""}
+                                    onChange={(e) => {
+                                      setFeedbackInput({ ...feedbackInput, [j.id]: e.target.value });
+                                      if (journalInlineError?.id === j.id) setJournalInlineError(null);
+                                    }}
+                                  />
+
+                                  {/* Action Buttons */}
+                                  <div className="flex flex-wrap gap-2">
+                                    <button
+                                      onClick={() => void handleApprove(j.id)}
+                                      disabled={statusInfo.key === "approved" || isBusy || deleteJournalLoading === j.id}
+                                      className="flex-1 min-w-[80px] px-3 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-xl hover:bg-emerald-700 active:scale-[0.98] transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1"
+                                    >
+                                      {isBusy ? <RefreshCw className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                                      {isBusy ? "Memproses..." : statusInfo.key === "approved" ? "Sudah Valid" : "Validasi"}
+                                    </button>
+
+                                    {statusInfo.key === "approved" && (
+                                      <button
+                                        type="button"
+                                        onClick={() => void handleSaveValidationFeedback(j.id)}
+                                        disabled={isBusy}
+                                        className={`px-3 py-2 border text-xs font-semibold rounded-xl transition disabled:opacity-50 ${
+                                          darkMode
+                                            ? "border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10"
+                                            : "border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                                        }`}
+                                      >
+                                        Simpan Feedback
+                                      </button>
+                                    )}
+
+                                    <button
+                                      onClick={() => void handleUpdateJournalStatus(j.id, "revision")}
+                                      disabled={statusInfo.key === "revision" || isBusy}
+                                      className="px-3 py-2 bg-orange-500 text-white text-xs font-semibold rounded-xl hover:bg-orange-600 active:scale-[0.98] transition disabled:opacity-50 disabled:cursor-not-allowed"
+                                    >
+                                      Perlu Revisi
+                                    </button>
+
+                                    {statusInfo.key === "approved" && (
+                                      <button
+                                        onClick={() => void handleCancelApproval(j.id)}
+                                        disabled={isBusy}
+                                        className={`px-3 py-2 border text-xs font-semibold rounded-xl transition disabled:opacity-50 flex items-center gap-1 ${
+                                          darkMode
+                                            ? "border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10"
+                                            : "border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+                                        }`}
+                                      >
+                                        <Undo2 className="w-3 h-3" />
+                                        Batalkan
+                                      </button>
+                                    )}
+
+                                    {statusInfo.key === "revision" && (
+                                      <button
+                                        type="button"
+                                        onClick={() => void handleCancelRevision(j.id)}
+                                        disabled={isBusy}
+                                        className={`px-3 py-2 border text-xs font-semibold rounded-xl transition disabled:opacity-50 ${
+                                          darkMode
+                                            ? "border-orange-500/30 text-orange-300 hover:bg-orange-500/10"
+                                            : "border-orange-300 text-orange-700 hover:bg-orange-50"
+                                        }`}
+                                      >
+                                        Batalkan Revisi
+                                      </button>
+                                    )}
+
+                                    <button
+                                      onClick={() => void handleDeleteJournal(j.id)}
+                                      disabled={deleteJournalLoading === j.id || journalActionLoading === j.id}
+                                      aria-label={`Hapus jurnal ${j.bookTitle}`}
+                                      className={`p-2 text-red-600 border border-red-200 rounded-xl hover:bg-red-50 transition disabled:opacity-50 disabled:cursor-not-allowed ${
+                                        darkMode ? "bg-red-500/10" : "bg-red-50"
+                                      }`}
+                                    >
+                                      {deleteJournalLoading === j.id ? "..." : <Trash2 className="w-4 h-4" />}
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </section>
+                    );
+                  })}
                 </div>
               )}
             </div>
-            {selectedJournalIds.size > 0 && (
-              <div className="mb-4 flex flex-col gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs leading-relaxed font-semibold text-emerald-800 text-justify">
-                  {selectedJournalIds.size} jurnal dipilih untuk divalidasi
-                </p>
-                <div className="flex flex-col gap-2 sm:flex-row">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedJournalIds(new Set())}
-                    className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 sm:w-auto"
-                  >
-                    Batalkan pilihan
-                  </button>
-                  {selectedPendingJournalCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => void handleBulkApprove()}
-                      disabled={bulkJournalLoading}
-                      className="w-full rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-                    >
-                      {bulkJournalLoading ? "Memvalidasi..." : `Validasi ${selectedPendingJournalCount} Jurnal`}
-                    </button>
-                  )}
-                  {selectedApprovedJournalCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => void handleBulkCancelApproval()}
-                      disabled={bulkJournalLoading}
-                      className="w-full rounded-xl border border-orange-300 bg-orange-50 px-3 py-2 text-xs font-semibold text-orange-700 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-                    >
-                      {bulkJournalLoading ? "Memproses..." : `Batalkan ${selectedApprovedJournalCount} Validasi`}
-                    </button>
-                  )}
-                  {selectedRevisionJournalCount > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => void handleBulkCancelRevision()}
-                      disabled={bulkJournalLoading}
-                      className="w-full rounded-xl border border-orange-300 bg-orange-50 px-3 py-2 text-xs font-semibold text-orange-700 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
-                    >
-                      {bulkJournalLoading ? "Memproses..." : `Batalkan ${selectedRevisionJournalCount} Revisi`}
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-            {journals.length === 0 ? (
-              <p className="text-emerald-700/60 text-sm">Belum ada jurnal dari siswa manapun.</p>
-            ) : filteredGroupedJournalsByClass.length === 0 ? (
-              <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">Tidak ada jurnal pada kelas yang dipilih.</p>
-            ) : (
-              <div className="space-y-6">
-                {filteredGroupedJournalsByClass.map(({ classCode, journals: classJournals }) => {
-                  const classJournalIds = classJournals.map((journal) => journal.id);
-                  const allClassSelected = classJournalIds.every((journalId) => selectedJournalIds.has(journalId));
-                  return (
-                  <section key={classCode} aria-labelledby={`journal-class-${classCode}`}>
-                    <div className="mb-3 flex flex-col gap-2 border-b border-emerald-100 pb-2 sm:flex-row sm:items-center sm:justify-between">
-                      <h3 id={`journal-class-${classCode}`} className="text-sm font-bold text-emerald-900">Kelas {classCode}</h3>
-                      <label className="flex cursor-pointer items-center gap-2 text-xs font-semibold text-emerald-700">
-                        <input
-                          type="checkbox"
-                          checked={allClassSelected}
-                          onChange={() => handleToggleClassJournals(classJournalIds)}
-                          className="h-4 w-4 accent-emerald-600"
-                        />
-                        Pilih semua jurnal kelas ini
-                      </label>
-                    </div>
-                    <div className="space-y-4 lg:grid lg:grid-cols-2 lg:gap-4 lg:space-y-0 lg:items-start">
-                {classJournals.map((j) => {
-                  const statusInfo = getStatusInfo(j.status);
-                  const isBusy = journalActionLoading === j.id;
-                  const hasValidationFeedback = statusInfo.key === "approved" && Boolean(j.teacherFeedback?.trim());
-                  return (
-                    <div
-                      key={j.id}
-                      id={`journal-card-${j.id}`}
-                      className={`border p-3 sm:p-4 rounded-2xl bg-emerald-50/50 flex flex-col gap-2.5 relative overflow-hidden transition-colors ${
-                        journalInlineError?.id === j.id ? "border-red-300 ring-2 ring-red-200" : "border-emerald-100"
-                      }`}
-                    >
-                      <span className={`absolute left-0 top-0 bottom-0 w-1 ${statusInfo.dotClass}`} />
-                      <div className="flex flex-col items-start gap-2 pl-1 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex min-w-0 items-start gap-2">
-                          <input
-                            type="checkbox"
-                            checked={selectedJournalIds.has(j.id)}
-                            onChange={() => handleToggleJournalSelection(j.id)}
-                            aria-label={`Pilih jurnal ${j.studentName}`}
-                            className="mt-1 h-4 w-4 shrink-0 accent-emerald-600"
-                          />
-                          <button
-                            onClick={() => setSelectedStudent(getStudentIdentityKey(j.studentId, j.studentName, j.classCode))}
-                            className="max-w-full text-left font-bold text-emerald-900 hover:underline break-words"
-                          >
-                            {j.studentName}
-                            {j.classCode && (
-                              <span className="ml-2 text-xs font-normal text-emerald-700/50">
-                                · Kelas {j.classCode}
-                              </span>
-                            )}
-                          </button>
-                        </div>
-                        <span className={`text-xs px-2 py-1 rounded-lg font-semibold ${statusInfo.badgeClass}`}>
-                          {statusInfo.badge}
-                        </span>
-                      </div>
-
-                      <div className="grid gap-1 text-xs text-emerald-700/70 sm:grid-cols-2 pl-1">
-                        <p className="text-justify leading-relaxed">
-                          <strong>Upload:</strong> {formatTanggal(toDateSafe(j.createdAt))}
-                        </p>
-                        <p className="text-justify leading-relaxed">
-                          <strong>Validator:</strong>{" "}
-                          {j.approvedBy ? (
-                            <span className="font-semibold text-emerald-800">{j.approvedBy}</span>
-                          ) : (
-                            <span className="text-slate-500">Belum divalidasi</span>
-                          )}
-                        </p>
-                      </div>
-
-                      {(statusInfo.key === "approved" || statusInfo.key === "revision") && (
-                        <p className="text-xs leading-relaxed text-emerald-700/60 pl-1 text-justify">
-                          <strong>Terakhir diubah:</strong>{" "}
-                          <span className="font-semibold text-emerald-800">
-                            {formatTanggal(toDateSafe(j.updatedAt || j.createdAt))}
-                          </span>
-                        </p>
-                      )}
-
-                      {statusInfo.key === "revision" && (
-                        <p className="text-xs leading-relaxed text-orange-700 bg-orange-50 border border-orange-200 rounded-lg px-2 py-1.5 ml-1 text-justify break-words">
-                          <strong>Alasan revisi:</strong> {j.teacherFeedback || "-"}
-                        </p>
-                      )}
-
-                      {statusInfo.key === "approved" && j.teacherFeedback?.trim() && (
-                        <p className="text-xs leading-relaxed text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1.5 ml-1 text-justify break-words">
-                          <strong>Feedback validasi:</strong> {j.teacherFeedback}
-                        </p>
-                      )}
-
-                      {statusInfo.key === "approved" && !hasValidationFeedback && (
-                        <p className="ml-1 flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-xs leading-relaxed text-amber-800 text-justify">
-                          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                          Feedback validasi belum ditambahkan.
-                        </p>
-                      )}
-
-                      <p className="text-xs sm:text-sm leading-relaxed text-emerald-800/80 break-words pl-1 text-justify">
-                        <strong>Buku:</strong> {j.bookTitle} ({j.author})
-                        {j.genre ? ` · ${j.genre}` : ""} — Hal. {j.startPage}-{getLatestPageForJournal(j)}
-                        {j.finished ? " · ✅ Selesai dibaca" : ""}
-                      </p>
-                      <p className="text-xs sm:text-sm leading-relaxed text-emerald-800/80 break-words pl-1 text-justify">
-                        <strong>Nilai Karakter:</strong> {getCharacterList(j).join(", ") || "-"}
-                      </p>
-                      <p className="text-xs sm:text-sm leading-relaxed text-emerald-700/70 italic break-words pl-1 text-justify">&quot;{j.summary}&quot;</p>
-                      {journalInlineError?.id === j.id && (
-                        <p className="ml-1 flex items-start gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-xs leading-relaxed text-red-700 text-justify">
-                          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                          {journalInlineError.message}
-                        </p>
-                      )}
-                      <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center pl-1">
-                        <input
-                          type="text"
-                          placeholder={statusInfo.key === "approved" ? "Tambahkan feedback validasi..." : "Umpan balik / alasan revisi..."}
-                          className={`min-w-0 w-full flex-1 p-2 text-sm bg-white border rounded-xl outline-none focus:ring-2 transition ${
-                            journalInlineError?.id === j.id
-                              ? "border-red-300 focus:ring-red-300 focus:border-red-400"
-                              : "border-emerald-200 focus:ring-emerald-400 focus:border-emerald-400"
-                          }`}
-                          value={feedbackInput[j.id] ?? j.teacherFeedback ?? ""}
-                          onChange={(e) => {
-                            setFeedbackInput({ ...feedbackInput, [j.id]: e.target.value });
-                            if (journalInlineError?.id === j.id) setJournalInlineError(null);
-                          }}
-                        />
-                        <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap">
-                          <button
-                            onClick={() => void handleApprove(j.id)}
-                            disabled={statusInfo.key === "approved" || isBusy || deleteJournalLoading === j.id}
-                            className="min-w-0 px-2 py-2 bg-emerald-600 text-white text-xs sm:text-sm font-semibold rounded-xl hover:bg-emerald-700 active:scale-[0.98] transition disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:active:scale-100"
-                          >
-                            {isBusy ? "Memproses..." : statusInfo.key === "approved" ? "Sudah Valid" : "Validasi"}
-                          </button>
-                          {statusInfo.key === "approved" && (
-                            <button
-                              type="button"
-                              onClick={() => void handleSaveValidationFeedback(j.id)}
-                              disabled={isBusy}
-                              className="col-span-2 min-w-0 rounded-xl border border-emerald-300 bg-white px-2 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50 sm:col-span-1"
-                            >
-                              {isBusy ? "Menyimpan..." : "Simpan Feedback"}
-                            </button>
-                          )}
-                          <button
-                            onClick={() => void handleUpdateJournalStatus(j.id, "revision")}
-                            disabled={statusInfo.key === "revision" || isBusy}
-                            className="min-w-0 px-2 py-2 bg-orange-500 text-white text-xs sm:text-sm font-semibold rounded-xl hover:bg-orange-600 active:scale-[0.98] transition disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:active:scale-100"
-                          >
-                            Perlu Revisi
-                          </button>
-                          {statusInfo.key === "approved" && (
-                            <button
-                              onClick={() => void handleCancelApproval(j.id)}
-                              disabled={isBusy}
-                              className="flex min-w-0 items-center justify-center gap-1.5 px-2 py-2 border border-emerald-300 text-emerald-700 bg-white text-xs sm:text-sm font-semibold rounded-xl hover:bg-emerald-50 active:scale-[0.98] transition disabled:opacity-50"
-                            >
-                              <Undo2 className="w-4 h-4" />
-                              Batalkan Validasi
-                            </button>
-                          )}
-                          {statusInfo.key === "revision" && (
-                            <button
-                              type="button"
-                              onClick={() => void handleCancelRevision(j.id)}
-                              disabled={isBusy}
-                              className="flex min-w-0 items-center justify-center gap-1.5 px-2 py-2 border border-orange-300 text-orange-700 bg-orange-50 text-xs sm:text-sm font-semibold rounded-xl hover:bg-orange-100 active:scale-[0.98] transition disabled:opacity-50"
-                            >
-                              Batalkan Revisi
-                            </button>
-                          )}
-                          <button
-                            onClick={() => void handleDeleteJournal(j.id)}
-                            disabled={deleteJournalLoading === j.id || journalActionLoading === j.id}
-                            aria-label={`Hapus jurnal ${j.bookTitle}`}
-                            className="flex items-center justify-center px-3 py-2 text-red-600 border border-red-200 bg-red-50 rounded-xl hover:bg-red-100 transition disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-red-50"
-                          >
-                            {deleteJournalLoading === j.id ? "..." : <Trash2 className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-                    </div>
-                  </section>
-                  );
-                })}
-              </div>
-            )}
           </div>
         )}
 
@@ -3107,10 +3678,10 @@ export default function TeacherDashboard() {
             <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 lg:p-7 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
               <h2 className="text-base sm:text-lg lg:text-xl font-bold text-emerald-900 flex items-center gap-2">
                 <Settings2 className="w-5 h-5 text-emerald-600" />
-                Kelola Data Siswa
+                Kelola Data Murid
               </h2>
               <p className="text-xs text-emerald-700/60 mt-1 lg:max-w-2xl">
-                Ubah profil siswa atau hapus data profil beserta seluruh jurnalnya.
+                Ubah profil murid atau hapus data profil beserta seluruh jurnalnya.
                 Penghapusan akun login Firebase memerlukan backend Admin SDK.
               </p>
               {managementError && (
@@ -3175,7 +3746,7 @@ export default function TeacherDashboard() {
                 ).length > 1 && (
                   <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <p className="text-sm font-semibold text-red-800">
-                      {selectedStudentsForDelete.size} siswa dipilih untuk dihapus
+                      {selectedStudentsForDelete.size} murid dipilih untuk dihapus
                     </p>
                     <div className="flex gap-2">
                       <button
@@ -3189,16 +3760,16 @@ export default function TeacherDashboard() {
                         disabled={managementLoading}
                         className="px-3 py-1.5 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 transition"
                       >
-                        {managementLoading ? "Menghapus..." : `Hapus ${selectedStudentsForDelete.size} Siswa`}
+                        {managementLoading ? "Menghapus..." : `Hapus ${selectedStudentsForDelete.size} Murid`}
                       </button>
                     </div>
                   </div>
                 )}
 
               {allStudents.length === 0 ? (
-                <p className="text-sm text-emerald-700/60">Belum ada akun siswa.</p>
+                <p className="text-sm text-emerald-700/60">Belum ada akun murid.</p>
               ) : groupedStudentsByClass.length === 0 ? (
-                <p className="text-sm text-emerald-700/60">Tidak ada siswa yang cocok dengan pencarian &quot;{managementStudentSearch}&quot;.</p>
+                <p className="text-sm text-emerald-700/60">Tidak ada murid yang cocok dengan pencarian &quot;{managementStudentSearch}&quot;.</p>
               ) : (
                 <div className="space-y-6 lg:grid lg:grid-cols-2 lg:gap-6 lg:space-y-0 lg:items-start">
                   {groupedStudentsByClass.map(({ classCode, students }) => {
@@ -3225,7 +3796,7 @@ export default function TeacherDashboard() {
                               )}
                             </button>
                             <h4 className="truncate text-sm font-bold text-white sm:text-base">
-                              Kelas {classCode} ({students.length} siswa)
+                              Kelas {classCode} ({students.length} murid)
                             </h4>
                           </div>
                         </div>
@@ -3234,7 +3805,7 @@ export default function TeacherDashboard() {
                           <div className="border-b border-emerald-200 bg-red-50/80 px-3 py-2.5 sm:px-4 sm:py-3">
                             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                               <p className="text-sm font-semibold text-red-800">
-                                {students.filter((student) => selectedStudentsForDelete.has(student.uid)).length} siswa dipilih di kelas {classCode}
+                                {students.filter((student) => selectedStudentsForDelete.has(student.uid)).length} murid dipilih di kelas {classCode}
                               </p>
                               <div className="flex gap-2">
                                 <button
@@ -3248,7 +3819,7 @@ export default function TeacherDashboard() {
                                   disabled={managementLoading}
                                   className="px-3 py-1.5 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 transition"
                                 >
-                                  {managementLoading ? "Menghapus..." : `Hapus ${students.filter((student) => selectedStudentsForDelete.has(student.uid)).length} Siswa`}
+                                  {managementLoading ? "Menghapus..." : `Hapus ${students.filter((student) => selectedStudentsForDelete.has(student.uid)).length} Murid`}
                                 </button>
                               </div>
                             </div>
@@ -3305,7 +3876,7 @@ export default function TeacherDashboard() {
                             </div>
                             {isEditingThis && (
                               <div className="bg-emerald-100/40 border-t-2 border-emerald-200 p-4 sm:p-5">
-                                <h3 className="text-sm font-semibold text-emerald-800 mb-3">Ubah Profil Siswa: {student.name}</h3>
+                                <h3 className="text-sm font-semibold text-emerald-800 mb-3">Ubah Profil Murid: {student.name}</h3>
                                 <div className="space-y-3">
                                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                     <input
@@ -3378,7 +3949,7 @@ export default function TeacherDashboard() {
               {(
                 [
                   { key: "kelas", label: "Rekapan Per Kelas" },
-                  { key: "siswa", label: "Rekapan Per Siswa" },
+                  { key: "siswa", label: "Rekapan Per Murid" },
                 ] as { key: ReportView; label: string }[]
               ).map((r) => (
                 <button
@@ -3402,7 +3973,7 @@ export default function TeacherDashboard() {
                     Filter Laporan
                   </p>
                   <h3 className="text-sm font-semibold text-emerald-900">
-                    {reportView === "siswa" ? "Rekapan Per Siswa" : "Rekapan Per Kelas"}
+                    {reportView === "siswa" ? "Rekapan Per Murid" : "Rekapan Per Kelas"}
                   </h3>
                 </div>
                 <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700">
@@ -3435,7 +4006,7 @@ export default function TeacherDashboard() {
                 {reportView === "siswa" && (
                   <div className="min-w-0 sm:col-span-2 xl:col-span-2">
                     <label className="text-[11px] font-medium text-emerald-700/70 mb-1 block">
-                      Laporan Siswa
+                      Laporan Murid
                     </label>
                     <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                       <input
@@ -3450,7 +4021,7 @@ export default function TeacherDashboard() {
                         onChange={(e) => setReportStudent(e.target.value)}
                         className="min-h-[42px] w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
                       >
-                        <option value="all">Semua siswa</option>
+                        <option value="all">Semua murid</option>
                         {reportStudentsGroupedByClass.map((group) => (
                           <optgroup key={group.classCode} label={`Kelas ${group.classCode}`}>
                             {group.students.map((s) => (
@@ -3463,9 +4034,9 @@ export default function TeacherDashboard() {
                       </select>
                     </div>
                     <p className="mt-1 text-[11px] text-emerald-700/50">
-                      Daftar ini mencakup seluruh siswa terdaftar (termasuk yang belum pernah kirim
-                      jurnal). Pilih satu siswa untuk laporan personal, atau &quot;Semua siswa&quot;
-                      untuk laporan gabungan seluruh siswa aktif.
+                      Daftar ini mencakup seluruh murid terdaftar (termasuk yang belum pernah kirim
+                      jurnal). Pilih satu murid untuk laporan personal, atau &quot;Semua murid&quot;
+                      untuk laporan gabungan seluruh murid aktif.
                     </p>
                   </div>
                 )}
@@ -3503,11 +4074,11 @@ export default function TeacherDashboard() {
             <p className="text-xs text-emerald-700/60">
               {reportView === "siswa"
                 ? reportStudent === "all"
-                  ? `Menampilkan ${reportStudentSummariesForExport.length} siswa (${reportPeriodLabel}).`
-                  : `Laporan personal ${reportSelectedStudentSummary?.name ?? "siswa ini"} (${reportPeriodLabel}) · ${
+                  ? `Menampilkan ${reportStudentSummariesForExport.length} murid (${reportPeriodLabel}).`
+                  : `Laporan personal ${reportSelectedStudentSummary?.name ?? "murid ini"} (${reportPeriodLabel}) · ${
                       reportSelectedStudentSummary?.totalJournals ?? 0
                     } jurnal.`
-                : `Menampilkan ${reportClassStudentSummaries.length} siswa untuk ${
+                : `Menampilkan ${reportClassStudentSummaries.length} murid untuk ${
                     reportClass === "all" ? "semua kelas" : `kelas ${reportClass}`
                   } (${reportPeriodLabel}).`}
             </p>
@@ -3549,7 +4120,7 @@ export default function TeacherDashboard() {
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:gap-6">
                 <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3.5 lg:p-4">
                   <h4 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-emerald-700/70">
-                    Top 10 Buku Paling Banyak Dibaca (Siswa)
+                    Top 10 Buku Paling Banyak Dibaca (Murid)
                   </h4>
                   {reportTopBooks.length === 0 ? (
                     <p className="text-sm text-emerald-700/50">Belum ada data buku pada periode ini.</p>
@@ -3571,7 +4142,7 @@ export default function TeacherDashboard() {
                 </div>
                 <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-3.5 lg:p-4">
                   <h4 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-amber-700/80">
-                    Top 10 Nilai Karakter Paling Sering Disebut (Siswa)
+                    Top 10 Nilai Karakter Paling Sering Disebut (Murid)
                   </h4>
                   {reportTopCharacters.length === 0 ? (
                     <p className="text-sm text-emerald-700/50">Belum ada data nilai karakter pada periode ini.</p>
@@ -3598,7 +4169,7 @@ export default function TeacherDashboard() {
               <div className="mb-4 flex items-center justify-between gap-2 border-b border-emerald-100 pb-2.5">
                 <h3 className="text-sm font-semibold text-emerald-900">Pratinjau</h3>
                 <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
-                  {reportView === "siswa" ? "Per Siswa" : "Per Kelas"}
+                  {reportView === "siswa" ? "Per Murid" : "Per Kelas"}
                 </span>
               </div>
 
@@ -3621,8 +4192,8 @@ export default function TeacherDashboard() {
                           <thead>
                             <tr className="text-left text-emerald-700/60 border-b border-emerald-100">
                               <th className="py-2 lg:py-3 pr-2">Kelas</th>
-                              <th className="py-2 lg:py-3 pr-2">Total Siswa</th>
-                              <th className="py-2 lg:py-3 pr-2">Siswa Aktif</th>
+                              <th className="py-2 lg:py-3 pr-2">Total Murid</th>
+                              <th className="py-2 lg:py-3 pr-2">Murid Aktif</th>
                               <th className="py-2 lg:py-3 pr-2">Total Jurnal</th>
                               <th className="py-2 lg:py-3 pr-2">Tervalidasi</th>
                               <th className="py-2 lg:py-3 pr-2">Perlu Revisi</th>
@@ -3652,12 +4223,12 @@ export default function TeacherDashboard() {
                   )}
                   <p className="text-[11px] text-emerald-700/50 mt-2">
                     Pratinjau di atas ringkasan per kelas. File CSV yang diunduh akan lebih rinci —
-                    per siswa dan per buku.
+                    per murid dan per buku.
                   </p>
                 </div>
               )}
 
-              {/* ---- Pratinjau: Rekapan Per Siswa ---- */}
+              {/* ---- Pratinjau: Rekapan Per Murid ---- */}
               {reportView === "siswa" &&
                 (reportStudent === "all" ? (
                   <div>
@@ -3676,7 +4247,7 @@ export default function TeacherDashboard() {
                           <table className="w-full text-sm">
                             <thead>
                               <tr className="text-left text-emerald-700/60 border-b border-emerald-100">
-                                <th className="py-2">Nama Siswa</th>
+                                <th className="py-2">Nama Murid</th>
                                 <th className="py-2">Kelas</th>
                                 <th className="py-2">Gender</th>
                                 <th className="py-2">Total Jurnal</th>
@@ -3707,7 +4278,7 @@ export default function TeacherDashboard() {
                       </>
                     )}
                     <p className="text-[11px] text-emerald-700/50 mt-2">
-                      Pratinjau di atas ringkasan per siswa. File CSV yang diunduh akan lebih rinci —
+                      Pratinjau di atas ringkasan per murid. File CSV yang diunduh akan lebih rinci —
                       per buku, lengkap dengan judul, penulis, genre, halaman, dan nilai karakter.
                     </p>
                   </div>
@@ -3715,7 +4286,7 @@ export default function TeacherDashboard() {
                   <div className="space-y-4">
                     {!reportSelectedStudentSummary || reportSelectedStudentSummary.totalJournals === 0 ? (
                       <p className="text-sm text-emerald-700/60">
-                        Belum ada jurnal dari {reportSelectedStudentSummary?.name ?? "siswa ini"} pada periode ini.
+                        Belum ada jurnal dari {reportSelectedStudentSummary?.name ?? "murid ini"} pada periode ini.
                       </p>
                     ) : (
                       <>
@@ -3878,11 +4449,11 @@ export default function TeacherDashboard() {
       {/* ---- Versi cetak ---- */}
       <div className="hidden print:block p-6 text-black">
         <h1 className="text-xl font-bold mb-1">
-          {reportView === "siswa" ? "Laporan Per Siswa" : "Laporan Per Kelas"}
+          {reportView === "siswa" ? "Laporan Per Murid" : "Laporan Per Kelas"}
         </h1>
         <p className="text-sm mb-1">
           {reportView === "siswa"
-            ? reportStudent === "all" ? "Semua siswa" : `Siswa: ${reportSelectedStudentSummary?.name ?? "-"}`
+            ? reportStudent === "all" ? "Semua murid" : `Murid: ${reportSelectedStudentSummary?.name ?? "-"}`
             : reportClass === "all" ? "Semua kelas" : `Kelas: ${reportClass}`}
         </p>
         <p className="text-sm mb-4">Periode: {reportPeriodLabel} · Dicetak pada {formatTanggal(new Date())}</p>
@@ -3922,7 +4493,7 @@ export default function TeacherDashboard() {
         </button>
       )}
 
-      {/* ---- Modal Detail Siswa ---- */}
+      {/* ---- Modal Detail Murid ---- */}
       {selectedStudentData && (
         <div
           className="fixed inset-0 bg-emerald-950/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 sm:p-4 print:hidden"
@@ -4051,9 +4622,18 @@ export default function TeacherDashboard() {
   );
 }
 
-function buildLeaderboard(journalsInput: Journal[], limit = 10, refreshKey?: string): LeaderboardEntry[] {
+function buildLeaderboard(
+  journalsInput: Journal[],
+  limit = 10,
+  refreshKey?: string,
+  allStudents: RosterStudent[] = []
+): LeaderboardEntry[] {
   const windowRef = refreshKey ? new Date(refreshKey) : new Date();
   const snapshotCutoff = getLatestMondaySnapshotCutoff(windowRef);
+  const genderByStudentId = new Map<string, string>();
+  allStudents.forEach((student) => {
+    if (student.uid) genderByStudentId.set(student.uid, student.gender || "");
+  });
   const statsByStudent = new Map<
     string,
     { studentName: string; classCode: string; journalCount: number; totalPagesRead: number; finishedTitles: Set<string> }
@@ -4066,7 +4646,7 @@ function buildLeaderboard(journalsInput: Journal[], limit = 10, refreshKey?: str
     if (!createdAt || createdAt > snapshotCutoff) return;
 
     const stats = statsByStudent.get(journal.studentId) || {
-      studentName: journal.studentName || "Siswa",
+      studentName: journal.studentName || "Murid",
       classCode: journal.classCode || "-",
       journalCount: 0,
       totalPagesRead: 0,
@@ -4086,6 +4666,7 @@ function buildLeaderboard(journalsInput: Journal[], limit = 10, refreshKey?: str
       studentId,
       studentName: stats.studentName,
       classCode: stats.classCode,
+      gender: genderByStudentId.get(studentId) || "",
       journalCount: stats.journalCount,
       totalPagesRead: stats.totalPagesRead,
       booksFinished: stats.finishedTitles.size,

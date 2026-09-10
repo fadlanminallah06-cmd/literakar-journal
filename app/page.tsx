@@ -4,11 +4,11 @@ import type { Metadata } from "next";
 import { BookOpen, Sparkles, Leaf } from "lucide-react";
 
 export const metadata: Metadata = {
-  title: "Jurnal Literasi & Karakter Siswa - Platform Membaca Digital",
+  title: "Jurnal Literasi & Karakter Murid - Platform Membaca Digital",
   description: "Platform pencatatan jurnal membaca interaktif untuk membangun kebiasaan membaca, memantau perkembangan literasi, dan menanamkan nilai-nilai karakter positif.",
   openGraph: {
-    title: "Jurnal Literasi & Karakter Siswa",
-    description: "Platform pencatatan jurnal membaca interaktif untuk siswa dan guru",
+    title: "Jurnal Literasi & Karakter Murid",
+    description: "Platform pencatatan jurnal membaca interaktif untuk murid dan guru",
     url: "/",
     type: "website",
     images: [
@@ -16,14 +16,14 @@ export const metadata: Metadata = {
         url: "/asset/logo3.png",
         width: 1200,
         height: 630,
-        alt: "Logo Jurnal Literasi & Karakter Siswa",
+        alt: "Logo Jurnal Literasi & Karakter Murid",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Jurnal Literasi & Karakter Siswa",
-    description: "Platform pencatatan jurnal membaca interaktif untuk siswa dan guru",
+    title: "Jurnal Literasi & Karakter Murid",
+    description: "Platform pencatatan jurnal membaca interaktif untuk murid dan guru",
     images: ["/asset/logo3.png"],
   },
 };
@@ -42,7 +42,7 @@ export default function HomePage() {
         <div className="relative w-64 md:w-80 aspect-video mb-6 drop-shadow-lg">
           <Image
             src="/asset/logo3.png"
-            alt="Logo Jurnal Literasi & Karakter Siswa"
+            alt="Logo Jurnal Literasi & Karakter Murid"
             fill
             className="object-contain"
             priority

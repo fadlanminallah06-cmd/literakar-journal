@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   browserLocalPersistence,
   browserSessionPersistence,
@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
+import LoginBackgroundTree from "@/components/LoginBackgroundTree";
 
 // Key localStorage untuk menyimpan email yang diingat. Hanya email yang
 // disimpan — password TIDAK PERNAH disimpan di localStorage; pengisian
@@ -31,7 +32,40 @@ export default function LoginPage() {
   const [resetMessage, setResetMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
+  const [isPeeking, setIsPeeking] = useState(false);
+  const [focusSide, setFocusSide] = useState<"email" | "password">("email");
+  const peekTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
+
+  const handleFocus = (side: "email" | "password") => {
+    setFocusSide(side);
+    setIsPeeking(true);
+
+    if (peekTimeoutRef.current) {
+      clearTimeout(peekTimeoutRef.current);
+    }
+  };
+
+  const handleBlur = () => {
+    peekTimeoutRef.current = setTimeout(() => {
+      setIsPeeking(false);
+    }, 3000);
+  };
+
+  const handleTyping = (side: "email" | "password", value: string) => {
+    if (side === "email") {
+      setEmail(value);
+    } else {
+      setPassword(value);
+    }
+
+    setFocusSide(side);
+    setIsPeeking(true);
+
+    if (peekTimeoutRef.current) {
+      clearTimeout(peekTimeoutRef.current);
+    }
+  };
 
   // Muat email yang pernah diingat (kalau ada) saat halaman pertama dibuka,
   // supaya pengguna tidak perlu mengetik ulang emailnya.
@@ -49,6 +83,14 @@ export default function LoginPage() {
     } catch {
       // localStorage tidak tersedia (mis. SSR/privasi browser) — abaikan, form tetap kosong.
     }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (peekTimeoutRef.current) {
+        clearTimeout(peekTimeoutRef.current);
+      }
+    };
   }, []);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -153,14 +195,25 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-emerald-50 via-green-50 to-teal-100">
-      {/* Soft decorative blobs — pure CSS, no images, ringan di mobile */}
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-emerald-50 via-green-50 to-teal-100 relative overflow-hidden">
+      {/* Background blobs */}
+      <div className="pointer-events-none fixed inset-0 overflow-hidden z-0">
         <div className="absolute -top-24 -left-24 w-72 h-72 bg-emerald-200/40 rounded-full blur-3xl" />
         <div className="absolute -bottom-24 -right-24 w-72 h-72 bg-teal-200/40 rounded-full blur-3xl" />
       </div>
 
-      <div className="relative w-full max-w-md bg-white/80 backdrop-blur-sm p-8 rounded-3xl shadow-xl shadow-emerald-900/10 border border-white">
+      {/*
+        Pohon ngintip - z-[60] di depan card.
+        Pointer-events-none jadi tidak blokir klik.
+      */}
+      <LoginBackgroundTree isPeeking={isPeeking} focusSide={focusSide} />
+
+      {/*
+        Card Login - z-10 (di belakang pohon).
+        Tambahin margin-top (mt-16) atau padding-top (pt-32) 
+        biar ada ruang kosong di atas card buat kepala pohon.
+      */}
+      <div className="relative z-10 w-full max-w-md bg-white/95 backdrop-blur-md p-8 pt-32 mt-16 rounded-3xl shadow-xl shadow-emerald-900/10 border border-white">
         <div className="relative w-full aspect-video mb-4">
           <Image
             src="/asset/logo3.png"
@@ -195,7 +248,9 @@ export default function LoginPage() {
                 placeholder="nama@email.com"
                 className="w-full pl-10 pr-3 py-2.5 bg-emerald-50/50 border border-emerald-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => handleTyping("email", e.target.value)}
+                onFocus={() => handleFocus("email")}
+                onBlur={handleBlur}
               />
             </div>
           </div>
@@ -211,7 +266,9 @@ export default function LoginPage() {
                 placeholder="••••••••"
                 className="w-full pl-10 pr-10 py-2.5 bg-emerald-50/50 border border-emerald-200 rounded-xl text-slate-800 placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => handleTyping("password", e.target.value)}
+                onFocus={() => handleFocus("password")}
+                onBlur={handleBlur}
               />
               <button
                 type="button"

@@ -36,6 +36,7 @@ import {
   Target,
   AlertTriangle,
   Sparkles,
+  Save,
   Crown,
   Zap,
   CalendarDays,
@@ -84,6 +85,7 @@ interface LeaderboardEntry {
   studentId: string;
   studentName: string;
   classCode: string;
+  gender?: string;
   journalCount: number;
   totalPagesRead: number;
   booksFinished: number;
@@ -97,7 +99,7 @@ interface ClassLeaderboardEntry {
   booksFinished: number;
 }
 
-type TabKey = "beranda" | "jurnal" | "riwayat" | "badge" | "pohon" | "leaderboard";
+type TabKey = "beranda" | "jurnal" | "pohon" | "badge" | "leaderboard" | "riwayat";
 type BadgeFilter = "semua" | "terkunci" | "didapat";
 type RiwayatStatusFilter = "semua" | "pending" | "revision" | "approved";
 type NormalizedStatus = "pending" | "revision" | "approved";
@@ -362,7 +364,12 @@ type BadgeMetricKey =
   | "genreCount"
   | "characterVarietyCount"
   | "earlyBird"
-  | "nightOwl";
+  | "nightOwl"
+  | "uniqueBooks"
+  | "maxDailyPages"
+  | "nightOwlCount"
+  | "genreFocus"
+  | "legendCombo";
 
 interface BadgeDef {
   key: string;
@@ -381,7 +388,13 @@ interface BadgeComputed extends BadgeDef {
   percent: number;
 }
 
-const CATEGORY_ORDER = ["Jumlah Buku", "Konsistensi", "Halaman & Maraton", "Eksplorasi & Kebiasaan"];
+const CATEGORY_ORDER = [
+  "Jumlah Buku",
+  "Konsistensi",
+  "Halaman & Maraton",
+  "Eksplorasi & Kebiasaan",
+  "Koleksi & Spesialisasi",
+];
 
 const BADGE_DEFS: BadgeDef[] = [
   { key: "pemula", title: "Pembaca Pemula", description: "Baca 1 buku", category: "Jumlah Buku", tier: "bronze", target: 1, metric: "booksFinished", icon: "book" },
@@ -402,6 +415,12 @@ const BADGE_DEFS: BadgeDef[] = [
   { key: "nilai", title: "Pemburu Nilai", description: "Temukan 5 nilai karakter berbeda", category: "Eksplorasi & Kebiasaan", tier: "silver", target: 5, metric: "characterVarietyCount", icon: "heart" },
   { key: "pagi", title: "Si Rajin Pagi", description: "Isi jurnal sebelum jam 7 pagi", category: "Eksplorasi & Kebiasaan", tier: "bronze", target: 1, metric: "earlyBird", icon: "sunrise" },
   { key: "malam", title: "Burung Hantu Baca", description: "Isi jurnal setelah jam 9 malam", category: "Eksplorasi & Kebiasaan", tier: "bronze", target: 1, metric: "nightOwl", icon: "moon" },
+
+  { key: "kolektor", title: "Kolektor Buku", description: "Kumpulkan 20 judul buku berbeda", category: "Koleksi & Spesialisasi", tier: "gold", target: 20, metric: "uniqueBooks", icon: "library" },
+  { key: "speed", title: "Speed Reader", description: "Baca 100+ halaman dalam satu hari", category: "Halaman & Maraton", tier: "silver", target: 100, metric: "maxDailyPages", icon: "zap" },
+  { key: "nightowl", title: "Pembaca Malam", description: "10 kali baca setelah jam 9 malam", category: "Eksplorasi & Kebiasaan", tier: "gold", target: 10, metric: "nightOwlCount", icon: "moon" },
+  { key: "genrefocus", title: "Spesialis Genre", description: "Baca 5 kali dari genre yang sama", category: "Koleksi & Spesialisasi", tier: "silver", target: 5, metric: "genreFocus", icon: "target" },
+  { key: "legenda", title: "Legenda Literasi", description: "15 buku + 5000 halaman + streak 14 hari", category: "Konsistensi", tier: "gold", target: 1, metric: "legendCombo", icon: "crown" },
 ];
 
 const TIER_STYLES: Record<BadgeTier, { earnedBg: string; label: string }> = {
@@ -441,6 +460,8 @@ function BadgeIcon({ icon, earned }: { icon: string; earned: boolean }) {
       return <Sunrise className={className} />;
     case "moon":
       return <Moon className={className} />;
+    case "target":
+      return <Target className={className} />;
     default:
       return <BookOpen className={className} />;
   }
@@ -583,6 +604,7 @@ function CreatureFace({
   eyeGap = 26,
   eyeR = 11,
   blink = false,
+  happy = false,
   size = 1,
 }: {
   cx?: number;
@@ -590,6 +612,7 @@ function CreatureFace({
   eyeGap?: number;
   eyeR?: number;
   blink?: boolean;
+  happy?: boolean;
   size?: number;
 }) {
   const leftX = cx - eyeGap / 2;
@@ -598,34 +621,90 @@ function CreatureFace({
 
   return (
     <g>
-      {/* pipi merona */}
-      <ellipse cx={leftX - r * 1.3} cy={cy + r * 1.5} rx={r * 0.8} ry={r * 0.55} fill="#fda4af" opacity={0.55} />
-      <ellipse cx={rightX + r * 1.3} cy={cy + r * 1.5} rx={r * 0.8} ry={r * 0.55} fill="#fda4af" opacity={0.55} />
+      {/* Blush/Merona - lebih tebal saat happy */}
+      <ellipse
+        cx={leftX - r * 1.4}
+        cy={cy + r * 1.6}
+        rx={r * (happy ? 1 : 0.8)}
+        ry={r * (happy ? 0.7 : 0.55)}
+        fill="#fda4af"
+        opacity={happy ? 0.8 : 0.55}
+        className={happy ? "blush-active" : ""}
+      />
+      <ellipse
+        cx={rightX + r * 1.4}
+        cy={cy + r * 1.6}
+        rx={r * (happy ? 1 : 0.8)}
+        ry={r * (happy ? 0.7 : 0.55)}
+        fill="#fda4af"
+        opacity={happy ? 0.8 : 0.55}
+        className={happy ? "blush-active" : ""}
+      />
 
       {blink ? (
         <>
-          <path d={`M${leftX - r},${cy} Q${leftX},${cy + r * 0.7} ${leftX + r},${cy}`} stroke="#14532d" strokeWidth={r * 0.35} strokeLinecap="round" fill="none" />
-          <path d={`M${rightX - r},${cy} Q${rightX},${cy + r * 0.7} ${rightX + r},${cy}`} stroke="#14532d" strokeWidth={r * 0.35} strokeLinecap="round" fill="none" />
+          <path
+            d={`M${leftX - r},${cy} Q${leftX},${cy + r * 0.8} ${leftX + r},${cy}`}
+            stroke="#14532d"
+            strokeWidth={r * 0.4}
+            strokeLinecap="round"
+            fill="none"
+          />
+          <path
+            d={`M${rightX - r},${cy} Q${rightX},${cy + r * 0.8} ${rightX + r},${cy}`}
+            stroke="#14532d"
+            strokeWidth={r * 0.4}
+            strokeLinecap="round"
+            fill="none"
+          />
+        </>
+      ) : happy ? (
+        <>
+          <path
+            d={`M${leftX - r},${cy + r * 0.3} Q${leftX},${cy - r * 0.8} ${leftX + r},${cy + r * 0.3}`}
+            stroke="#14532d"
+            strokeWidth={r * 0.35}
+            strokeLinecap="round"
+            fill="none"
+          />
+          <path
+            d={`M${rightX - r},${cy + r * 0.3} Q${rightX},${cy - r * 0.8} ${rightX + r},${cy + r * 0.3}`}
+            stroke="#14532d"
+            strokeWidth={r * 0.35}
+            strokeLinecap="round"
+            fill="none"
+          />
+          <circle cx={leftX - r * 0.3} cy={cy - r * 0.2} r={r * 0.15} fill="#fff" opacity="0.8" />
+          <circle cx={rightX - r * 0.3} cy={cy - r * 0.2} r={r * 0.15} fill="#fff" opacity="0.8" />
         </>
       ) : (
         <>
           <circle cx={leftX} cy={cy} r={r} fill="#ffffff" />
           <circle cx={rightX} cy={cy} r={r} fill="#ffffff" />
-          <circle cx={leftX} cy={cy + r * 0.12} r={r * 0.62} fill="#14532d" />
-          <circle cx={rightX} cy={cy + r * 0.12} r={r * 0.62} fill="#14532d" />
-          <circle cx={leftX - r * 0.22} cy={cy - r * 0.28} r={r * 0.22} fill="#ffffff" />
-          <circle cx={rightX - r * 0.22} cy={cy - r * 0.28} r={r * 0.22} fill="#ffffff" />
+          <circle cx={leftX} cy={cy + r * 0.15} r={r * 0.65} fill="#14532d" />
+          <circle cx={rightX} cy={cy + r * 0.15} r={r * 0.65} fill="#14532d" />
+          <circle cx={leftX - r * 0.25} cy={cy - r * 0.3} r={r * 0.25} fill="#ffffff" />
+          <circle cx={rightX - r * 0.25} cy={cy - r * 0.3} r={r * 0.25} fill="#ffffff" />
         </>
       )}
 
-      {/* senyum */}
-      <path
-        d={`M${cx - r * 1.1},${cy + r * 1.55} Q${cx},${cy + r * 2.55} ${cx + r * 1.1},${cy + r * 1.55}`}
-        stroke="#14532d"
-        strokeWidth={r * 0.3}
-        strokeLinecap="round"
-        fill="none"
-      />
+      {happy ? (
+        <path
+          d={`M${cx - r * 1.4},${cy + r * 1.5} Q${cx},${cy + r * 2.8} ${cx + r * 1.4},${cy + r * 1.5}`}
+          stroke="#14532d"
+          strokeWidth={r * 0.35}
+          strokeLinecap="round"
+          fill="none"
+        />
+      ) : (
+        <path
+          d={`M${cx - r * 1.1},${cy + r * 1.55} Q${cx},${cy + r * 2.55} ${cx + r * 1.1},${cy + r * 1.55}`}
+          stroke="#14532d"
+          strokeWidth={r * 0.3}
+          strokeLinecap="round"
+          fill="none"
+        />
+      )}
     </g>
   );
 }
@@ -637,6 +716,7 @@ function TreeCanopy({
   showFruit = false,
   showFace = true,
   blink = false,
+  happy = false,
 }: {
   stage: TreeStage;
   gradId: string;
@@ -644,6 +724,7 @@ function TreeCanopy({
   showFruit?: boolean;
   showFace?: boolean;
   blink?: boolean;
+  happy?: boolean;
 }) {
   const palette = TREE_STAGE_META[stage].palette;
 
@@ -656,13 +737,13 @@ function TreeCanopy({
         </linearGradient>
       </defs>
 
-      {/* bayangan lembut di belakang kanopi */}
+      {/* Bayangan lembut di belakang kanopi */}
       <path d={CANOPY_BLOB_PATH} transform="translate(6,10) scale(0.98)" fill={palette.dark} opacity={0.16} />
-      {/* kanopi utama */}
+      {/* Kanopi utama */}
       <path d={CANOPY_BLOB_PATH} fill={`url(#${gradId})`} />
-      {/* lapisan dalam untuk kedalaman */}
+      {/* Lapisan dalam untuk kedalaman */}
       <path d={CANOPY_BLOB_PATH} transform="translate(20,18) scale(0.55)" fill={palette.dark} opacity={0.22} />
-      {/* highlight cahaya */}
+      {/* Highlight cahaya */}
       <ellipse cx="70" cy="35" rx="26" ry="14" fill="#ffffff" opacity={0.25} />
 
       {showBuds && (
@@ -682,7 +763,7 @@ function TreeCanopy({
         </>
       )}
 
-      {showFace && <CreatureFace blink={blink} />}
+      {showFace && <CreatureFace blink={blink} happy={happy} />}
     </g>
   );
 }
@@ -700,51 +781,144 @@ function canopyTransform(stage: TreeStage, variant: "full" | "mini") {
 }
 
 function TreeShareStyles({ scope }: { scope: "full" | "mini" }) {
-  // Style ambient (goyang pelan) + animasi tap/daun jatuh untuk versi penuh.
   if (scope === "mini") {
     return (
       <style>{`
-        @keyframes tree-idle-sway-mini { 0%,100% { transform: rotate(-1.5deg); } 50% { transform: rotate(1.5deg); } }
-        .tree-idle-sway-mini { transform-origin: 50% 100%; animation: tree-idle-sway-mini 5s ease-in-out infinite; }
+        @keyframes tree-idle-sway-mini { 
+          0%,100% { transform: rotate(-1.5deg) translateY(0); } 
+          50% { transform: rotate(1.5deg) translateY(-2px); } 
+        }
+        .tree-idle-sway-mini { transform-origin: 50% 100%; animation: tree-idle-sway-mini 4s ease-in-out infinite; }
         @media (prefers-reduced-motion: reduce) { .tree-idle-sway-mini { animation: none !important; } }
       `}</style>
     );
   }
   return (
     <style>{`
-      @keyframes tree-idle-sway { 0%,100% { transform: rotate(-1deg); } 50% { transform: rotate(1deg); } }
-      @keyframes tree-tap-sway {
-        0% { transform: translateY(0) rotate(0deg) scale(1); }
-        15% { transform: translateY(-14px) rotate(-6deg) scale(1.06); }
-        32% { transform: translateY(2px) rotate(5deg) scale(0.97); }
-        50% { transform: translateY(-8px) rotate(-3deg) scale(1.03); }
-        68% { transform: translateY(0px) rotate(2deg) scale(1); }
-        100% { transform: translateY(0) rotate(0deg) scale(1); }
+      /* Idle Animation - Breathing effect */
+      @keyframes tree-idle-breathe {
+        0%, 100% { transform: scale(1) rotate(0deg); }
+        25% { transform: scale(1.02) rotate(-0.5deg); }
+        75% { transform: scale(1.02) rotate(0.5deg); }
       }
-      @keyframes leaf-fall {
-        0% { transform: translateY(-10px) rotate(0deg); opacity: 0; }
+      
+      /* Happy Jump Animation - saat disentuh */
+      @keyframes tree-happy-jump {
+        0% { transform: translateY(0) scale(1); }
+        20% { transform: translateY(-25px) scale(1.05) rotate(-3deg); }
+        40% { transform: translateY(0) scale(0.95) rotate(2deg); }
+        60% { transform: translateY(-12px) scale(1.02) rotate(-1deg); }
+        80% { transform: translateY(0) scale(1); }
+        100% { transform: translateY(0) scale(1); }
+      }
+      
+      /* Arms waving lebih ekspresif */
+      @keyframes arm-wave-excited-left {
+        0%, 100% { transform: rotate(0deg); }
+        25% { transform: rotate(-35deg) translateY(-5px); }
+        50% { transform: rotate(15deg); }
+        75% { transform: rotate(-25deg) translateY(-3px); }
+      }
+      @keyframes arm-wave-excited-right {
+        0%, 100% { transform: rotate(0deg); }
+        25% { transform: rotate(30deg) translateY(-5px); }
+        50% { transform: rotate(-12deg); }
+        75% { transform: rotate(20deg) translateY(-3px); }
+      }
+      
+      /* Flying Book Animation - mengelilingi pohon */
+      @keyframes book-fly-around {
+        0% { transform: translate(0, 0) rotate(0deg); opacity: 0; }
         10% { opacity: 1; }
-        100% { transform: translateY(160px) rotate(var(--leaf-rot)); opacity: 0; }
+        25% { transform: translate(60px, -40px) rotate(90deg); }
+        50% { transform: translate(0, -80px) rotate(180deg); }
+        75% { transform: translate(-60px, -40px) rotate(270deg); }
+        90% { opacity: 1; }
+        100% { transform: translate(0, 0) rotate(360deg); opacity: 0; }
       }
-      @keyframes arm-wave-left {
-        0%, 100% { transform: rotate(0deg); }
-        25% { transform: rotate(-22deg); }
-        50% { transform: rotate(10deg); }
-        75% { transform: rotate(-14deg); }
+      
+      /* Butterfly Flying */
+      @keyframes butterfly-fly-1 {
+        0%, 100% { transform: translate(0, 0) rotate(0deg); }
+        25% { transform: translate(30px, -20px) rotate(15deg); }
+        50% { transform: translate(60px, 0) rotate(0deg); }
+        75% { transform: translate(30px, 20px) rotate(-15deg); }
       }
-      @keyframes arm-wave-right {
-        0%, 100% { transform: rotate(0deg); }
-        25% { transform: rotate(18deg); }
-        50% { transform: rotate(-8deg); }
-        75% { transform: rotate(12deg); }
+      @keyframes butterfly-fly-2 {
+        0%, 100% { transform: translate(0, 0) rotate(0deg) scaleX(1); }
+        50% { transform: translate(-40px, -30px) rotate(-20deg) scaleX(0.8); }
       }
-      .tree-idle-sway { transform-origin: 50% 100%; animation: tree-idle-sway 4.5s ease-in-out infinite; }
-      .tree-tap-sway { transform-origin: 50% 100%; animation: tree-tap-sway 0.95s cubic-bezier(0.34,1.56,0.64,1); }
-      .leaf-particle { animation: leaf-fall linear forwards; }
-      .arm-left-wave { transform-origin: 78px 148px; animation: arm-wave-left 0.95s ease-in-out; }
-      .arm-right-wave { transform-origin: 122px 148px; animation: arm-wave-right 0.95s ease-in-out; }
+      
+      /* Bird Perch - muncul sesekali */
+      @keyframes bird-appear {
+        0%, 90%, 100% { opacity: 0; transform: translateY(-10px); }
+        92%, 98% { opacity: 1; transform: translateY(0); }
+      }
+      
+      /* Enhanced Leaf Fall */
+      @keyframes leaf-fall-spin {
+        0% { transform: translateY(-10px) rotate(0deg) scale(1); opacity: 0; }
+        10% { opacity: 1; }
+        100% { transform: translateY(180px) rotate(720deg) scale(0.5); opacity: 0; }
+      }
+      
+      /* Sparkle Effect */
+      @keyframes sparkle-twinkle {
+        0%, 100% { opacity: 0; transform: scale(0) rotate(0deg); }
+        50% { opacity: 1; transform: scale(1) rotate(90deg); }
+      }
+      
+      /* Face blush animation */
+      @keyframes blush-pulse {
+        0%, 100% { opacity: 0.4; }
+        50% { opacity: 0.7; }
+      }
+
+      /* Class implementations */
+      .tree-idle-breathe { 
+        transform-origin: 50% 100%; 
+        animation: tree-idle-breathe 4s ease-in-out infinite; 
+      }
+      .tree-happy-jump { 
+        transform-origin: 50% 100%; 
+        animation: tree-happy-jump 1s cubic-bezier(0.34,1.56,0.64,1); 
+      }
+      .arm-left-excited { 
+        transform-origin: 78px 148px; 
+        animation: arm-wave-excited-left 1s ease-in-out; 
+      }
+      .arm-right-excited { 
+        transform-origin: 122px 148px; 
+        animation: arm-wave-excited-right 1s ease-in-out; 
+      }
+      .flying-book { 
+        animation: book-fly-around 4s linear infinite; 
+        transform-origin: center;
+      }
+      .butterfly-1 { 
+        animation: butterfly-fly-1 6s ease-in-out infinite; 
+      }
+      .butterfly-2 { 
+        animation: butterfly-fly-2 5s ease-in-out infinite 1s; 
+      }
+      .bird-perch { 
+        animation: bird-appear 8s ease-in-out infinite; 
+      }
+      .leaf-spin { 
+        animation: leaf-fall-spin linear forwards; 
+      }
+      .sparkle { 
+        animation: sparkle-twinkle 1.5s ease-in-out infinite; 
+      }
+      .blush-active { 
+        animation: blush-pulse 2s ease-in-out infinite; 
+      }
+      
       @media (prefers-reduced-motion: reduce) {
-        .tree-idle-sway, .tree-tap-sway, .leaf-particle, .arm-left-wave, .arm-right-wave { animation: none !important; }
+        .tree-idle-breathe, .tree-happy-jump, .arm-left-excited, .arm-right-excited,
+        .flying-book, .butterfly-1, .butterfly-2, .bird-perch, .leaf-spin, .sparkle, .blush-active { 
+          animation: none !important; 
+        }
       }
     `}</style>
   );
@@ -754,6 +928,7 @@ function TreeGrowth({ totalPages, dark }: { totalPages: number; dark: boolean })
   const uid = useId();
   const [isSwaying, setIsSwaying] = useState(false);
   const [isBlinking, setIsBlinking] = useState(false);
+  const [isHappy, setIsHappy] = useState(false);
   const [leaves, setLeaves] = useState<
     { id: number; left: number; delay: number; duration: number; rotate: number; emoji: string }[]
   >([]);
@@ -780,180 +955,319 @@ function TreeGrowth({ totalPages, dark }: { totalPages: number; dark: boolean })
     },
   ];
 
+  useEffect(() => {
+    const blinkInterval = window.setInterval(() => {
+      setIsBlinking(true);
+      window.setTimeout(() => setIsBlinking(false), 200);
+    }, 3000 + Math.random() * 2000);
+
+    return () => window.clearInterval(blinkInterval);
+  }, []);
+
   const shakeTree = () => {
     setIsSwaying(true);
-    window.setTimeout(() => setIsSwaying(false), 950);
+    setIsHappy(true);
+
+    window.setTimeout(() => setIsSwaying(false), 1000);
+    window.setTimeout(() => setIsHappy(false), 2000);
 
     setIsBlinking(true);
-    window.setTimeout(() => setIsBlinking(false), 420);
+    window.setTimeout(() => setIsBlinking(false), 300);
 
-    const emojis = ["🍃", "🌿", "🍀", "✨", "💚"];
-    const burst = Array.from({ length: 11 }).map((_, i) => ({
+    const emojis = ["🍃", "🌿", "🍀", "✨", "💚", "🌸", "⭐"];
+    const burst = Array.from({ length: 15 }).map((_, i) => ({
       id: Date.now() + i,
-      left: 12 + Math.random() * 76,
-      delay: Math.random() * 0.25,
-      duration: 1.2 + Math.random() * 0.7,
-      rotate: Math.random() * 360,
+      left: 10 + Math.random() * 80,
+      delay: Math.random() * 0.3,
+      duration: 1.5 + Math.random() * 0.8,
+      rotate: Math.random() * 720,
       emoji: emojis[Math.floor(Math.random() * emojis.length)],
     }));
     setLeaves(burst);
-    window.setTimeout(() => setLeaves([]), 2200);
+    window.setTimeout(() => setLeaves([]), 2500);
   };
 
   return (
-    <div className={`p-4 sm:p-6 rounded-3xl shadow-md border ${dark ? "bg-slate-800/80 border-slate-700 shadow-black/20" : "bg-white/90 backdrop-blur-sm shadow-emerald-900/[0.06] border-white"}`}>
+    <div className={`relative overflow-hidden rounded-3xl shadow-xl border transition-all duration-300 ${
+      dark 
+        ? "bg-slate-800/80 border-slate-700 shadow-black/20" 
+        : "bg-white/90 backdrop-blur-sm shadow-emerald-900/[0.06] border-white"
+    }`}>
       <TreeShareStyles scope="full" />
 
-      <div className="flex items-center gap-3 mb-5">
-        <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center shrink-0 ${dark ? "bg-emerald-900/60 text-emerald-300" : "bg-emerald-100 text-emerald-700"}`}>
-          <Library className="w-5 h-5" />
-        </div>
-        <div className="min-w-0">
-          <h2 className={`text-base sm:text-lg font-bold tracking-tight ${dark ? "text-emerald-100" : "text-emerald-900"}`}>Pohon Literasi</h2>
-          <p className={`text-xs ${dark ? "text-emerald-300/60" : "text-emerald-700/60"}`}>Kenalan sama Literakar, sahabat baca yang tumbuh bareng kamu!</p>
-          <p className={`text-[11px] mt-1 font-medium ${dark ? "text-emerald-300" : "text-emerald-700"}`}>
-            Progress pohon literasi diperbarui tiap Senin pagi pukul 08.00 WIB berdasarkan jurnal yang sudah disetujui guru.
-          </p>
-        </div>
+      <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-3xl">
+        <div className={`absolute -top-20 -right-20 w-64 h-64 rounded-full blur-3xl opacity-20 ${
+          dark ? "bg-emerald-500" : "bg-emerald-300"
+        }`} />
+        <div className={`absolute -bottom-20 -left-20 w-64 h-64 rounded-full blur-3xl opacity-20 ${
+          dark ? "bg-teal-500" : "bg-teal-300"
+        }`} />
       </div>
 
-      <div className="relative rounded-2xl bg-gradient-to-b from-sky-100 via-emerald-50 to-lime-100 p-4 sm:p-5 text-center overflow-hidden ring-1 ring-black/5">
-        {/* matahari samar */}
-        <div className="pointer-events-none absolute -top-8 -right-8 w-28 h-28 rounded-full bg-amber-200/50 blur-2xl" />
-        <div className="pointer-events-none absolute top-4 right-6 w-10 h-10 rounded-full bg-gradient-to-br from-yellow-200 to-amber-300 opacity-80" />
-
-        <p className="relative text-xs font-medium text-emerald-700/70">Total halaman yang dibaca</p>
-        <p className="relative text-2xl sm:text-3xl font-bold text-emerald-900 mt-1 tracking-tight">{totalPages} halaman</p>
-
-        <button
-          type="button"
-          onClick={shakeTree}
-          aria-label="Sentuh Literakar supaya bergoyang senang"
-          className="relative mx-auto mt-3 block w-full max-w-xs h-52 sm:h-64 group focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-2xl"
-        >
-          {/* daun & kilau berjatuhan saat disentuh */}
-          {leaves.map((leaf) => (
-            <span
-              key={leaf.id}
-              className="leaf-particle absolute text-lg pointer-events-none"
-              style={
-                {
-                  left: `${leaf.left}%`,
-                  top: "35%",
-                  animationDelay: `${leaf.delay}s`,
-                  animationDuration: `${leaf.duration}s`,
-                  ["--leaf-rot" as string]: `${leaf.rotate}deg`,
-                } as CSSProperties
-              }
-            >
-              {leaf.emoji}
-            </span>
-          ))}
-
-          {/* tanah / rumput */}
-          <svg viewBox="0 0 200 40" className="absolute bottom-0 left-1/2 -translate-x-1/2 w-48 sm:w-56" aria-hidden="true">
-            <ellipse cx="100" cy="20" rx="95" ry="14" fill="#bbf7d0" opacity={0.7} />
-            <circle cx="60" cy="16" r="3.5" fill="#facc15" opacity={0.7} />
-            <circle cx="140" cy="22" r="3.5" fill="#f9a8d4" opacity={0.6} />
-            <circle cx="30" cy="22" r="2.5" fill="#a7f3d0" opacity={0.8} />
-          </svg>
-
-          {/* Literakar: pohon-makhluk lucu (kanopi berwajah + akar + lengan + buku) */}
-          <svg
-            viewBox="0 0 200 220"
-            className={`absolute bottom-3 left-1/2 -translate-x-1/2 h-full transition-transform duration-300 group-hover:scale-[1.03] ${
-              isSwaying ? "tree-tap-sway" : "tree-idle-sway"
-            }`}
-          >
-            <defs>
-              <linearGradient id={`${uid}-trunk`} x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#92400e" />
-                <stop offset="100%" stopColor="#c2793a" />
-              </linearGradient>
-            </defs>
-
-            {/* akar bergelombang di bawah (menggantikan batang lurus polos) */}
-            <path
-              d="M70,210 C55,205 40,208 28,200 M78,212 C68,206 58,209 48,215 M100,214 C100,205 100,198 100,192 M122,212 C132,206 142,209 152,215 M130,210 C145,205 160,208 172,200"
-              stroke="#92400e"
-              strokeWidth="6"
-              strokeLinecap="round"
-              fill="none"
-              opacity={0.85}
-            />
-
-            {/* batang pendek */}
-            <path d="M92,192 C90,175 90,165 96,150 L104,150 C110,165 110,175 108,192 Z" fill={`url(#${uid}-trunk)`} />
-
-            {/* kanopi berwajah sesuai tahap — digambar SEBELUM lengan supaya tangan & buku
-                selalu tampil di atas kanopi (tidak tertutup) di tahap manapun, termasuk saat
-                kanopi masih kecil di layar sempit. */}
-            <g transform={canopyTransform(stage, "full")}>
-              <TreeCanopy
-                stage={stage}
-                gradId={`${uid}-canopy`}
-                showBuds={stage === "young"}
-                showFruit={stage === "big"}
-                showFace
-                blink={isBlinking}
-              />
-            </g>
-
-            {/* lengan kiri melambai memegang buku */}
-            <g className={isSwaying ? "arm-left-wave" : ""}>
-              <path d="M80,150 C55,148 40,135 34,115" stroke="#92400e" strokeWidth="7" strokeLinecap="round" fill="none" />
-              <g transform="translate(14,92) rotate(-14)">
-                <rect x="0" y="0" width="30" height="21" rx="3" fill="#fde68a" stroke="#b45309" strokeWidth="1.5" />
-                <line x1="15" y1="2" x2="15" y2="19" stroke="#b45309" strokeWidth="1.5" />
-              </g>
-            </g>
-
-            {/* lengan kanan melambai */}
-            <g className={isSwaying ? "arm-right-wave" : ""}>
-              <path d="M120,150 C145,148 160,135 166,115" stroke="#92400e" strokeWidth="7" strokeLinecap="round" fill="none" />
-              <circle cx="168" cy="110" r="6" fill="#92400e" />
-            </g>
-          </svg>
-        </button>
-
-        <p className="relative text-xs text-emerald-700/60 -mt-1">Sentuh Literakar, dia akan melambai senang! 👋</p>
-        <h3 className="relative text-lg sm:text-xl font-bold text-emerald-900 mt-3 tracking-tight">{stageMeta.label} {stageMeta.mood}</h3>
-        <p className="relative text-sm font-semibold text-emerald-800">({stageMeta.range})</p>
-
-        {/* progres bertahap: Kecil -> Muda -> Besar */}
-        <div className="relative max-w-md mx-auto mt-5">
-          <div className="flex gap-1.5">
-            {segments.map((seg) => (
-              <div key={seg.key} className="flex-1">
-                <div className="h-2.5 rounded-full bg-emerald-900/10 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-700 ${
-                      seg.key === stage ? "bg-gradient-to-r from-lime-400 to-emerald-600" : "bg-emerald-400/70"
-                    }`}
-                    style={{ width: `${seg.pct}%` }}
-                  />
-                </div>
-              </div>
-            ))}
+      <div className="relative p-4 sm:p-6 lg:p-8">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mb-6 sm:mb-8">
+          <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center shrink-0 shadow-lg ${
+            dark 
+              ? "bg-gradient-to-br from-emerald-900 to-emerald-800 text-emerald-300 shadow-emerald-900/50" 
+              : "bg-gradient-to-br from-emerald-100 to-emerald-50 text-emerald-700 shadow-emerald-200/50"
+          }`}>
+            <Library className="w-6 h-6 sm:w-7 sm:h-7" />
           </div>
-          <div className="flex justify-between mt-1.5">
-            {segments.map((seg) => (
-              <span
-                key={seg.key}
-                className={`text-[10px] sm:text-[11px] font-medium flex items-center gap-1 ${
-                  seg.key === stage ? "text-emerald-800" : "text-emerald-700/40"
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              <h2 className={`text-xl sm:text-2xl font-bold tracking-tight ${dark ? "text-emerald-100" : "text-emerald-900"}`}>
+                Pohon Literasi
+              </h2>
+              <span className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider ${
+                dark 
+                  ? "bg-emerald-900/50 text-emerald-300 border border-emerald-700" 
+                  : "bg-emerald-100 text-emerald-700 border border-emerald-200"
+              }`}>
+                {stageMeta.label}
+              </span>
+            </div>
+            <p className={`text-sm ${dark ? "text-emerald-300/70" : "text-emerald-700/70"}`}>
+              Kenalan sama Literakar, sahabat baca yang tumbuh bareng kamu!
+            </p>
+            <div className={`mt-2 inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full ${
+              dark ? "bg-slate-700/50 text-emerald-300/80" : "bg-emerald-50 text-emerald-700/80"
+            }`}>
+              <CalendarDays className="w-3 h-3" />
+              <span>Update tiap Senin 08.00 WIB</span>
+            </div>
+          </div>
+        </div>
+
+        <div className={`relative rounded-2xl sm:rounded-3xl overflow-hidden ring-1 ring-black/5 ${
+          dark 
+            ? "bg-gradient-to-b from-slate-900 via-emerald-950/50 to-slate-900" 
+            : "bg-gradient-to-b from-sky-100 via-emerald-50 to-lime-100"
+        }`}>
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute -top-8 -right-8 w-32 h-32 rounded-full bg-amber-200/30 blur-2xl" />
+            <div className="absolute top-6 right-8 w-12 h-12 rounded-full bg-gradient-to-br from-yellow-200 to-amber-300 opacity-60 blur-sm animate-pulse" />
+            <div className="absolute bottom-10 left-4 w-16 h-16 rounded-full bg-emerald-300/20 blur-xl" />
+          </div>
+
+          <div className="relative p-4 sm:p-6 text-center">
+            <div className="inline-flex flex-col items-center justify-center mb-4 sm:mb-6">
+              <p className={`text-xs font-medium uppercase tracking-wider ${dark ? "text-emerald-400/70" : "text-emerald-700/60"}`}>
+                Total Halaman Dibaca
+              </p>
+              <div className="flex items-baseline gap-1 mt-1">
+                <span className={`text-3xl sm:text-4xl font-bold tracking-tight ${dark ? "text-emerald-100" : "text-emerald-900"}`}>
+                  {totalPages}
+                </span>
+                <span className={`text-sm font-medium ${dark ? "text-emerald-300/60" : "text-emerald-700/60"}`}>
+                  halaman
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={shakeTree}
+              aria-label="Sentuh Literakar supaya bergoyang senang"
+              className="relative mx-auto block w-full max-w-[280px] sm:max-w-xs h-64 sm:h-72 group focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-3xl transition-transform duration-300 hover:scale-[1.02] active:scale-[0.98]"
+            >
+              {leaves.map((leaf) => (
+                <span
+                  key={leaf.id}
+                  className="leaf-spin absolute text-lg sm:text-xl pointer-events-none z-20"
+                  style={
+                    {
+                      left: `${leaf.left}%`,
+                      top: "30%",
+                      animationDelay: `${leaf.delay}s`,
+                      animationDuration: `${leaf.duration}s`,
+                      ["--leaf-rot" as string]: `${leaf.rotate}deg`,
+                    } as CSSProperties
+                  }
+                >
+                  {leaf.emoji}
+                </span>
+              ))}
+
+              {isHappy && (
+                <>
+                  <span className="sparkle absolute top-10 left-10 text-yellow-400 text-xl">✨</span>
+                  <span className="sparkle absolute top-20 right-10 text-yellow-400 text-lg" style={{ animationDelay: "0.2s" }}>⭐</span>
+                  <span className="sparkle absolute bottom-20 left-16 text-yellow-300 text-lg" style={{ animationDelay: "0.4s" }}>✨</span>
+                </>
+              )}
+
+              <svg viewBox="0 0 200 40" className="absolute bottom-0 left-1/2 -translate-x-1/2 w-48 sm:w-56 opacity-80" aria-hidden="true">
+                <ellipse cx="100" cy="20" rx="95" ry="14" fill={dark ? "#064e3b" : "#bbf7d0"} opacity={dark ? 0.6 : 0.7} />
+                <circle cx="60" cy="16" r="3.5" fill="#facc15" opacity={0.6} />
+                <circle cx="140" cy="22" r="3.5" fill="#f9a8d4" opacity={0.5} />
+                <circle cx="30" cy="22" r="2.5" fill="#a7f3d0" opacity={0.7} />
+              </svg>
+
+              <svg
+                viewBox="0 0 200 220"
+                className={`absolute bottom-2 left-1/2 -translate-x-1/2 h-full transition-transform duration-500 ${
+                  isSwaying ? "tree-happy-jump" : "tree-idle-breathe"
                 }`}
               >
-                <span>{seg.icon}</span>
-                <span className="hidden xs:inline">{seg.label}</span>
-              </span>
-            ))}
+                <defs>
+                  <linearGradient id={`${uid}-trunk`} x1="0%" y1="0%" x2="100%" y2="0%">
+                    <stop offset="0%" stopColor="#92400e" />
+                    <stop offset="100%" stopColor="#c2793a" />
+                  </linearGradient>
+                </defs>
+
+                <path
+                  d="M70,210 C55,205 40,208 28,200 M78,212 C68,206 58,209 48,215 M100,214 C100,205 100,198 100,192 M122,212 C132,206 142,209 152,215 M130,210 C145,205 160,208 172,200"
+                  stroke="#92400e"
+                  strokeWidth="6"
+                  strokeLinecap="round"
+                  fill="none"
+                  opacity={0.85}
+                />
+
+                <path d="M92,192 C90,175 90,165 96,150 L104,150 C110,165 110,175 108,192 Z" fill={`url(#${uid}-trunk)`} />
+
+                <g transform={canopyTransform(stage, "full")}>
+                  <TreeCanopy
+                    stage={stage}
+                    gradId={`${uid}-canopy`}
+                    showBuds={stage === "young"}
+                    showFruit={stage === "big"}
+                    showFace
+                    blink={isBlinking}
+                    happy={isHappy}
+                  />
+                </g>
+
+                <g className={isSwaying ? "arm-left-excited" : ""}>
+                  <path d="M80,150 C55,148 40,135 34,115" stroke="#92400e" strokeWidth="7" strokeLinecap="round" fill="none" />
+                  <g transform="translate(14,92) rotate(-14)">
+                    <rect x="0" y="0" width="30" height="21" rx="3" fill="#fde68a" stroke="#b45309" strokeWidth="1.5" />
+                    <line x1="15" y1="2" x2="15" y2="19" stroke="#b45309" strokeWidth="1.5" />
+                  </g>
+                </g>
+
+                <g className={isSwaying ? "arm-right-excited" : ""}>
+                  <path d="M120,150 C145,148 160,135 166,115" stroke="#92400e" strokeWidth="7" strokeLinecap="round" fill="none" />
+                  <circle cx="168" cy="110" r="6" fill="#92400e" />
+                </g>
+
+                {stage === "big" && (
+                  <g className="flying-book" style={{ transformOrigin: "100px 100px" }}>
+                    <g transform="translate(160, 80) rotate(15)">
+                      <rect x="0" y="0" width="20" height="14" rx="2" fill="#fde68a" stroke="#b45309" strokeWidth="1" opacity="0.9" />
+                      <line x1="10" y1="1" x2="10" y2="13" stroke="#b45309" strokeWidth="1" />
+                    </g>
+                  </g>
+                )}
+
+                {stage !== "small" && (
+                  <>
+                    <g className="butterfly-1" style={{ transformOrigin: "60px 80px" }}>
+                      <circle cx="60" cy="80" r="3" fill="#f472b6" opacity="0.8" />
+                      <ellipse cx="58" cy="78" rx="4" ry="2" fill="#fbbf24" opacity="0.6" transform="rotate(-30 58 78)" />
+                    </g>
+                    <g className="butterfly-2" style={{ transformOrigin: "140px 90px" }}>
+                      <circle cx="140" cy="90" r="2.5" fill="#60a5fa" opacity="0.8" />
+                      <ellipse cx="142" cy="88" rx="3" ry="1.5" fill="#93c5fd" opacity="0.6" transform="rotate(30 142 88)" />
+                    </g>
+                  </>
+                )}
+
+                {stage === "big" && (
+                  <g className="bird-perch">
+                    <g transform="translate(150, 60)">
+                      <ellipse cx="0" cy="0" rx="8" ry="5" fill="#64748b" />
+                      <circle cx="6" cy="-3" r="3" fill="#64748b" />
+                      <circle cx="7" cy="-3" r="1" fill="#fff" />
+                      <path d="M-2,2 L-2,6 M2,2 L2,6" stroke="#92400e" strokeWidth="1" />
+                    </g>
+                  </g>
+                )}
+              </svg>
+
+              <div className={`absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full text-[10px] font-medium whitespace-nowrap transition-all duration-300 ${
+                dark ? "bg-slate-800/80 text-emerald-300" : "bg-white/80 text-emerald-700"
+              } backdrop-blur-sm border ${dark ? "border-slate-600" : "border-emerald-200"} ${
+                isHappy ? "opacity-0" : "opacity-0 group-hover:opacity-100"
+              }`}>
+                👆 Sentuh aku!
+              </div>
+            </button>
+
+            <div className="mt-6 sm:mt-8">
+              <h3 className={`text-xl sm:text-2xl font-bold tracking-tight ${dark ? "text-emerald-100" : "text-emerald-900"}`}>
+                {stageMeta.label} <span className="ml-1">{stageMeta.mood}</span>
+              </h3>
+              <p className={`text-sm font-semibold mt-1 ${dark ? "text-emerald-300" : "text-emerald-700"}`}>
+                ({stageMeta.range})
+              </p>
+            </div>
+
+            <div className="max-w-md mx-auto mt-6 sm:mt-8">
+              <div className="flex gap-2 sm:gap-3">
+                {segments.map((seg) => (
+                  <div key={seg.key} className="flex-1 group cursor-default">
+                    <div className={`h-2.5 sm:h-3 rounded-full overflow-hidden transition-all duration-300 ${
+                      dark ? "bg-slate-700/50" : "bg-emerald-900/10"
+                    }`}>
+                      <div
+                        className={`h-full rounded-full transition-all duration-700 ${
+                          seg.key === stage 
+                            ? "bg-gradient-to-r from-lime-400 to-emerald-600 shadow-sm shadow-emerald-500/30" 
+                            : "bg-emerald-400/50"
+                        }`}
+                        style={{ width: `${seg.pct}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between mt-2 px-0.5">
+                      <span className={`text-[10px] sm:text-xs font-medium flex items-center gap-1 ${
+                        seg.key === stage 
+                          ? dark ? "text-emerald-300" : "text-emerald-800" 
+                          : dark ? "text-slate-500" : "text-emerald-700/40"
+                      }`}>
+                        <span className="text-sm sm:text-base">{seg.icon}</span>
+                        <span className="hidden xs:inline">{seg.label}</span>
+                      </span>
+                      {seg.key === stage && (
+                        <span className={`text-[9px] sm:text-[10px] font-bold px-1.5 py-0.5 rounded-full ${
+                          dark ? "bg-emerald-900/50 text-emerald-300" : "bg-emerald-100 text-emerald-700"
+                        }`}>
+                          {Math.round(seg.pct)}%
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              
+              <p className={`text-xs sm:text-sm mt-4 font-medium ${dark ? "text-emerald-300/70" : "text-emerald-700/70"}`}>
+                {totalPages >= 500
+                  ? "🌟 Literakar tumbuh subur! Terus membaca untuk menjaganya bahagia."
+                  : `🎯 Menuju tahap berikutnya: ${remaining} halaman lagi`}
+              </p>
+            </div>
           </div>
-          <p className="text-xs text-emerald-700/60 mt-3">
-            {totalPages >= 500
-              ? "Literakar tumbuh subur! Terus membaca untuk menjaganya bahagia."
-              : `Menuju tahap berikutnya: ${remaining} halaman lagi`}
-          </p>
+        </div>
+
+        <div className={`mt-4 sm:mt-6 p-3 sm:p-4 rounded-2xl border flex items-start gap-3 ${
+          dark 
+            ? "bg-slate-700/30 border-slate-600/50" 
+            : "bg-emerald-50/50 border-emerald-100"
+        }`}>
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${
+            dark ? "bg-emerald-900/50 text-emerald-300" : "bg-emerald-100 text-emerald-700"
+          }`}>
+            <Sparkles className="w-4 h-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className={`text-xs sm:text-sm font-semibold ${dark ? "text-emerald-200" : "text-emerald-800"}`}>
+              Tips Hari Ini
+            </p>
+            <p className={`text-[11px] sm:text-xs mt-1 leading-relaxed ${dark ? "text-emerald-300/60" : "text-emerald-700/60"}`}>
+              Baca 10-20 menit sebelum tidur membantu memperkuat memori dan membuat Literakar tumbuh lebih subur!
+            </p>
+          </div>
         </div>
       </div>
     </div>
@@ -1346,6 +1660,7 @@ export default function StudentDashboard() {
   const [badgeFilter, setBadgeFilter] = useState<BadgeFilter>("semua");
   const [newBadgeTitles, setNewBadgeTitles] = useState<Set<string>>(new Set());
   const [editingJournalId, setEditingJournalId] = useState<string | null>(null);
+  const [editingFeedback, setEditingFeedback] = useState<string>("");
 
   // Fitur #1: hapus jurnal milik sendiri (selama belum divalidasi guru)
   const [deleteLoadingId, setDeleteLoadingId] = useState<string | null>(null);
@@ -1403,7 +1718,7 @@ export default function StudentDashboard() {
     const endX = event.changedTouches[0]?.clientX;
     if (endX === undefined || Math.abs(endX - startX) < 70) return;
 
-    const tabKeys: TabKey[] = ["beranda", "badge", "pohon", "leaderboard", "jurnal", "riwayat"];
+    const tabKeys: TabKey[] = ["beranda", "jurnal", "pohon", "badge", "leaderboard", "riwayat"];
     const currentIndex = tabKeys.indexOf(activeTab);
     const nextIndex = endX < startX ? currentIndex + 1 : currentIndex - 1;
     if (nextIndex >= 0 && nextIndex < tabKeys.length) setActiveTab(tabKeys[nextIndex]);
@@ -1508,11 +1823,12 @@ export default function StudentDashboard() {
 
       querySnapshot.forEach((docSnap) => {
         const data = docSnap.data() as Journal;
-        if (data.studentId) activeStudentIds.add(String(data.studentId));
         if (!data.studentId || normalizeStatus(data.status) !== "approved") return;
 
         const createdAt = toDateSafe(data.createdAt);
         if (!createdAt || createdAt > snapshotCutoff) return;
+
+        activeStudentIds.add(String(data.studentId));
 
         const existing = statsMap.get(data.studentId) || {
           studentName: data.studentName || "Siswa",
@@ -1534,6 +1850,7 @@ export default function StudentDashboard() {
         studentId,
         studentName: stats.studentName,
         classCode: stats.classCode,
+        gender: "",
         journalCount: stats.journalCount,
         totalPagesRead: stats.totalPagesRead,
         booksFinished: stats.finishedTitles.size,
@@ -2029,31 +2346,64 @@ export default function StudentDashboard() {
   // Daftar badge/achievement lengkap dengan progres dari snapshot jurnal tervalidasi.
   const badges: BadgeComputed[] = useMemo(() => {
     const finishedTitles = new Set<string>();
+    const uniqueTitles = new Set<string>();
     const totalPagesApproved = badgeJournals.reduce((total, journal) => {
       if (journal.finished && journal.bookTitle) finishedTitles.add(journal.bookTitle.trim().toLowerCase());
+      if (journal.bookTitle) uniqueTitles.add(journal.bookTitle.trim().toLowerCase());
       const pages = Number(journal.endPage) - Number(journal.startPage);
       return total + (Number.isNaN(pages) || pages < 0 ? 0 : pages);
     }, 0);
 
     const genres = new Set<string>();
     const characters = new Set<string>();
+    const genreCounts = new Map<string, number>();
     let maxPages = 0;
     let earlyBird = false;
     let nightOwl = false;
+    let nightOwlCount = 0;
+    const dailyPages = new Map<string, number>();
+
     badgeJournals.forEach((journal) => {
-      if (journal.genre?.trim()) genres.add(journal.genre.trim().toLowerCase());
+      if (journal.genre?.trim()) {
+        const g = journal.genre.trim().toLowerCase();
+        genres.add(g);
+        genreCounts.set(g, (genreCounts.get(g) || 0) + 1);
+      }
+
       (journal.characterValues || []).forEach((value) => {
         if (value.trim()) characters.add(value.trim().toLowerCase());
       });
+
       const pages = Number(journal.endPage) - Number(journal.startPage);
       if (!Number.isNaN(pages) && pages > maxPages) maxPages = pages;
+
       const date = toDateSafe(journal.createdAt);
+      if (date && !Number.isNaN(pages) && pages > 0) {
+        const dateKey = toJakartaDateKey(date);
+        dailyPages.set(dateKey, (dailyPages.get(dateKey) || 0) + pages);
+      }
+
       if (date) {
         const parts = getJakartaDateParts(date);
         earlyBird ||= parts.hour < 7;
-        nightOwl ||= parts.hour >= 21;
+        if (parts.hour >= 21) {
+          nightOwl = true;
+          nightOwlCount++;
+        }
       }
     });
+
+    let maxDailyPages = 0;
+    dailyPages.forEach((pages) => {
+      if (pages > maxDailyPages) maxDailyPages = pages;
+    });
+
+    let maxGenreCount = 0;
+    genreCounts.forEach((count) => {
+      if (count > maxGenreCount) maxGenreCount = count;
+    });
+
+    const isLegend = finishedTitles.size >= 15 && totalPagesApproved >= 5000 && readingStreak >= 14;
 
     const metrics: Record<BadgeMetricKey, number> = {
       booksFinished: finishedTitles.size,
@@ -2066,7 +2416,13 @@ export default function StudentDashboard() {
       characterVarietyCount: characters.size,
       earlyBird: earlyBird ? 1 : 0,
       nightOwl: nightOwl ? 1 : 0,
+      uniqueBooks: uniqueTitles.size,
+      maxDailyPages,
+      nightOwlCount,
+      genreFocus: maxGenreCount,
+      legendCombo: isLegend ? 1 : 0,
     };
+
     return BADGE_DEFS.map((def) => {
       const raw = metrics[def.metric] ?? 0;
       const current = Math.min(raw, def.target);
@@ -2211,6 +2567,7 @@ export default function StudentDashboard() {
 
   const startEditJournal = (journal: Journal) => {
     setEditingJournalId(journal.id);
+    setEditingFeedback(journal.teacherFeedback?.trim() || "");
     setForm({
       bookTitle: journal.bookTitle ?? "",
       author: journal.author ?? "",
@@ -2240,6 +2597,7 @@ export default function StudentDashboard() {
       setJournals((prev) => prev.filter((j) => j.id !== journal.id));
       if (editingJournalId === journal.id) {
         setEditingJournalId(null);
+        setEditingFeedback("");
         setForm(EMPTY_FORM);
         setSelectedCharacters(new Set());
         setCustomCharacter("");
@@ -2316,6 +2674,8 @@ export default function StudentDashboard() {
       setSelectedCharacters(new Set());
       setCustomCharacter("");
       setEditingJournalId(null);
+      setEditingFeedback("");
+      setActiveTab("riwayat");
       if (user) {
         try {
           localStorage.removeItem(`literasi_jurnal_draft_${user.uid}`);
@@ -2328,6 +2688,39 @@ export default function StudentDashboard() {
       setFormError(editingJournalId ? "Gagal memperbarui jurnal. Silakan coba lagi." : "Gagal menyimpan jurnal. Silakan coba lagi.");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleClearForm = () => {
+    setForm(EMPTY_FORM);
+    setSelectedCharacters(new Set());
+    setCustomCharacter("");
+    setFormError("");
+    setSuccessMessage("");
+    if (user) {
+      try {
+        localStorage.removeItem(`literasi_jurnal_draft_${user.uid}`);
+      } catch {
+        // abaikan
+      }
+    }
+  };
+
+  // Fitur baru: auto-isi halaman awal dari halaman akhir jurnal sebelumnya
+  // untuk judul buku yang sama, supaya siswa tidak perlu input manual dan
+  // mengurangi kemungkinan overlapWarning karena salah ketik.
+  const handleBookTitleBlur = () => {
+    if (editingJournalId) return;
+    const title = form.bookTitle.trim().toLowerCase();
+    if (!title || form.startPage !== "") return;
+
+    const maxEndPage = journals.reduce((max, j) => {
+      if (j.bookTitle.trim().toLowerCase() !== title) return max;
+      return Math.max(max, Number(j.endPage) || 0);
+    }, 0);
+
+    if (maxEndPage > 0) {
+      setForm((prev) => ({ ...prev, startPage: String(maxEndPage + 1) }));
     }
   };
 
@@ -2370,10 +2763,10 @@ export default function StudentDashboard() {
 
   const tabs: { key: TabKey; label: string; icon: React.ReactNode; badgeCount?: number }[] = [
     { key: "beranda", label: "Beranda", icon: <Home className="w-4 h-4" /> },
-    { key: "badge", label: "Badge Saya", icon: <Award className="w-4 h-4" /> },
-    { key: "pohon", label: "Pohon Literasi", icon: <TreeDeciduous className="w-4 h-4" /> },
-    { key: "leaderboard", label: "Leaderboard", icon: <Trophy className="w-4 h-4" /> },
     { key: "jurnal", label: "Isi Jurnal Membaca", icon: <NotebookPen className="w-4 h-4" /> },
+    { key: "pohon", label: "Pohon Literasi", icon: <TreeDeciduous className="w-4 h-4" /> },
+    { key: "badge", label: "Badge Saya", icon: <Award className="w-4 h-4" /> },
+    { key: "leaderboard", label: "Leaderboard", icon: <Trophy className="w-4 h-4" /> },
     { key: "riwayat", label: "Riwayat Jurnal", icon: <History className="w-4 h-4" />, badgeCount: revisionCount },
   ];
 
@@ -2411,7 +2804,7 @@ export default function StudentDashboard() {
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className={`text-base sm:text-xl font-bold tracking-tight truncate ${theme.headingText}`}>Dashboard Siswa</h1>
+                <h1 className={`text-base sm:text-xl font-bold tracking-tight truncate ${theme.headingText}`}>Dashboard Murid</h1>
                 <span className={`text-[9px] sm:text-[10px] uppercase tracking-[0.14em] font-bold px-1.5 py-0.5 rounded-full border ${darkMode ? "border-emerald-700 bg-emerald-900/40 text-emerald-300" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
                   Literakar
                 </span>
@@ -2528,89 +2921,115 @@ export default function StudentDashboard() {
           </div>
         </nav>
 
-        {/* ---- Tab: Beranda ---- */}
+        {/* ---- Tab: Beranda (Enhanced UI) ---- */}
         {activeTab === "beranda" && (
-          <div className="space-y-4 sm:space-y-6">
-            <div className={`p-4 sm:p-6 lg:p-7 rounded-3xl shadow-md border backdrop-blur-sm flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between ${theme.panel}`}>
-              <div>
-                <h2 className={`text-lg sm:text-xl font-bold tracking-tight ${theme.headingText}`}>Halo, {displayName} 👋</h2>
-                <p className={`text-sm mt-1 ${theme.bodyText}`}>Satu halaman hari ini, satu langkah lebih dekat menuju versi terbaik dirimu.</p>
-              </div>
-              <div className="w-full sm:w-auto">
-                <TreeProgressIcon totalPages={approvedTotalPages} dark={darkMode} />
+          <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500">
+            {/* Header Section dengan Glassmorphism */}
+            <div className="relative overflow-hidden rounded-3xl bg-white/40 backdrop-blur-md border border-white/60 shadow-[0_8px_30px_-12px_rgba(6,95,70,0.15)] p-4 sm:p-6">
+              <div className="absolute -top-24 -right-24 w-64 h-64 bg-emerald-200/30 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-teal-200/30 rounded-full blur-3xl pointer-events-none" />
+              
+              <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-xl sm:text-2xl font-bold text-emerald-900 tracking-tight">
+                    Halo, {displayName} 👋
+                  </h2>
+                  <p className="text-sm text-emerald-700/70 mt-1">
+                    Satu halaman hari ini, satu langkah lebih dekat menuju versi terbaik dirimu.
+                  </p>
+                </div>
+                <div className="w-full sm:w-auto shrink-0">
+                  <TreeProgressIcon totalPages={approvedTotalPages} dark={darkMode} />
+                </div>
               </div>
             </div>
 
-            {/* Indikator: peringkat siswa di kelasnya sendiri, berdasarkan leaderboard */}
+            {/* Indikator: peringkat siswa di kelasnya sendiri */}
             {myClassRank && (
-              <div className={`p-3.5 sm:p-4 lg:p-5 rounded-2xl shadow-md border backdrop-blur-sm flex flex-col gap-3 sm:flex-row sm:items-center ${theme.panel}`}>
-                <div className="flex items-center gap-3 min-w-0">
-                  <div
-                    className={`w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center shrink-0 ${
-                      myClassRank.rank <= 3
-                        ? "bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-500 text-white shadow-inner shadow-black/10"
-                        : darkMode
-                        ? "bg-slate-700 text-emerald-200"
-                        : "bg-emerald-100 text-emerald-700"
-                    }`}
+              <div className="relative overflow-hidden rounded-2xl bg-white/40 backdrop-blur-md border border-white/60 shadow-[0_8px_30px_-12px_rgba(6,95,70,0.15)] p-4 sm:p-5">
+                <div className="absolute -right-12 -top-12 w-40 h-40 bg-amber-200/30 rounded-full blur-3xl pointer-events-none" />
+                <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 shadow-lg ${
+                        myClassRank.rank <= 3
+                          ? "bg-gradient-to-br from-yellow-300 via-amber-400 to-orange-500 text-white"
+                          : darkMode
+                          ? "bg-slate-700 text-emerald-200"
+                          : "bg-emerald-100 text-emerald-700"
+                      }`}
+                    >
+                      <Crown className="w-6 h-6" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-emerald-900">
+                        Peringkat kamu di kelas: <span className="text-amber-600 font-bold">#{myClassRank.rank}</span> dari {myClassRank.total} murid
+                      </p>
+                      <p className="text-xs text-emerald-700/60 mt-0.5">
+                        Berdasarkan jumlah jurnal terbanyak di Kelas {userProfile?.classCode}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveTab("leaderboard");
+                      setLeaderboardSubTab("kelas");
+                    }}
+                    className="shrink-0 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.98] transition shadow-md shadow-emerald-600/20 w-full sm:w-auto"
                   >
-                    <Crown className="w-5 h-5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={`text-xs sm:text-sm font-semibold ${theme.headingText}`}>
-                      Peringkat kamu di kelas: <span className="text-amber-500">#{myClassRank.rank}</span> dari {myClassRank.total} siswa
-                    </p>
-                    <p className={`text-[11px] sm:text-xs mt-0.5 ${theme.mutedText}`}>
-                      Berdasarkan jumlah jurnal terbanyak di Kelas {userProfile?.classCode}
-                    </p>
-                  </div>
+                    <span>Lihat Leaderboard</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveTab("leaderboard");
-                    setLeaderboardSubTab("kelas");
-                  }}
-                  className="shrink-0 flex items-center justify-center gap-1 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.98] transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 w-full sm:w-auto"
-                >
-                  <span className="hidden xs:inline">Lihat</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
               </div>
             )}
 
-            {/* Fitur #4: reminder streak — muncul kalau siswa belum isi jurnal hari ini dan belum mencapai target hari ini */}
+            {/* Reminder Streak - Enhanced */}
             {!dailyGoalReached && !hasJournalToday && (
               <div
-                className={`p-3.5 sm:p-4 rounded-2xl border flex flex-wrap sm:flex-nowrap items-center gap-3 ${
+                className={`relative overflow-hidden rounded-2xl border-2 p-4 sm:p-5 ${
                   readingStreak > 0
-                    ? darkMode
-                      ? "bg-orange-900/30 border-orange-800 text-orange-200"
-                      : "bg-orange-50 border-orange-200 text-orange-800"
-                    : darkMode
-                    ? "bg-emerald-900/30 border-emerald-800 text-emerald-200"
-                    : "bg-emerald-50 border-emerald-200 text-emerald-800"
+                    ? "bg-gradient-to-br from-orange-50 to-amber-50 border-orange-200"
+                    : "bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-200"
                 }`}
               >
-                {readingStreak > 0 ? <Flame className="w-5 h-5 shrink-0" /> : <Sparkles className="w-5 h-5 shrink-0" />}
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs sm:text-sm font-semibold">
-                    {readingStreak > 0
-                      ? `Streak ${readingStreak} harimu akan terputus kalau belum isi jurnal hari ini!`
-                      : "Yuk mulai streak membaca hari ini!"}
-                  </p>
+                <div className={`absolute -right-8 -top-8 w-32 h-32 rounded-full blur-2xl opacity-50 ${
+                  readingStreak > 0 ? "bg-orange-200" : "bg-emerald-200"
+                }`} />
+                <div className="relative flex flex-col sm:flex-row sm:items-center gap-4">
+                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${
+                    readingStreak > 0 ? "bg-orange-100 text-orange-600" : "bg-emerald-100 text-emerald-600"
+                  }`}>
+                    {readingStreak > 0 ? <Flame className="w-6 h-6" /> : <Sparkles className="w-6 h-6" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className={`text-base font-bold ${readingStreak > 0 ? "text-orange-900" : "text-emerald-900"}`}>
+                      {readingStreak > 0
+                        ? `Streak ${readingStreak} harimu akan terputus!`
+                        : "Yuk mulai streak membaca hari ini!"}
+                    </h3>
+                    <p className={`text-sm mt-1 ${readingStreak > 0 ? "text-orange-700/70" : "text-emerald-700/70"}`}>
+                      {readingStreak > 0
+                        ? "Isi jurnal sekarang untuk menjaga konsistensimu"
+                        : "Mulai perjalanan literasimu dengan satu jurnal hari ini"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab("jurnal")}
+                    className={`shrink-0 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition active:scale-[0.98] shadow-md w-full sm:w-auto ${
+                      readingStreak > 0 
+                        ? "bg-orange-500 hover:bg-orange-600 shadow-orange-500/25" 
+                        : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/25"
+                    }`}
+                  >
+                    Isi Jurnal Sekarang
+                  </button>
                 </div>
-                <button
-                  onClick={() => setActiveTab("jurnal")}
-                  className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold transition active:scale-[0.98] focus:outline-none focus-visible:ring-2 w-full sm:w-auto ${
-                    readingStreak > 0 ? "bg-orange-500 text-white hover:bg-orange-600 focus-visible:ring-orange-400" : "bg-emerald-600 text-white hover:bg-emerald-700 focus-visible:ring-emerald-400"
-                  }`}
-                >
-                  Isi Jurnal
-                </button>
               </div>
             )}
 
+            {/* Stats Grid - Mobile Optimized */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
               <StatCard label="Buku Selesai Bulan Ini" value={monthlyStats.finishedBooks} icon={<Library className="w-4 h-4" />} color="blue" dark={darkMode} />
               <StatCard label="Halaman Bulan Ini" value={monthlyStats.pages} icon={<BookOpen className="w-4 h-4" />} color="emerald" dark={darkMode} />
@@ -2618,258 +3037,480 @@ export default function StudentDashboard() {
               <StatCard label="Jurnal Bulan Ini" value={monthlyStats.journals} icon={<CalendarCheck className="w-4 h-4" />} color="yellow" dark={darkMode} />
             </div>
 
-            {/* Fitur #9: target membaca harian personal */}
-            <div className={`p-4 sm:p-6 rounded-3xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
-              <div className="flex flex-col gap-3 mb-3 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Target className={`w-4 h-4 ${darkMode ? "text-emerald-300" : "text-emerald-700"}`} />
-                  <h3 className={`text-sm font-semibold ${theme.headingText}`}>Target Membaca Harian</h3>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span
-                    className={`text-[10px] px-2 py-1 rounded-full font-semibold shrink-0 ${
-                      targetLocked
-                        ? darkMode
-                          ? "bg-emerald-900/50 text-emerald-200 border border-emerald-700"
-                          : "bg-emerald-100 text-emerald-700 border border-emerald-200"
-                        : darkMode
+            {/* Target Membaca Harian - Enhanced Card */}
+            <div className="relative overflow-hidden rounded-3xl bg-white/40 backdrop-blur-md border border-white/60 shadow-[0_8px_30px_-12px_rgba(6,95,70,0.15)]">
+              <div className="absolute -left-20 -top-20 w-64 h-64 bg-emerald-200/20 rounded-full blur-3xl pointer-events-none" />
+              
+              <div className="relative p-4 sm:p-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                      darkMode ? "bg-emerald-900/50 text-emerald-300" : "bg-emerald-100 text-emerald-700"
+                    }`}>
+                      <Target className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className={`text-base font-bold ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
+                        Target Membaca Harian
+                      </h3>
+                      <p className={`text-xs ${darkMode ? "text-emerald-300/60" : "text-emerald-700/60"}`}>
+                        {dailyGoal} halaman per hari
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`text-[10px] px-3 py-1.5 rounded-full font-semibold ${
+                        targetLocked
+                          ? darkMode
+                            ? "bg-emerald-900/50 text-emerald-200 border border-emerald-700"
+                            : "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                          : darkMode
                           ? "bg-slate-700 text-emerald-200 border border-slate-600"
                           : "bg-slate-100 text-slate-600 border border-slate-200"
-                    }`}
-                  >
-                    {targetLocked ? "Target aktif" : "Belum disimpan"}
-                  </span>
-                  {targetLocked && (
-                    <button
-                      type="button"
-                      onClick={() => setTargetLocked(false)}
-                      className={`inline-flex items-center justify-center rounded-full border px-2.5 py-1 text-[10px] font-semibold transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
-                        darkMode
-                          ? "border-emerald-700/70 bg-emerald-900/30 text-emerald-200 hover:bg-emerald-900/40"
-                          : "border-emerald-200 bg-white/80 text-emerald-700 hover:bg-emerald-50"
                       }`}
                     >
-                      Ubah Target
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              <div className={`mb-3 rounded-xl border px-3 py-2 text-xs ${darkMode ? "border-emerald-800 bg-emerald-900/20 text-emerald-200" : "border-emerald-200 bg-emerald-50/80 text-emerald-800"}`}>
-                Target harian kamu adalah <strong>{dailyGoal} halaman per hari</strong>. Kamu bisa menjaga konsistensi membaca setiap hari untuk naik level.
-              </div>
-
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap w-full">
-                  <input
-                    type="number"
-                    min={1}
-                    max={50}
-                    value={goalDraft}
-                    onChange={(e) => setGoalDraft(e.target.value)}
-                    disabled={targetLocked}
-                    className={`w-full sm:w-20 sm:min-w-[5.5rem] p-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input} ${targetLocked ? "opacity-60 cursor-not-allowed" : ""}`}
-                  />
-                  <span className={`text-xs ${theme.bodyText}`}>halaman / hari</span>
-                  <button
-                    onClick={saveDailyGoal}
-                    disabled={targetLocked}
-                    className="w-full sm:w-auto px-3 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-xl hover:bg-emerald-700 active:scale-[0.98] transition disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:hover:bg-slate-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
-                  >
-                    Simpan Target
-                  </button>
-                </div>
-              </div>
-
-              {!dailyGoalReached && yesterdayGoalMissed && (
-                <div className="mt-3 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-800">
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-                    <span>
-                      Target kemarin belum selesai: <strong>{yesterdayPages} / {dailyGoal}</strong> halaman. Ayo baca lagi hari ini agar streak tetap kuat!
+                      {targetLocked ? "🎯 Target Aktif" : "✏️ Belum Disimpan"}
                     </span>
+                    {targetLocked && (
+                      <button
+                        type="button"
+                        onClick={() => setTargetLocked(false)}
+                        className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition ${
+                          darkMode
+                            ? "border-emerald-700/70 bg-emerald-900/30 text-emerald-200 hover:bg-emerald-900/50"
+                            : "border-emerald-200 bg-white/80 text-emerald-700 hover:bg-emerald-50"
+                        }`}
+                      >
+                        Ubah
+                      </button>
+                    )}
                   </div>
                 </div>
-              )}
 
-              <div className="mt-3">
-                <div className="flex justify-between text-xs mb-1">
-                  <span className={theme.bodyText}>{todayPages} / {dailyGoal} halaman hari ini</span>
-                  <span className={theme.bodyText}>{Math.round(goalPct)}%</span>
+                {/* Progress Bar */}
+                <div className="mb-4">
+                  <div className="flex justify-between items-end mb-2">
+                    <div>
+                      <span className={`text-2xl font-bold ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
+                        {todayPages}
+                      </span>
+                      <span className={`text-sm ${darkMode ? "text-emerald-300/60" : "text-emerald-700/60"}`}>
+                        / {dailyGoal} halaman
+                      </span>
+                    </div>
+                    <span className={`text-sm font-bold ${dailyGoalReached ? "text-amber-600" : darkMode ? "text-emerald-300" : "text-emerald-700"}`}>
+                      {Math.round(goalPct)}%
+                    </span>
+                  </div>
+                  <div className={`h-3 rounded-full overflow-hidden ${darkMode ? "bg-slate-700" : "bg-emerald-900/10"}`}>
+                    <div
+                      className={`h-full rounded-full transition-all duration-700 ${
+                        dailyGoalReached 
+                          ? "bg-gradient-to-r from-amber-400 to-yellow-500" 
+                          : "bg-gradient-to-r from-lime-400 to-emerald-600"
+                      }`}
+                      style={{ width: `${goalPct}%` }}
+                    />
+                  </div>
                 </div>
-                <div className={`h-2.5 rounded-full overflow-hidden ${darkMode ? "bg-slate-700" : "bg-emerald-900/10"}`}>
-                  <div
-                    className={`h-full rounded-full transition-all duration-700 ${dailyGoalReached ? "bg-gradient-to-r from-amber-400 to-yellow-500" : "bg-gradient-to-r from-lime-400 to-emerald-600"}`}
-                    style={{ width: `${goalPct}%` }}
-                  />
-                </div>
+
+                {/* Input Target */}
+                {!targetLocked && (
+                  <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-end">
+                    <div className="flex-1 w-full">
+                      <label className={`text-xs mb-1 block ${darkMode ? "text-emerald-300/70" : "text-emerald-700/70"}`}>
+                        Target halaman per hari (1-50)
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          min={1}
+                          max={50}
+                          value={goalDraft}
+                          onChange={(e) => setGoalDraft(e.target.value)}
+                          className={`flex-1 p-2.5 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input}`}
+                        />
+                        <button
+                          onClick={saveDailyGoal}
+                          className="px-5 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 active:scale-[0.98] transition shadow-md shadow-emerald-600/20"
+                        >
+                          Simpan
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Warning */}
+                {!dailyGoalReached && yesterdayGoalMissed && (
+                  <div className="mt-4 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 flex items-start gap-3">
+                    <AlertTriangle className="w-5 h-5 text-orange-600 shrink-0 mt-0.5" />
+                    <div className="text-sm text-orange-800">
+                      <span className="font-semibold">Target kemarin belum selesai!</span> Kamu membaca {yesterdayPages} dari {dailyGoal} halaman. Ayo baca lagi hari ini!
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Fitur: rekomendasi buku berdasarkan judul buku yang paling sering dicatat */}
+            {/* Rekomendasi Buku */}
             {favoriteBookInfo && recommendedBooks.length > 0 && (
-              <div className={`p-4 sm:p-6 lg:p-7 rounded-3xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className={`w-10 h-10 sm:w-11 sm:h-11 rounded-2xl flex items-center justify-center shrink-0 ${darkMode ? "bg-emerald-900/60 text-emerald-300" : "bg-emerald-100 text-emerald-700"}`}>
-                    <Sparkles className="w-5 h-5" />
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className={`text-sm sm:text-base font-bold tracking-tight ${theme.headingText}`}>Rekomendasi Buku Untukmu</h3>
-                    <p className={`text-xs mt-0.5 ${theme.mutedText}`}>
-                      Karena kamu sering baca: <span className="font-semibold">{favoriteBookInfo.label}</span>
-                    </p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {recommendedBooks.map((book) => (
-                    <div
-                      key={book.title}
-                      className={`p-3 rounded-2xl border flex flex-col gap-1 ${darkMode ? "border-slate-700 bg-slate-700/40" : "border-emerald-100 bg-emerald-50/50"}`}
-                    >
-                      <BookOpen className={`w-4 h-4 mb-1 ${darkMode ? "text-emerald-300" : "text-emerald-600"}`} />
-                      <p className={`text-sm font-semibold leading-snug ${theme.headingText}`}>{book.title}</p>
-                      <p className={`text-xs ${theme.mutedText}`}>{book.author}</p>
+              <div className="relative overflow-hidden rounded-3xl bg-white/40 backdrop-blur-md border border-white/60 shadow-[0_8px_30px_-12px_rgba(6,95,70,0.15)] p-4 sm:p-6">
+                <div className="absolute -right-20 -bottom-20 w-64 h-64 bg-amber-200/20 rounded-full blur-3xl pointer-events-none" />
+                
+                <div className="relative">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                      darkMode ? "bg-amber-900/50 text-amber-300" : "bg-amber-100 text-amber-600"
+                    }`}>
+                      <Sparkles className="w-5 h-5" />
                     </div>
-                  ))}
+                    <div>
+                      <h3 className={`text-base font-bold ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
+                        Rekomendasi Buku Untukmu
+                      </h3>
+                      <p className={`text-xs ${darkMode ? "text-emerald-300/60" : "text-emerald-700/60"}`}>
+                        Karena kamu sering baca: <span className="font-semibold">{favoriteBookInfo.label}</span>
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {recommendedBooks.map((book) => (
+                      <div
+                        key={book.title}
+                        className={`group p-4 rounded-2xl border transition-all duration-300 hover:-translate-y-1 hover:shadow-md ${
+                          darkMode 
+                            ? "border-slate-700 bg-slate-700/40 hover:bg-slate-700/60" 
+                            : "border-emerald-100 bg-emerald-50/50 hover:bg-emerald-100/50"
+                        }`}
+                      >
+                        <BookOpen className={`w-5 h-5 mb-2 ${darkMode ? "text-emerald-300" : "text-emerald-600"}`} />
+                        <p className={`text-sm font-semibold leading-snug ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
+                          {book.title}
+                        </p>
+                        <p className={`text-xs mt-1 ${darkMode ? "text-emerald-300/60" : "text-emerald-700/60"}`}>
+                          {book.author}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* Fitur #5: grafik progres membaca pribadi */}
+            {/* Grafik Progres */}
             <MyProgressChart journals={journals} dark={darkMode} />
 
-            <div className={`p-4 sm:p-6 lg:p-7 rounded-3xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
-              <h3 className={`text-sm font-semibold mb-3 ${darkMode ? "text-emerald-300/80" : "text-emerald-800/70"}`}>Jurnal Terbaru</h3>
-              {journals.length === 0 ? (
-                <p className={`text-sm ${theme.bodyText}`}>
-                  Kamu belum punya jurnal. Yuk mulai isi jurnal pertamamu di tab &quot;Isi Jurnal Membaca&quot;!
-                </p>
-              ) : (
-                <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
-                  {journals.slice(0, 3).map((j) => (
-                    <div key={j.id} className={`flex justify-between items-center gap-2 p-3 rounded-xl transition-colors ${theme.panelSoft}`}>
-                      <span className={`text-sm font-semibold truncate ${theme.headingText}`}>{j.bookTitle}</span>
-                      <span className={`text-xs shrink-0 ${theme.mutedText}`}>{formatTanggal(toDateSafe(j.createdAt))}</span>
-                    </div>
-                  ))}
+            {/* Jurnal Terbaru - Enhanced List */}
+            <div className="relative overflow-hidden rounded-3xl bg-white/40 backdrop-blur-md border border-white/60 shadow-[0_8px_30px_-12px_rgba(6,95,70,0.15)]">
+              <div className="p-4 sm:p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className={`text-base font-bold ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
+                    Jurnal Terbaru
+                  </h3>
+                  <button
+                    onClick={() => setActiveTab("riwayat")}
+                    className={`text-xs font-semibold flex items-center gap-1 ${
+                      darkMode ? "text-emerald-300 hover:text-emerald-200" : "text-emerald-600 hover:text-emerald-700"
+                    }`}
+                  >
+                    Lihat Semua
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-              )}
+                
+                {journals.length === 0 ? (
+                  <div className={`text-center py-8 rounded-2xl border-2 border-dashed ${
+                    darkMode ? "border-slate-700 bg-slate-800/30" : "border-emerald-200 bg-emerald-50/30"
+                  }`}>
+                    <NotebookPen className={`w-10 h-10 mx-auto mb-3 ${darkMode ? "text-slate-600" : "text-emerald-300"}`} />
+                    <p className={`text-sm ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
+                      Belum ada jurnal. Yuk mulai isi jurnal pertamamu!
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
+                    {journals.slice(0, 3).map((j, idx) => (
+                      <div 
+                        key={j.id} 
+                        className={`group flex justify-between items-center gap-3 p-4 rounded-2xl border transition-all duration-300 hover:shadow-md ${
+                          darkMode 
+                            ? "border-slate-700 bg-slate-700/40 hover:bg-slate-700/60" 
+                            : "border-emerald-100 bg-emerald-50/50 hover:bg-emerald-100/50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                            darkMode ? "bg-emerald-900/50 text-emerald-300" : "bg-emerald-100 text-emerald-700"
+                          }`}>
+                            <BookOpen className="w-5 h-5" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className={`text-sm font-semibold truncate ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
+                              {j.bookTitle}
+                            </p>
+                            <p className={`text-xs ${darkMode ? "text-emerald-300/60" : "text-emerald-700/60"}`}>
+                              {formatTanggal(toDateSafe(j.createdAt))}
+                            </p>
+                          </div>
+                        </div>
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-medium shrink-0 ${
+                          normalizeStatus(j.status) === "approved"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : normalizeStatus(j.status) === "revision"
+                            ? "bg-orange-100 text-orange-700"
+                            : "bg-yellow-100 text-yellow-700"
+                        }`}>
+                          {normalizeStatus(j.status) === "approved" ? "Tervalidasi" :
+                           normalizeStatus(j.status) === "revision" ? "Revisi" : "Menunggu"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
 
         {/* ---- Tab: Badge Saya ---- */}
         {activeTab === "badge" && (
-          <div className={`p-4 sm:p-6 lg:p-7 rounded-3xl shadow-md border backdrop-blur-sm space-y-5 ${theme.panel}`}>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div>
-                <h2 className={`text-lg font-bold tracking-tight ${theme.headingText}`}>Badge Saya</h2>
-                <p className={`text-xs mt-1 ${theme.mutedText}`}>
-                  Kumpulkan pencapaian dari kebiasaan membaca dan jurnalmu.
-                </p>
-                <p className={`text-[11px] mt-1.5 font-medium ${darkMode ? "text-emerald-300" : "text-emerald-700"}`}>
-                  Badge Jumlah Buku, Halaman &amp; Maraton, serta Eksplorasi &amp; Kebiasaan diperbarui tiap Senin pagi
-                  pukul 08.00 WIB (menunggu validasi guru). Badge Konsistensi (streak &amp; rajin mingguan) tetap
-                  update setiap hari.
-                </p>
-              </div>
+          <div
+            className={`relative overflow-hidden rounded-3xl shadow-xl border transition-all duration-300 ${
+              darkMode
+                ? "bg-slate-800/80 border-slate-700 shadow-black/20"
+                : "bg-white/90 backdrop-blur-sm shadow-emerald-900/[0.06] border-white"
+            }`}
+          >
+            <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-3xl">
               <div
-                className={`shrink-0 px-4 py-2 rounded-2xl border text-center self-start sm:self-auto ${
-                  darkMode ? "bg-slate-700/50 border-slate-600" : "bg-emerald-50 border-emerald-200"
+                className={`absolute -top-20 -right-20 w-64 h-64 rounded-full blur-3xl opacity-20 ${
+                  darkMode ? "bg-amber-500" : "bg-amber-300"
                 }`}
-              >
-                <p className={`text-lg font-bold ${theme.headingText}`}>
-                  {earnedCount}/{totalCount}
-                </p>
-                <p className={`text-[10px] ${theme.mutedText}`}>Badge didapat</p>
-              </div>
-            </div>
-
-            <div className={`h-2.5 rounded-full overflow-hidden ${darkMode ? "bg-slate-700" : "bg-emerald-900/10"}`}>
+              />
               <div
-                className="h-full rounded-full bg-gradient-to-r from-lime-400 to-emerald-600 transition-all duration-700"
-                style={{ width: `${totalCount > 0 ? (earnedCount / totalCount) * 100 : 0}%` }}
+                className={`absolute -bottom-20 -left-20 w-64 h-64 rounded-full blur-3xl opacity-20 ${
+                  darkMode ? "bg-emerald-500" : "bg-emerald-300"
+                }`}
               />
             </div>
 
-            {/* Badge terdekat — memotivasi siswa dengan menunjukkan pencapaian yang paling dekat */}
-            {nearestBadge && (
+            <div className="relative p-4 sm:p-6 lg:p-8 space-y-6">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div
+                    className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg ${
+                      darkMode
+                        ? "bg-gradient-to-br from-amber-900 to-amber-800 text-amber-300 shadow-amber-900/50"
+                        : "bg-gradient-to-br from-amber-100 to-amber-50 text-amber-700 shadow-amber-200/50"
+                    }`}
+                  >
+                    <Award className="w-7 h-7" />
+                  </div>
+                  <div>
+                    <h2 className={`text-2xl font-bold tracking-tight ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
+                      Badge Saya
+                    </h2>
+                    <p className={`text-sm ${darkMode ? "text-emerald-300/70" : "text-emerald-700/70"}`}>
+                      Kumpulkan pencapaian dari kebiasaan membaca
+                    </p>
+                  </div>
+                </div>
+
+                <div
+                  className={`shrink-0 px-5 py-3 rounded-2xl border text-center ${
+                    darkMode ? "bg-slate-700/50 border-slate-600" : "bg-emerald-50 border-emerald-200"
+                  }`}
+                >
+                  <p className={`text-2xl font-bold ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
+                    {earnedCount}/{totalCount}
+                  </p>
+                  <p
+                    className={`text-[10px] uppercase tracking-wider font-semibold ${
+                      darkMode ? "text-emerald-400" : "text-emerald-600"
+                    }`}
+                  >
+                    Badge Didapat
+                  </p>
+                </div>
+              </div>
+
               <div
-                className={`p-3.5 sm:p-4 rounded-2xl border flex items-center gap-3 ${
-                  darkMode ? "bg-orange-900/20 border-orange-800" : "bg-orange-50 border-orange-200"
+                className={`rounded-2xl border p-4 ${
+                  darkMode
+                    ? "bg-gradient-to-r from-emerald-900/30 to-teal-900/20 border-emerald-500/20"
+                    : "bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-200/60"
                 }`}
               >
-                <Target className={`w-5 h-5 shrink-0 ${darkMode ? "text-orange-300" : "text-orange-600"}`} />
-                <div className="flex-1 min-w-0">
-                  <p className={`text-xs sm:text-sm font-semibold ${darkMode ? "text-orange-200" : "text-orange-800"}`}>
-                    Sedikit lagi! Badge &quot;{nearestBadge.title}&quot; ({nearestBadge.current}/{nearestBadge.target})
-                  </p>
-                  <div className={`h-1.5 rounded-full overflow-hidden mt-1.5 ${darkMode ? "bg-slate-700" : "bg-orange-900/10"}`}>
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-orange-400 to-amber-500 transition-all duration-700"
-                      style={{ width: `${nearestBadge.percent}%` }}
-                    />
+                <div className="flex items-start gap-3">
+                  <CalendarDays className={`w-5 h-5 shrink-0 mt-0.5 ${darkMode ? "text-emerald-400" : "text-emerald-600"}`} />
+                  <div className="text-xs sm:text-sm">
+                    <p className={`font-semibold ${darkMode ? "text-emerald-200" : "text-emerald-800"}`}>
+                      Sistem Update Badge
+                    </p>
+                    <p className={`mt-1 ${darkMode ? "text-emerald-300/70" : "text-emerald-700/70"}`}>
+                      Badge Jumlah Buku, Halaman &amp; Eksplorasi diperbarui tiap Senin 08.00 WIB. Badge Konsistensi
+                      (streak) update real-time setiap hari.
+                    </p>
                   </div>
                 </div>
               </div>
-            )}
 
-            <div className={`flex gap-2 border-b pb-3 overflow-x-auto ${darkMode ? "border-slate-700" : "border-emerald-100"}`}>
-              {([
-                ["semua", "Semua"],
-                ["terkunci", "Terkunci"],
-                ["didapat", "Didapat"],
-              ] as [BadgeFilter, string][]).map(([filter, label]) => (
-                <button
-                  key={filter}
-                  type="button"
-                  onClick={() => setBadgeFilter(filter)}
-                  className={`shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
-                    badgeFilter === filter
-                      ? "bg-emerald-600 text-white"
-                      : darkMode
-                      ? "bg-slate-700 text-emerald-200 hover:bg-slate-600"
-                      : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs sm:text-sm">
+                  <span className={`font-medium ${darkMode ? "text-emerald-300" : "text-emerald-700"}`}>
+                    Progress Total
+                  </span>
+                  <span className={`font-bold ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
+                    {Math.round((earnedCount / totalCount) * 100)}%
+                  </span>
+                </div>
+                <div className={`h-3 rounded-full overflow-hidden ${darkMode ? "bg-slate-700" : "bg-emerald-900/10"}`}>
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-amber-400 via-orange-500 to-emerald-600 transition-all duration-1000 shadow-sm"
+                    style={{ width: `${totalCount > 0 ? (earnedCount / totalCount) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+
+              {nearestBadge && (
+                <div
+                  className={`relative overflow-hidden rounded-2xl border-2 p-4 ${
+                    darkMode
+                      ? "bg-gradient-to-br from-orange-900/30 to-amber-900/20 border-orange-500/30"
+                      : "bg-gradient-to-br from-orange-50 to-amber-50 border-orange-200"
                   }`}
                 >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {visibleBadges.length === 0 ? (
-              <p className={`text-sm py-4 ${theme.mutedText}`}>
-                Belum ada badge pada filter ini.
-              </p>
-            ) : (
-              <div className="space-y-6">
-                {CATEGORY_ORDER.map((category) => {
-                  const list = visibleBadges.filter((b) => b.category === category);
-                  if (list.length === 0) return null;
-                  return (
-                    <div key={category}>
-                      <h4 className={`text-xs font-bold uppercase tracking-wide mb-2 ${theme.mutedText}`}>{category}</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {list.map((badge) => (
-                          <BadgeCard
-                            key={`${badge.category}-${badge.title}`}
-                            title={badge.title}
-                            description={badge.description}
-                            earned={badge.earned}
-                            dark={darkMode}
-                            tier={badge.tier}
-                            icon={badge.icon}
-                            current={badge.current}
-                            target={badge.target}
-                            isNew={newBadgeTitles.has(badge.title)}
+                  <div className="absolute -right-4 -top-4 w-24 h-24 bg-orange-400/20 rounded-full blur-2xl" />
+                  <div className="relative flex items-center gap-4">
+                    <div
+                      className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
+                        darkMode ? "bg-orange-500/20 text-orange-300" : "bg-orange-100 text-orange-600"
+                      }`}
+                    >
+                      <Target className="w-6 h-6" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs font-bold uppercase tracking-wider ${darkMode ? "text-orange-300" : "text-orange-600"}`}>
+                        Sedikit Lagi!
+                      </p>
+                      <p className={`text-sm sm:text-base font-bold truncate ${darkMode ? "text-orange-100" : "text-orange-900"}`}>
+                        {nearestBadge.title}
+                      </p>
+                      <div className="flex items-center gap-3 mt-2">
+                        <div className={`flex-1 h-2 rounded-full overflow-hidden ${darkMode ? "bg-slate-700" : "bg-orange-900/10"}`}>
+                          <div
+                            className="h-full rounded-full bg-gradient-to-r from-orange-400 to-amber-500 transition-all duration-700"
+                            style={{ width: `${nearestBadge.percent}%` }}
                           />
-                        ))}
+                        </div>
+                        <span className={`text-xs font-bold ${darkMode ? "text-orange-300" : "text-orange-700"}`}>
+                          {nearestBadge.current}/{nearestBadge.target}
+                        </span>
                       </div>
                     </div>
-                  );
-                })}
+                  </div>
+                </div>
+              )}
+
+              <div
+                className={`flex gap-2 border-b pb-4 overflow-x-auto ${
+                  darkMode ? "border-slate-700" : "border-emerald-100"
+                }`}
+              >
+                {([
+                  ["semua", "Semua", totalCount],
+                  ["terkunci", "Terkunci", totalCount - earnedCount],
+                  ["didapat", "Didapat", earnedCount],
+                ] as [BadgeFilter, string, number][]).map(([filter, label, count]) => (
+                  <button
+                    key={filter}
+                    type="button"
+                    onClick={() => setBadgeFilter(filter)}
+                    className={`shrink-0 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 flex items-center gap-2 ${
+                      badgeFilter === filter
+                        ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/25"
+                        : darkMode
+                        ? "bg-slate-700 text-emerald-200 hover:bg-slate-600"
+                        : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
+                    }`}
+                  >
+                    <span>{label}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                        badgeFilter === filter
+                          ? "bg-white/20 text-white"
+                          : darkMode
+                          ? "bg-slate-600 text-slate-300"
+                          : "bg-emerald-200 text-emerald-700"
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                ))}
               </div>
-            )}
+
+              {visibleBadges.length === 0 ? (
+                <div
+                  className={`text-center py-12 rounded-2xl border-2 border-dashed ${
+                    darkMode ? "border-slate-700 bg-slate-800/30" : "border-emerald-200 bg-emerald-50/30"
+                  }`}
+                >
+                  <Award className={`w-12 h-12 mx-auto mb-3 ${darkMode ? "text-slate-600" : "text-emerald-300"}`} />
+                  <p className={`text-sm font-medium ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
+                    Tidak ada badge pada filter ini
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-8">
+                  {CATEGORY_ORDER.map((category) => {
+                    const list = visibleBadges.filter((b) => b.category === category);
+                    if (list.length === 0) return null;
+                    return (
+                      <div key={category}>
+                        <div className="flex items-center gap-2 mb-4">
+                          <div className={`w-1 h-5 rounded-full ${darkMode ? "bg-emerald-500" : "bg-emerald-400"}`} />
+                          <h4
+                            className={`text-xs font-bold uppercase tracking-widest ${
+                              darkMode ? "text-emerald-400" : "text-emerald-600"
+                            }`}
+                          >
+                            {category}
+                          </h4>
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded-full ${
+                              darkMode ? "bg-slate-700 text-slate-300" : "bg-emerald-100 text-emerald-600"
+                            }`}
+                          >
+                            {list.length}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                          {list.map((badge) => (
+                            <BadgeCard
+                              key={`${badge.category}-${badge.title}`}
+                              title={badge.title}
+                              description={badge.description}
+                              earned={badge.earned}
+                              dark={darkMode}
+                              tier={badge.tier}
+                              icon={badge.icon}
+                              current={badge.current}
+                              target={badge.target}
+                              isNew={newBadgeTitles.has(badge.title)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -2878,502 +3519,794 @@ export default function StudentDashboard() {
 
         {/* ---- Tab: Leaderboard ---- */}
         {activeTab === "leaderboard" && (
-          <div className={`p-4 sm:p-6 lg:p-7 rounded-3xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
-              <div className="min-w-0 flex-1">
-                <h2 className={`text-base sm:text-lg font-bold tracking-tight flex items-start gap-2 ${theme.headingText}`}>
-                  <Trophy className="w-5 h-5 text-amber-500 shrink-0" />
-                  <span className="min-w-0 break-words">Leaderboard Penakluk Literasi
-                  </span>
-                </h2>
-                <p className={`text-xs mt-1 leading-relaxed break-words text-justify ${theme.mutedText}`}>
-                  {leaderboardSubTab === "semua"
-                    ? "Menu ini menampilkan Top 100 siswa dengan urutan berdasarkan jumlah jurnal, halaman dibaca, dan buku selesai dari seluruh kelas."
-                    : leaderboardSubTab === "kelas"
-                    ? "Peringkat siswa di kelas Anda saat ini dihitung berdasarkan jumlah jurnal, halaman dibaca, dan buku selesai."
-                    : "Peringkat kelas terbaik/terajin membaca dihitung dari akumulasi jurnal, halaman dibaca, dan buku selesai seluruh siswa di setiap kelas."}
-                </p>
-                <div className={`mt-3 rounded-2xl border p-3 shadow-sm backdrop-blur-sm ${darkMode ? "border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-orange-500/5 to-emerald-500/10" : "border-amber-200 bg-gradient-to-r from-amber-50 via-white to-emerald-50"}`}>
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl shadow-md ${darkMode ? "bg-gradient-to-br from-amber-400 to-orange-500 text-slate-950" : "bg-gradient-to-br from-amber-300 to-orange-400 text-white"}`}>
-                        <Users className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className={`text-[10px] font-bold uppercase tracking-[0.14em] ${darkMode ? "text-amber-200" : "text-amber-700"}`}>Siswa aktif</p>
-                        <p className={`text-lg font-extrabold leading-none ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>{totalActiveStudents}</p>
-                      </div>
-                    </div>
-                    <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold ${darkMode ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border-emerald-300 bg-emerald-50 text-emerald-700"}`}>
-                      Top 100
-                    </span>
+          <div className={`p-3 sm:p-6 lg:p-7 rounded-3xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
+            {/* Header Section */}
+            <div className="flex flex-col gap-3 sm:gap-4 mb-4 sm:mb-6">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2.5 sm:gap-3 mb-2 sm:mb-3">
+                  <div className={`w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center shrink-0 ${
+                    darkMode 
+                      ? "bg-gradient-to-br from-amber-500/20 to-orange-500/20 border border-amber-500/30" 
+                      : "bg-gradient-to-br from-amber-100 to-orange-100 border border-amber-200"
+                  }`}>
+                    <Trophy className={`w-4 h-4 sm:w-6 sm:h-6 ${darkMode ? "text-amber-400" : "text-amber-600"}`} />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className={`text-base sm:text-xl font-bold tracking-tight truncate ${theme.headingText}`}>
+                      Leaderboard Penakluk Literasi
+                    </h2>
+                    <p className={`text-[11px] sm:text-xs mt-0.5 truncate ${theme.mutedText}`}>
+                      {leaderboardSubTab === "semua" 
+                        ? "Top 100 Murid Terajin Membaca" 
+                        : leaderboardSubTab === "kelas" 
+                        ? `Kelas ${studentClassCode || "-"}` 
+                        : "Kelas terajin membaca"}
+                    </p>
                   </div>
                 </div>
-                <p className={`max-w-prose text-[11px] mt-2 leading-relaxed font-medium break-words text-justify ${darkMode ? "text-amber-300" : "text-amber-700"}`}>
-                  Jumlah progres membaca dan peringkat diperbarui tiap Senin pagi pukul 08.00 WIB.
-                </p>
-                <p className={`max-w-prose text-[11px] mt-1 leading-relaxed break-words text-justify ${darkMode ? "text-slate-300/80" : "text-emerald-700/70"}`}>
-                  Sistem menghitung progres dari jurnal yang sudah valid dan memperbarui skor setiap Senin pagi.
-                </p>
+
+                {/* Info Banner - Mobile Optimized */}
+                <div className={`rounded-xl sm:rounded-2xl border p-2.5 sm:p-4 ${
+                  darkMode 
+                    ? "bg-gradient-to-r from-amber-900/20 via-orange-900/10 to-emerald-900/20 border-amber-500/20" 
+                    : "bg-gradient-to-r from-amber-50 via-orange-50/50 to-emerald-50 border-amber-200/60"
+                }`}>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 sm:gap-x-4 sm:gap-y-2">
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <Users className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${darkMode ? "text-amber-400" : "text-amber-600"}`} />
+                      <span className={`text-xs sm:text-sm font-semibold ${theme.headingText}`}>
+                        {totalActiveStudents} <span className={`font-normal ${theme.mutedText}`}>Murid Aktif</span>
+                      </span>
+                    </div>
+                    <div className={`hidden sm:block w-px h-4 ${darkMode ? "bg-slate-600" : "bg-emerald-200"}`} />
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      <CalendarDays className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${darkMode ? "text-emerald-400" : "text-emerald-600"}`} />
+                      <span className={`text-[10px] sm:text-xs ${theme.mutedText}`}>
+                        Update Senin 08:00
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => void fetchLeaderboard()}
-                disabled={leaderboardLoading}
-                className={`w-full sm:w-auto shrink-0 px-3 py-1.5 rounded-xl text-xs font-semibold transition disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 self-stretch sm:self-auto ${
-                  darkMode ? "bg-slate-700 text-emerald-200 hover:bg-slate-600" : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                }`}
-              >
-                {leaderboardLoading ? "Memuat..." : "Muat Ulang"}
-              </button>
             </div>
 
-            {/* Sub-tab: Semua Kelas vs Per Kelas */}
-            <div className={`flex flex-wrap gap-2 mb-4 p-1 rounded-xl w-full sm:w-fit ${darkMode ? "bg-slate-900/40" : "bg-emerald-900/5"}`}>
-              {([
-                ["semua", "Murid Rajin"],
-                ["kelas", "Murid Rajin di Kelas-Mu"],
-                ["kelas-terajin", "Kelas Rajin"],
-              ] as [LeaderboardSubTab, string][]).map(([key, label]) => (
+            {/* Sub-tab Navigation - Mobile: Horizontal Scroll */}
+            <div className={`mb-4 sm:mb-6 p-1 sm:p-1.5 rounded-xl sm:rounded-2xl overflow-x-auto ${
+              darkMode ? "bg-slate-900/50 border border-slate-700/50" : "bg-emerald-900/5 border border-emerald-100"
+            }`}>
+              <div className="flex gap-1 min-w-max sm:min-w-0 sm:grid sm:grid-cols-3">
+                {([
+                  ["semua", "Murid Rajin", "Top 100"],
+                  ["kelas", "Kelas Saya", studentClassCode || "-"],
+                  ["kelas-terajin", "Kelas Rajin", "Antar kelas"]
+                ] as [LeaderboardSubTab, string, string][]).map(([key, label, desc]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setLeaderboardSubTab(key)}
+                    className={`flex-1 px-3 sm:px-4 py-2 sm:py-3 rounded-lg sm:rounded-xl text-center transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 min-w-[100px] sm:min-w-0 ${
+                      leaderboardSubTab === key
+                        ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/25"
+                        : darkMode
+                        ? "text-emerald-300/70 hover:bg-slate-800 hover:text-emerald-200"
+                        : "text-emerald-800/70 hover:bg-white hover:text-emerald-900"
+                    }`}
+                  >
+                    <span className="block text-xs sm:text-sm font-bold truncate">{label}</span>
+                    <span className={`hidden sm:block text-[10px] sm:text-[11px] mt-0.5 truncate ${
+                      leaderboardSubTab === key ? "text-emerald-100/80" : theme.mutedText
+                    }`}>
+                      {desc}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* My Position Card - Mobile Optimized */}
+            {myLeaderboardPosition && (
+              myLeaderboardPosition.isVisible ? (
                 <button
-                  key={key}
                   type="button"
-                  onClick={() => setLeaderboardSubTab(key)}
-                  className={`flex-1 sm:flex-none px-2.5 sm:px-4 py-1.5 rounded-lg text-[10px] sm:text-xs font-semibold leading-tight transition ${
-                    leaderboardSubTab === key
-                      ? "bg-emerald-600 text-white shadow-sm"
-                      : darkMode
-                      ? "text-emerald-300/70 hover:bg-slate-700"
-                      : "text-emerald-800/70 hover:bg-emerald-50"
+                  onClick={() => {
+                    document.getElementById(`leaderboard-student-${user?.uid}`)?.scrollIntoView({ 
+                      behavior: "smooth", 
+                      block: "center" 
+                    });
+                  }}
+                  className={`mb-4 sm:mb-6 w-full text-left rounded-xl sm:rounded-2xl border-2 p-3 sm:p-4 transition-all duration-200 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
+                    darkMode 
+                      ? "border-emerald-500/50 bg-gradient-to-r from-emerald-900/40 to-teal-900/30 hover:border-emerald-400" 
+                      : "border-emerald-300 bg-gradient-to-r from-emerald-50 to-teal-50 hover:border-emerald-400"
                   }`}
                 >
-                  {label}
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5 sm:gap-4 min-w-0">
+                      <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 ${
+                        darkMode ? "bg-emerald-500/20 text-emerald-300" : "bg-emerald-100 text-emerald-700"
+                      }`}>
+                        <Trophy className="w-5 h-5 sm:w-6 sm:h-6" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider ${darkMode ? "text-emerald-400" : "text-emerald-600"}`}>
+                          Posisi Kamu
+                        </p>
+                        <p className={`text-base sm:text-lg font-bold truncate ${theme.headingText}`}>
+                          #{myLeaderboardPosition.rank} 
+                          <span className={`text-xs sm:text-sm font-normal ${theme.mutedText}`}> dari {myLeaderboardPosition.total}</span>
+                        </p>
+                      </div>
+                    </div>
+                    <ChevronRight className={`w-4 h-4 sm:w-5 sm:h-5 shrink-0 ${darkMode ? "text-emerald-400" : "text-emerald-600"}`} />
+                  </div>
                 </button>
-              ))}
-            </div>
+              ) : (
+                <div className={`mb-4 sm:mb-6 rounded-xl sm:rounded-2xl border p-3 sm:p-4 ${
+                  darkMode ? "border-amber-500/30 bg-amber-900/10" : "border-amber-200 bg-amber-50"
+                }`}>
+                  <div className="flex items-center gap-2.5 sm:gap-3">
+                    <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 ${
+                      darkMode ? "bg-amber-500/20 text-amber-400" : "bg-amber-100 text-amber-600"
+                    }`}>
+                      <Award className="w-4 h-4 sm:w-5 sm:h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className={`text-sm font-bold truncate ${theme.headingText}`}>
+                        Peringkat #{myLeaderboardPosition.rank}
+                      </p>
+                      <p className={`text-[11px] sm:text-xs truncate ${theme.mutedText}`}>
+                        Belum masuk Top 100. Terus semangat! 📚
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )
+            )}
 
-            {/* Kelas siswa selalu mengikuti kelas login, tidak bisa melihat kelas lain. */}
-            {leaderboardSubTab === "kelas" && (
-              <div className="mb-4">
-                <p className={`text-xs font-semibold ${theme.bodyText}`}>
-                  Peringkat Kelas {studentClassCode || "-"}
-                </p>
+            {/* Error State */}
+            {leaderboardError && (
+              <div className="mb-3 sm:mb-4 text-xs sm:text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg sm:rounded-xl px-3 py-2 sm:px-4 sm:py-3 flex items-center gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+                <span className="line-clamp-2">{leaderboardError}</span>
               </div>
             )}
 
-            {leaderboardSubTab === "kelas-terajin" ? (
+            {/* Content */}
+            {leaderboardLoading ? (
+              <div className="space-y-2 sm:space-y-3">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <div key={i} className={`h-16 sm:h-20 rounded-xl sm:rounded-2xl animate-pulse ${
+                    darkMode ? "bg-slate-700/50" : "bg-emerald-100/50"
+                  }`} />
+                ))}
+              </div>
+            ) : leaderboardSubTab === "kelas-terajin" ? (
+              /* Class Leaderboard - Mobile Optimized */
               classLeaderboardRanking.length === 0 ? (
-                <p className={`text-sm ${theme.bodyText}`}>Belum ada data kelas yang membaca buku.</p>
+                <div className={`text-center py-8 sm:py-12 rounded-xl sm:rounded-2xl border-2 border-dashed ${
+                  darkMode ? "border-slate-700" : "border-emerald-200"
+                }`}>
+                  <Library className={`w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 sm:mb-3 ${darkMode ? "text-slate-600" : "text-emerald-300"}`} />
+                  <p className={`text-xs sm:text-sm font-medium px-4 ${theme.mutedText}`}>Belum ada data kelas yang membaca buku</p>
+                </div>
               ) : (
-                <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
+                <div className="space-y-2 sm:space-y-3">
                   {classLeaderboardRanking.map((entry, idx) => {
                     const rank = idx + 1;
                     const isMyClass = entry.classCode === studentClassCode;
+                    const isTop3 = rank <= 3;
+                    
                     return (
                       <div
                         key={entry.classCode}
-                        className={`flex flex-col gap-2.5 p-2.5 rounded-xl border transition-all duration-200 sm:flex-row sm:items-center sm:gap-3 sm:p-3 ${
+                        className={`relative overflow-hidden rounded-xl sm:rounded-2xl border p-3 sm:p-4 transition-all duration-200 hover:shadow-md ${
                           isMyClass
                             ? darkMode
-                              ? "bg-gradient-to-r from-emerald-900/60 via-emerald-800/40 to-teal-900/50 border-emerald-500 shadow-[0_10px_24px_-18px_rgba(16,185,129,0.95)]"
-                              : "bg-gradient-to-r from-emerald-100 via-white to-teal-50 border-emerald-300 shadow-[0_10px_24px_-18px_rgba(16,185,129,0.8)]"
+                              ? "bg-gradient-to-r from-emerald-900/50 to-teal-900/30 border-emerald-500/50 shadow-lg shadow-emerald-900/20"
+                              : "bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-300 shadow-md shadow-emerald-100"
                             : darkMode
-                            ? "bg-slate-700/40 border-slate-700"
-                            : "bg-emerald-50/50 border-emerald-100"
+                            ? "bg-slate-800/50 border-slate-700 hover:border-slate-600"
+                            : "bg-white/60 border-emerald-100 hover:border-emerald-200"
                         }`}
                       >
-                        <div className="flex min-w-0 items-center gap-2.5">
-                          <div
-                            className={`w-10 h-10 sm:w-11 sm:h-11 shrink-0 rounded-full flex flex-col items-center justify-center font-bold text-[10px] sm:text-[11px] ${getRankBadgeStyle(rank, darkMode)}`}
-                          >
-                            {rank <= 3 ? <Crown className="w-4 h-4" /> : rank}
+                        <div className="flex items-center gap-2.5 sm:gap-4">
+                          {/* Rank Badge - Smaller on mobile */}
+                          <div className={`relative shrink-0 ${isTop3 ? "w-11 h-11 sm:w-14 sm:h-14" : "w-9 h-9 sm:w-12 sm:h-12"}`}>
+                            {isTop3 && (
+                              <div className={`absolute inset-0 rounded-xl sm:rounded-2xl blur-md sm:blur-lg opacity-30 sm:opacity-40 ${
+                                rank === 1 ? "bg-yellow-400" : rank === 2 ? "bg-slate-400" : "bg-amber-500"
+                              }`} />
+                            )}
+                            <div className={`relative w-full h-full rounded-xl sm:rounded-2xl flex flex-col items-center justify-center font-bold ${
+                              rank === 1 
+                                ? "bg-gradient-to-br from-yellow-300 to-amber-500 text-white shadow-md sm:shadow-lg" 
+                                : rank === 2 
+                                ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white shadow-md sm:shadow-lg"
+                                : rank === 3
+                                ? "bg-gradient-to-br from-amber-400 to-orange-600 text-white shadow-md sm:shadow-lg"
+                                : darkMode ? "bg-slate-700 text-slate-300" : "bg-emerald-100 text-emerald-700"
+                            }`}>
+                              {isTop3 ? (
+                                <>
+                                  <Crown className="w-3.5 h-3.5 sm:w-5 sm:h-5 mb-0.5" />
+                                  <span className="text-[9px] sm:text-[10px] font-bold">{rank}</span>
+                                </>
+                              ) : (
+                                <span className="text-sm sm:text-base sm:text-lg">{rank}</span>
+                              )}
+                            </div>
                           </div>
-                          <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-amber-500/80">
-                            {rank <= 3 ? getRankLabel(rank) : "Peringkat"}
+
+                          {/* Info - Flexible */}
+                          <div className="flex-1 min-w-0 py-0.5 sm:py-1">
+                            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                              <h3 className={`text-sm sm:text-base font-bold truncate ${theme.headingText}`}>
+                                Kelas {entry.classCode}
+                              </h3>
+                              {isMyClass && (
+                                <span className={`text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold shrink-0 ${
+                                  darkMode ? "bg-emerald-500/20 text-emerald-300" : "bg-emerald-100 text-emerald-700"
+                                }`}>
+                                  Kelasmu
+                                </span>
+                              )}
+                            </div>
+                            <p className={`text-[11px] sm:text-xs mt-0.5 sm:mt-1 ${theme.mutedText}`}>
+                              {entry.activeStudents} Murid Aktif
+                            </p>
+                          </div>
+
+                          {/* Stats - Stack on very small screens */}
+                          <div className="text-right shrink-0 py-0.5 sm:py-1">
+                            <p className={`text-base sm:text-lg font-bold ${theme.headingText}`}>
+                              {entry.journalCount}
+                              <span className={`text-[10px] sm:text-xs font-normal ml-0.5 sm:ml-1 ${theme.mutedText}`}>jurnal</span>
+                            </p>
+                            <div className={`flex items-center justify-end gap-1.5 sm:gap-3 mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] ${theme.mutedText}`}>
+                              <span className="whitespace-nowrap">{entry.totalPagesRead} hlm</span>
+                              <span className="hidden xs:inline">•</span>
+                              <span className="whitespace-nowrap">{entry.booksFinished} buku</span>
+                            </div>
                           </div>
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <p className={`text-xs sm:text-sm font-bold truncate ${theme.headingText}`}>
-                            Kelas {entry.classCode}
-                            {isMyClass && <span className="ml-1.5 text-xs font-normal text-emerald-500">(Kelasmu)</span>}
-                          </p>
-                          <p className={`text-xs ${theme.mutedText}`}>{entry.activeStudents} siswa aktif</p>
-                        </div>
-                        <div className="w-full text-left sm:w-auto sm:text-right shrink-0">
-                          <p className={`text-xs sm:text-sm font-bold ${theme.headingText}`}>{entry.journalCount} jurnal</p>
-                          <p className={`text-[10px] sm:text-xs ${theme.mutedText}`}>{entry.totalPagesRead} halaman</p>
-                          <p className={`text-[10px] sm:text-xs ${theme.mutedText}`}>{entry.booksFinished} buku selesai</p>
-                        </div>
+
+                        {/* Progress bar for top 3 */}
+                        {isTop3 && (
+                          <div className={`mt-2 sm:mt-3 h-1 sm:h-1.5 rounded-full overflow-hidden ${
+                            darkMode ? "bg-slate-700" : "bg-emerald-100"
+                          }`}>
+                            <div 
+                              className={`h-full rounded-full ${
+                                rank === 1 ? "bg-gradient-to-r from-yellow-400 to-amber-500" :
+                                rank === 2 ? "bg-gradient-to-r from-slate-400 to-slate-500" :
+                                "bg-gradient-to-r from-amber-400 to-orange-500"
+                              }`}
+                              style={{ width: `${Math.min(100, (entry.journalCount / Math.max(classLeaderboardRanking[0]?.journalCount || 1, 1)) * 100)}%` }}
+                            />
+                          </div>
+                        )}
                       </div>
                     );
                   })}
                 </div>
               )
             ) : (
-              myLeaderboardPosition && (
-                myLeaderboardPosition.isVisible ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      document.getElementById(`leaderboard-student-${user?.uid}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-                    }}
-                    className={`mb-4 flex w-full items-center justify-between gap-3 rounded-2xl border p-3 text-left transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 shadow-[0_12px_28px_-18px_rgba(16,185,129,0.8)] ${
-                      darkMode ? "border-emerald-500/40 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 text-white hover:shadow-[0_14px_30px_-18px_rgba(16,185,129,0.9)]" : "border-emerald-300 bg-gradient-to-r from-emerald-50 via-white to-teal-50 text-emerald-900 hover:shadow-[0_14px_30px_-18px_rgba(16,185,129,0.7)]"
-                    }`}
-                  >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${darkMode ? "bg-white/10 text-emerald-100" : "bg-emerald-100 text-emerald-700"}`}>
-                        <Trophy className="h-5 w-5" />
-                      </div>
-                      <span className="min-w-0">
-                        <span className={`block text-[10px] font-bold uppercase tracking-[0.16em] ${darkMode ? "text-emerald-100/80" : "text-emerald-700"}`}>
-                          Posisi kamu saat ini
-                        </span>
-                        <span className={`mt-0.5 block text-sm font-bold ${darkMode ? "text-white" : "text-emerald-900"}`}>
-                          {getRankLabel(myLeaderboardPosition.rank)} dari {myLeaderboardPosition.total} siswa
-                        </span>
-                        <span className={`mt-0.5 block text-[11px] ${darkMode ? "text-emerald-100/80" : "text-emerald-700/80"}`}>
-                          {myLeaderboardPosition.isVisible ? "Klik untuk melihat posisi kamu" : "Posisi ini belum masuk Top 100"}
-                        </span>
-                      </span>
-                    </div>
-                    <ChevronRight className="h-5 w-5 shrink-0 text-current" aria-hidden="true" />
-                  </button>
-                ) : (
-                  <div className={`mb-4 flex w-full items-center justify-between gap-3 rounded-2xl border p-3 text-left shadow-sm ${
-                    darkMode ? "border-amber-500/40 bg-amber-900/20" : "border-amber-300 bg-amber-50"
-                  }`}>
-                    <div className="flex min-w-0 items-center gap-3">
-                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${darkMode ? "bg-amber-500/15 text-amber-300" : "bg-amber-100 text-amber-700"}`}>
-                        <Award className="h-5 w-5" />
-                      </div>
-                      <span className="min-w-0">
-                        <span className={`block text-[10px] font-bold uppercase tracking-[0.16em] ${darkMode ? "text-amber-300" : "text-amber-700"}`}>
-                          Posisi kamu saat ini
-                        </span>
-                        <span className={`mt-0.5 block text-sm font-bold ${theme.headingText}`}>
-                          {getRankLabel(myLeaderboardPosition.rank)}
-                        </span>
-                        <span className={`mt-0.5 block text-[11px] ${theme.mutedText}`}>
-                          Posisi kamu belum masuk Top 100 leaderboard.
-                        </span>
-                      </span>
-                    </div>
-                  </div>
-                )
-              )
-            )}
-
-            {leaderboardError && (
-              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2 mb-3">{leaderboardError}</p>
-            )}
-
-            {leaderboardLoading ? (
-              <p className={`text-sm ${theme.bodyText}`}>Memuat leaderboard...</p>
-            ) : leaderboardSubTab === "semua" ? (
-              globalLeaderboard.length === 0 ? (
-                <p className={`text-sm ${theme.bodyText}`}>Belum ada data jurnal dari siswa manapun.</p>
+              /* Student Leaderboard - Mobile Optimized */
+              (leaderboardSubTab === "semua" ? globalLeaderboard : classLeaderboard).length === 0 ? (
+                <div className={`text-center py-8 sm:py-12 rounded-xl sm:rounded-2xl border-2 border-dashed ${
+                  darkMode ? "border-slate-700" : "border-emerald-200"
+                }`}>
+                  <BookOpen className={`w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 sm:mb-3 ${darkMode ? "text-slate-600" : "text-emerald-300"}`} />
+                  <p className={`text-xs sm:text-sm font-medium px-4 ${theme.mutedText}`}>
+                    {leaderboardSubTab === "semua" 
+                      ? "Belum ada data jurnal dari murid manapun"
+                      : "Belum ada data jurnal untuk kelas ini"}
+                  </p>
+                </div>
               ) : (
-                <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
-                  {globalLeaderboard.map((entry, idx) => {
+                <div className="space-y-2 sm:space-y-3">
+                  {(leaderboardSubTab === "semua" ? globalLeaderboard : classLeaderboard).map((entry, idx) => {
                     const rank = idx + 1;
                     const isMe = entry.studentId === user?.uid;
+                    const isTop3 = rank <= 3;
+                    
                     return (
                       <div
                         key={entry.studentId}
                         id={`leaderboard-student-${entry.studentId}`}
-                        className={`flex flex-col gap-2.5 p-2.5 rounded-xl border transition-all duration-200 sm:flex-row sm:items-center sm:gap-3 sm:p-3 ${
+                        className={`relative rounded-xl sm:rounded-2xl border p-2.5 sm:p-4 transition-all duration-200 hover:shadow-md ${
                           isMe
                             ? darkMode
-                              ? "bg-gradient-to-r from-emerald-900/60 via-emerald-800/40 to-teal-900/50 border-emerald-500 shadow-[0_10px_24px_-18px_rgba(16,185,129,0.95)]"
-                              : "bg-gradient-to-r from-emerald-100 via-white to-teal-50 border-emerald-300 shadow-[0_10px_24px_-18px_rgba(16,185,129,0.8)]"
+                              ? "bg-gradient-to-r from-emerald-900/50 to-teal-900/30 border-emerald-500/50 shadow-lg shadow-emerald-900/20"
+                              : "bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-300 shadow-md shadow-emerald-100"
+                            : isTop3
+                            ? darkMode
+                              ? "bg-slate-800/80 border-slate-700 hover:border-slate-600"
+                              : "bg-white border-emerald-100 hover:border-emerald-200"
                             : darkMode
-                            ? "bg-slate-700/40 border-slate-700"
-                            : "bg-emerald-50/50 border-emerald-100"
+                            ? "bg-slate-800/50 border-slate-700/50 hover:border-slate-600"
+                            : "bg-white/60 border-emerald-100/80 hover:border-emerald-200"
                         }`}
                       >
-                        <div className="flex min-w-0 items-center gap-2.5">
-                          <div
-                            className={`w-10 h-10 sm:w-11 sm:h-11 shrink-0 rounded-full flex flex-col items-center justify-center font-bold text-[10px] sm:text-[11px] ${getRankBadgeStyle(rank, darkMode)}`}
-                          >
-                            {rank <= 3 ? <Crown className="w-4 h-4" /> : rank}
+                        <div className="flex items-center gap-2.5 sm:gap-4">
+                          {/* Rank - Smaller on mobile */}
+                          <div className={`relative shrink-0 ${isTop3 ? "w-11 h-11 sm:w-14 sm:h-14" : "w-9 h-9 sm:w-11 sm:h-11"}`}>
+                            {isTop3 && (
+                              <div className={`absolute inset-0 rounded-xl sm:rounded-2xl blur-md sm:blur-lg opacity-30 sm:opacity-40 ${
+                                rank === 1 ? "bg-yellow-400" : rank === 2 ? "bg-slate-400" : "bg-amber-500"
+                              }`} />
+                            )}
+                            <div className={`relative w-full h-full rounded-xl sm:rounded-2xl flex flex-col items-center justify-center font-bold ${
+                              rank === 1 
+                                ? "bg-gradient-to-br from-yellow-300 to-amber-500 text-white shadow-md sm:shadow-lg" 
+                                : rank === 2 
+                                ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white shadow-md sm:shadow-lg"
+                                : rank === 3
+                                ? "bg-gradient-to-br from-amber-400 to-orange-600 text-white shadow-md sm:shadow-lg"
+                                : darkMode ? "bg-slate-700 text-slate-300" : "bg-emerald-100 text-emerald-700"
+                            }`}>
+                              {isTop3 ? (
+                                <>
+                                  <Crown className="w-3.5 h-3.5 sm:w-5 sm:h-5 mb-0.5" />
+                                  <span className="text-[9px] sm:text-[10px] font-bold">{rank}</span>
+                                </>
+                              ) : (
+                                <span className="text-sm sm:text-base">{rank}</span>
+                              )}
+                            </div>
                           </div>
-                          <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-amber-500/80">
-                            {rank <= 3 ? getRankLabel(rank) : "Peringkat"}
+
+                          {/* Avatar & Info - Flexible */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 sm:gap-2.5">
+                              {/* Avatar */}
+                              <Avatar
+                                gender={entry.gender}
+                                name={entry.studentName}
+                                className={`w-8 h-8 sm:w-10 sm:h-10 ${isMe ? "ring-2 ring-emerald-400/80" : ""}`}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 sm:gap-2">
+                                  <h3 className={`text-xs sm:text-sm font-bold truncate ${theme.headingText}`}>
+                                    {entry.studentName}
+                                  </h3>
+                                  {isMe && (
+                                    <span className={`text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold shrink-0 ${
+                                      darkMode ? "bg-emerald-500/20 text-emerald-300" : "bg-emerald-100 text-emerald-700"
+                                    }`}>
+                                      Kamu
+                                    </span>
+                                  )}
+                                </div>
+                                <p className={`text-[10px] sm:text-xs mt-0.5 truncate ${theme.mutedText}`}>
+                                  Kelas {entry.classCode}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Stats - Compact on mobile */}
+                          <div className="text-right shrink-0">
+                            <p className={`text-sm sm:text-lg font-bold ${theme.headingText}`}>
+                              {entry.journalCount}
+                              <span className={`text-[10px] sm:text-xs font-normal ml-0.5 sm:ml-1 ${theme.mutedText}`}>jurnal</span>
+                            </p>
+                            <div className={`flex items-center justify-end gap-1 sm:gap-2 mt-0.5 text-[9px] sm:text-[11px] ${theme.mutedText}`}>
+                              <span className="whitespace-nowrap">{entry.totalPagesRead} hlm</span>
+                              <span className="hidden xs:inline">•</span>
+                              <span className="whitespace-nowrap">{entry.booksFinished} buku</span>
+                            </div>
                           </div>
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <p className={`text-xs sm:text-sm font-bold truncate ${theme.headingText}`}>
-                            {entry.studentName}
-                            {isMe && <span className="ml-1.5 text-xs font-normal text-emerald-500">(Kamu)</span>}
-                          </p>
-                          <p className={`text-xs ${theme.mutedText}`}>Kelas {entry.classCode}</p>
-                        </div>
-                        <div className="w-full text-left sm:w-auto sm:text-right shrink-0">
-                          <p className={`text-xs sm:text-sm font-bold ${theme.headingText}`}>{entry.journalCount} jurnal</p>
-                          <p className={`text-[10px] sm:text-xs ${theme.mutedText}`}>{entry.totalPagesRead} halaman</p>
-                          <p className={`text-[10px] sm:text-xs ${theme.mutedText}`}>{entry.booksFinished} buku selesai</p>
-                        </div>
+
+                        {/* Highlight bar for current user */}
+                        {isMe && (
+                          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 sm:w-1 h-8 sm:h-12 rounded-r-full bg-emerald-500" />
+                        )}
                       </div>
                     );
                   })}
                 </div>
               )
-            ) : classLeaderboard.length === 0 ? (
-              <p className={`text-sm ${theme.bodyText}`}>Belum ada data jurnal untuk kelas ini.</p>
-            ) : (
-              <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
-                {classLeaderboard.map((entry, idx) => {
-                  const rank = idx + 1;
-                  const isMe = entry.studentId === user?.uid;
-                  return (
-                    <div
-                      key={entry.studentId}
-                      id={`leaderboard-student-${entry.studentId}`}
-                      className={`flex flex-col gap-2.5 p-2.5 rounded-xl border transition-all duration-200 sm:flex-row sm:items-center sm:gap-3 sm:p-3 ${
-                        isMe
-                          ? darkMode
-                            ? "bg-gradient-to-r from-emerald-900/60 via-emerald-800/40 to-teal-900/50 border-emerald-500 shadow-[0_10px_24px_-18px_rgba(16,185,129,0.95)]"
-                            : "bg-gradient-to-r from-emerald-100 via-white to-teal-50 border-emerald-300 shadow-[0_10px_24px_-18px_rgba(16,185,129,0.8)]"
-                          : darkMode
-                          ? "bg-slate-700/40 border-slate-700"
-                          : "bg-emerald-50/50 border-emerald-100"
-                      }`}
-                    >
-                      <div className="flex min-w-0 items-center gap-2.5">
-                        <div
-                          className={`w-10 h-10 sm:w-11 sm:h-11 shrink-0 rounded-full flex flex-col items-center justify-center font-bold text-[10px] sm:text-[11px] ${getRankBadgeStyle(rank, darkMode)}`}
-                        >
-                          {rank <= 3 ? <Crown className="w-4 h-4" /> : rank}
-                        </div>
-                        <div className="text-[9px] font-bold uppercase tracking-[0.14em] text-amber-500/80">
-                          {rank <= 3 ? getRankLabel(rank) : "Peringkat"}
-                        </div>
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className={`text-xs sm:text-sm font-bold truncate ${theme.headingText}`}>
-                          {entry.studentName}
-                          {isMe && <span className="ml-1.5 text-xs font-normal text-emerald-500">(Kamu)</span>}
-                        </p>
-                      </div>
-                      <div className="w-full text-left sm:w-auto sm:text-right shrink-0">
-                        <p className={`text-xs sm:text-sm font-bold ${theme.headingText}`}>{entry.journalCount} jurnal</p>
-                        <p className={`text-[10px] sm:text-xs ${theme.mutedText}`}>{entry.totalPagesRead} halaman</p>
-                        <p className={`text-[10px] sm:text-xs ${theme.mutedText}`}>{entry.booksFinished} buku selesai</p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
             )}
           </div>
         )}
 
-        {/* ---- Tab: Isi Jurnal Membaca ---- */}
+        {/* ---- Tab: Isi Jurnal Membaca (Enhanced) ---- */}
         {activeTab === "jurnal" && (
-          <div className={`p-4 sm:p-6 lg:p-7 rounded-3xl shadow-md border backdrop-blur-sm space-y-6 ${theme.panel}`}>
-            <div>
-              <h2 className={`text-lg font-bold tracking-tight ${theme.headingText}`}>
-                {editingJournalId ? "Edit & Kirim Ulang Jurnal" : "Isi Jurnal Membaca"}
-              </h2>
-              <p className={`text-xs mt-1 ${theme.mutedText}`}>
-                {editingJournalId
-                  ? "Perbaiki isi jurnal ini lalu kirim ulang agar status kembali menunggu validasi guru."
-                  : "Catat progres bacaanmu hari ini, lalu simpan untuk divalidasi guru."}
-              </p>
+          <div className={`relative overflow-hidden rounded-3xl shadow-xl border backdrop-blur-sm ${theme.panel}`}>
+            {/* Decorative background elements */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden rounded-3xl">
+              <div className={`absolute -top-32 -right-32 w-64 h-64 rounded-full blur-3xl opacity-20 ${darkMode ? "bg-emerald-500" : "bg-emerald-300"}`} />
+              <div className={`absolute -bottom-32 -left-32 w-64 h-64 rounded-full blur-3xl opacity-20 ${darkMode ? "bg-teal-500" : "bg-teal-300"}`} />
             </div>
 
-            {formError && (
-              <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{formError}</p>
-            )}
-            {successMessage && (
-              <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2">
-                {successMessage}
-              </p>
-            )}
-
-            {/* Informasi Buku */}
-            <div>
-              <h3 className={`text-sm font-semibold mb-2 ${darkMode ? "text-emerald-200" : "text-emerald-800"}`}>Informasi Buku</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <label className={`text-xs mb-1 block ${theme.bodyText}`}>Judul Buku</label>
-                  <input
-                    type="text"
-                    value={form.bookTitle}
-                    onChange={(e) => setForm({ ...form, bookTitle: e.target.value })}
-                    placeholder="cth. Laskar Pelangi"
-                    className={`w-full p-2.5 sm:p-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input}`}
-                  />
+            <div className="relative p-4 sm:p-6 lg:p-8 space-y-6">
+              {/* Header Section with Icon */}
+              <div className={`flex flex-col sm:flex-row sm:items-center gap-4 pb-6 border-b border-dashed ${darkMode ? "border-slate-700" : "border-emerald-200"}`}>
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg shrink-0 ${
+                  darkMode
+                    ? "bg-gradient-to-br from-emerald-900 to-emerald-800 text-emerald-300 shadow-emerald-900/50"
+                    : "bg-gradient-to-br from-emerald-100 to-emerald-50 text-emerald-700 shadow-emerald-200/50"
+                }`}>
+                  <NotebookPen className="w-7 h-7" />
                 </div>
-                <div>
-                  <label className={`text-xs mb-1 block ${theme.bodyText}`}>Penulis</label>
-                  <input
-                    type="text"
-                    value={form.author}
-                    onChange={(e) => setForm({ ...form, author: e.target.value })}
-                    placeholder="cth. Andrea Hirata"
-                    className={`w-full p-2.5 sm:p-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input}`}
-                  />
-                </div>
-                <div>
-                  <label className={`text-xs mb-1 block ${theme.bodyText}`}>Genre</label>
-                  <input
-                    type="text"
-                    list="genre-options"
-                    value={form.genre}
-                    onChange={(e) => setForm({ ...form, genre: e.target.value })}
-                    placeholder="cth. Fiksi"
-                    className={`w-full p-2.5 sm:p-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input}`}
-                  />
-                  <datalist id="genre-options">
-                    {GENRE_SUGGESTIONS.map((g) => (
-                      <option key={g} value={g} />
-                    ))}
-                  </datalist>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h2 className={`text-xl sm:text-2xl font-bold tracking-tight ${theme.headingText}`}>
+                      {editingJournalId ? "Edit & Kirim Ulang Jurnal" : "Isi Jurnal Membaca"}
+                    </h2>
+                    {editingJournalId && (
+                      <span className={`text-[10px] px-2 py-1 rounded-full font-bold uppercase tracking-wider ${
+                        darkMode ? "bg-orange-900/50 text-orange-300 border border-orange-700" : "bg-orange-100 text-orange-700 border border-orange-200"
+                      }`}>
+                        Mode Edit
+                      </span>
+                    )}
+                  </div>
+                  <p className={`text-sm mt-1 ${theme.bodyText}`}>
+                    {editingJournalId
+                      ? "Perbaiki isi jurnal ini lalu kirim ulang agar status kembali menunggu validasi guru."
+                      : "Catat progres bacaanmu hari ini, lalu simpan untuk divalidasi guru."}
+                  </p>
                 </div>
               </div>
-            </div>
 
-            {/* Progress Membaca */}
-            <div>
-              <h3 className={`text-sm font-semibold mb-2 ${darkMode ? "text-emerald-200" : "text-emerald-800"}`}>Progress Membaca</h3>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 items-end">
-                <div>
-                  <label className={`text-xs mb-1 block ${theme.bodyText}`}>Halaman Awal</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={form.startPage}
-                    onChange={(e) => setForm({ ...form, startPage: e.target.value })}
-                    placeholder="cth. 1"
-                    className={`w-full p-2.5 sm:p-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input}`}
-                  />
+              {/* Feedback Alert from Teacher */}
+              {editingJournalId && editingFeedback && (
+                <div className={`relative overflow-hidden rounded-2xl border-2 p-4 ${
+                  darkMode ? "border-orange-500/30 bg-gradient-to-br from-orange-900/20 to-orange-800/10" : "border-orange-200 bg-gradient-to-br from-orange-50 to-amber-50"
+                }`}>
+                  <div className="absolute -right-4 -top-4 w-24 h-24 bg-orange-400/20 rounded-full blur-2xl" />
+                  <div className="relative flex items-start gap-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                      darkMode ? "bg-orange-500/20 text-orange-400" : "bg-orange-100 text-orange-600"
+                    }`}>
+                      <AlertTriangle className="w-5 h-5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-bold ${darkMode ? "text-orange-300" : "text-orange-800"}`}>
+                        Alasan Revisi dari Guru
+                      </p>
+                      <p className={`text-sm mt-1 leading-relaxed ${darkMode ? "text-orange-200/80" : "text-orange-700/90"}`}>
+                        {editingFeedback}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <label className={`text-xs mb-1 block ${theme.bodyText}`}>Halaman Akhir</label>
-                  <input
-                    type="number"
-                    min={1}
-                    value={form.endPage}
-                    onChange={(e) => setForm({ ...form, endPage: e.target.value })}
-                    placeholder="cth. 20"
-                    className={`w-full p-2.5 sm:p-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input}`}
-                  />
-                </div>
-                <p className={`text-xs pb-2 col-span-2 md:col-span-1 ${theme.mutedText}`}>
-                  {pagesReadPreview > 0 ? `${pagesReadPreview} halaman dibaca` : ""}
-                </p>
-              </div>
-
-              {/* Fitur #7: peringatan tumpang tindih halaman */}
-              {overlapWarning && (
-                <p className="mt-2 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded-xl px-3 py-2 flex items-start gap-2">
-                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                  {overlapWarning}
-                </p>
               )}
 
-              <label className={`flex items-center gap-2 mt-3 text-sm ${darkMode ? "text-emerald-200" : "text-emerald-800"}`}>
-                <input
-                  type="checkbox"
-                  checked={form.finished}
-                  onChange={(e) => setForm({ ...form, finished: e.target.checked })}
-                  className="w-4 h-4 accent-emerald-600 shrink-0"
-                />
-                Buku ini sudah selesai dibaca
-              </label>
-
-              {/* Fitur #3: peringatan duplikat buku selesai */}
-              {duplicateFinishedWarning && (
-                <p className="mt-2 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded-xl px-3 py-2 flex items-start gap-2">
-                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                  {duplicateFinishedWarning}
-                </p>
+              {/* Error/Success Messages */}
+              {formError && (
+                <div className="flex items-center gap-3 p-4 rounded-2xl bg-red-50 border border-red-200 text-red-700 animate-in fade-in slide-in-from-top-2">
+                  <div className="w-8 h-8 rounded-lg bg-red-100 flex items-center justify-center shrink-0">
+                    <AlertTriangle className="w-4 h-4 text-red-600" />
+                  </div>
+                  <p className="text-sm font-medium">{formError}</p>
+                </div>
               )}
-            </div>
 
-            {/* Ringkasan */}
-            <div>
-              <label className={`text-sm font-semibold mb-2 block ${darkMode ? "text-emerald-200" : "text-emerald-800"}`}>Ringkasan Bacaan</label>
-              <textarea
-                value={form.summary}
-                onChange={(e) => setForm({ ...form, summary: e.target.value })}
-                placeholder="Ceritakan apa yang kamu baca hari ini..."
-                rows={4}
-                className={`w-full p-3 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input}`}
-              />
-            </div>
+              {successMessage && (
+                <div className="flex items-center gap-3 p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 animate-in fade-in slide-in-from-top-2">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
+                    <Sparkles className="w-4 h-4 text-emerald-600" />
+                  </div>
+                  <p className="text-sm font-medium">{successMessage}</p>
+                </div>
+              )}
 
-            {/* Nilai Karakter */}
-            <div>
-              <label className={`text-sm font-semibold mb-2 block ${darkMode ? "text-emerald-200" : "text-emerald-800"}`}>Nilai Karakter yang Ditemukan</label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                {CHARACTER_OPTIONS.map((c) => (
-                  <label
-                    key={c}
-                    className={`flex items-center gap-2 p-2.5 sm:p-2 rounded-xl border text-sm cursor-pointer transition ${
-                      selectedCharacters.has(c)
-                        ? darkMode
-                          ? "bg-emerald-900/50 border-emerald-700 text-emerald-100"
-                          : "bg-emerald-100 border-emerald-300 text-emerald-900"
-                        : darkMode
-                        ? "border-slate-600 text-emerald-300/70 hover:bg-slate-700"
-                        : "border-emerald-200 text-emerald-700/70 hover:bg-emerald-50"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedCharacters.has(c)}
-                      onChange={() => toggleCharacter(c)}
-                      className="w-4 h-4 accent-emerald-600 shrink-0"
+              {/* Form Sections */}
+              <div className="space-y-6">
+                {/* Section 1: Informasi Buku */}
+                <div className={`rounded-2xl border ${darkMode ? "border-slate-700 bg-slate-800/40" : "border-emerald-100 bg-emerald-50/30"} overflow-hidden`}>
+                  <div className={`px-4 py-3 border-b ${darkMode ? "border-slate-700 bg-slate-800/60" : "border-emerald-100 bg-emerald-50/50"}`}>
+                    <div className="flex items-center gap-2">
+                      <BookOpen className={`w-4 h-4 ${darkMode ? "text-emerald-400" : "text-emerald-600"}`} />
+                      <h3 className={`text-sm font-bold ${darkMode ? "text-emerald-200" : "text-emerald-800"}`}>Informasi Buku</h3>
+                    </div>
+                  </div>
+                  <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-1.5">
+                      <label className={`text-xs font-semibold uppercase tracking-wider ${theme.mutedText}`}>Judul Buku *</label>
+                      <input
+                        type="text"
+                        value={form.bookTitle}
+                        onChange={(e) => setForm({ ...form, bookTitle: e.target.value })}
+                        onBlur={handleBookTitleBlur}
+                        placeholder="cth. Laskar Pelangi"
+                        className={`w-full p-3 text-sm border rounded-xl outline-none focus:ring-2 transition-all duration-200 ${theme.input} hover:border-emerald-300 focus:scale-[1.01]`}
+                      />
+                      <p className={`text-[10px] ${theme.mutedText}`}>Judul buku yang sedang kamu baca</p>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={`text-xs font-semibold uppercase tracking-wider ${theme.mutedText}`}>Penulis *</label>
+                      <input
+                        type="text"
+                        value={form.author}
+                        onChange={(e) => setForm({ ...form, author: e.target.value })}
+                        placeholder="cth. Andrea Hirata"
+                        className={`w-full p-3 text-sm border rounded-xl outline-none focus:ring-2 transition-all duration-200 ${theme.input} hover:border-emerald-300 focus:scale-[1.01]`}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className={`text-xs font-semibold uppercase tracking-wider ${theme.mutedText}`}>Genre</label>
+                      <input
+                        type="text"
+                        list="genre-options"
+                        value={form.genre}
+                        onChange={(e) => setForm({ ...form, genre: e.target.value })}
+                        placeholder="cth. Fiksi"
+                        className={`w-full p-3 text-sm border rounded-xl outline-none focus:ring-2 transition-all duration-200 ${theme.input} hover:border-emerald-300 focus:scale-[1.01]`}
+                      />
+                      <datalist id="genre-options">
+                        {GENRE_SUGGESTIONS.map((g) => (
+                          <option key={g} value={g} />
+                        ))}
+                      </datalist>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 2: Progress Membaca */}
+                <div className={`rounded-2xl border ${darkMode ? "border-slate-700 bg-slate-800/40" : "border-emerald-100 bg-emerald-50/30"} overflow-hidden`}>
+                  <div className={`px-4 py-3 border-b ${darkMode ? "border-slate-700 bg-slate-800/60" : "border-emerald-100 bg-emerald-50/50"}`}>
+                    <div className="flex items-center gap-2">
+                      <Target className={`w-4 h-4 ${darkMode ? "text-emerald-400" : "text-emerald-600"}`} />
+                      <h3 className={`text-sm font-bold ${darkMode ? "text-emerald-200" : "text-emerald-800"}`}>Progress Membaca</h3>
+                    </div>
+                  </div>
+                  <div className="p-4 space-y-4">
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4 items-end">
+                      <div className="space-y-1.5">
+                        <label className={`text-xs font-semibold uppercase tracking-wider ${theme.mutedText}`}>Hal. Awal *</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={form.startPage}
+                          onChange={(e) => setForm({ ...form, startPage: e.target.value })}
+                          placeholder="1"
+                          className={`w-full p-3 text-sm border rounded-xl outline-none focus:ring-2 transition-all duration-200 text-center font-bold ${theme.input} hover:border-emerald-300`}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className={`text-xs font-semibold uppercase tracking-wider ${theme.mutedText}`}>Hal. Akhir *</label>
+                        <input
+                          type="number"
+                          min={1}
+                          value={form.endPage}
+                          onChange={(e) => setForm({ ...form, endPage: e.target.value })}
+                          placeholder="20"
+                          className={`w-full p-3 text-sm border rounded-xl outline-none focus:ring-2 transition-all duration-200 text-center font-bold ${theme.input} hover:border-emerald-300`}
+                        />
+                      </div>
+                      <div className="col-span-2 md:col-span-1 flex items-center justify-center md:justify-start pb-1">
+                        {pagesReadPreview > 0 ? (
+                          <div className={`px-4 py-2 rounded-xl text-sm font-bold ${
+                            darkMode ? "bg-emerald-900/50 text-emerald-300 border border-emerald-700" : "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                          }`}>
+                            📖 {pagesReadPreview} halaman dibaca
+                          </div>
+                        ) : (
+                          <span className={`text-xs ${theme.mutedText}`}>Isi halaman untuk melihat total</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Overlap Warning */}
+                    {overlapWarning && (
+                      <div className="flex items-start gap-3 p-3 rounded-xl bg-orange-50 border border-orange-200 text-orange-800 text-xs animate-in fade-in">
+                        <AlertTriangle className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-semibold">Perhatian: Rentang Halaman Tumpang Tindih</p>
+                          <p className="mt-0.5 opacity-90">{overlapWarning}</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Finished Checkbox - Enhanced */}
+                    <div className={`flex items-start gap-3 p-4 rounded-xl border-2 transition-all cursor-pointer ${
+                      form.finished
+                        ? darkMode ? "border-emerald-600 bg-emerald-900/30" : "border-emerald-400 bg-emerald-50"
+                        : darkMode ? "border-slate-600 bg-slate-700/30 hover:border-slate-500" : "border-slate-200 bg-white hover:border-emerald-300"
+                    }`}>
+                      <input
+                        type="checkbox"
+                        checked={form.finished}
+                        onChange={(e) => setForm({ ...form, finished: e.target.checked })}
+                        className="w-5 h-5 accent-emerald-600 mt-0.5 cursor-pointer"
+                        id="finished-checkbox"
+                      />
+                      <label htmlFor="finished-checkbox" className="flex-1 cursor-pointer">
+                        <span className={`block text-sm font-bold ${form.finished ? (darkMode ? "text-emerald-300" : "text-emerald-800") : theme.headingText}`}>
+                          Buku ini sudah selesai dibaca 🎉
+                        </span>
+                        <span className={`block text-xs mt-1 ${theme.mutedText}`}>
+                          Centang jika kamu sudah menyelesaikan buku ini sampai halaman terakhir
+                        </span>
+                      </label>
+                    </div>
+
+                    {/* Duplicate Warning */}
+                    {duplicateFinishedWarning && (
+                      <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs animate-in fade-in">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                        <p>{duplicateFinishedWarning}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Section 3: Ringkasan */}
+                <div className={`rounded-2xl border ${darkMode ? "border-slate-700 bg-slate-800/40" : "border-emerald-100 bg-emerald-50/30"} overflow-hidden`}>
+                  <div className={`px-4 py-3 border-b ${darkMode ? "border-slate-700 bg-slate-800/60" : "border-emerald-100 bg-emerald-50/50"}`}>
+                    <div className="flex items-center gap-2">
+                      <NotebookPen className={`w-4 h-4 ${darkMode ? "text-emerald-400" : "text-emerald-600"}`} />
+                      <h3 className={`text-sm font-bold ${darkMode ? "text-emerald-200" : "text-emerald-800"}`}>Ringkasan Bacaan *</h3>
+                    </div>
+                  </div>
+                  <div className="p-4">
+                    <textarea
+                      value={form.summary}
+                      onChange={(e) => setForm({ ...form, summary: e.target.value })}
+                      placeholder="Ceritakan apa yang kamu baca hari ini. Apa bagian yang paling menarik? Apa yang kamu pelajari dari buku ini?"
+                      rows={5}
+                      className={`w-full p-4 text-sm border rounded-xl outline-none focus:ring-2 transition resize-y min-h-[120px] leading-relaxed ${theme.input} hover:border-emerald-300`}
                     />
-                    {c}
-                  </label>
-                ))}
-                <label className={`flex flex-col gap-2 p-2.5 sm:p-2 rounded-xl border text-sm sm:col-span-2 lg:col-span-3 ${darkMode ? "border-slate-600 text-emerald-300/70" : "border-emerald-200 text-emerald-700/70"}`}>
-                  <span className={`font-medium ${darkMode ? "text-emerald-200" : "text-emerald-800"}`}>Nilai karakter lainnya</span>
-                  <textarea
-                    value={customCharacter}
-                    onChange={(e) => setCustomCharacter(e.target.value)}
-                    placeholder="Tuliskan nilai karakter lain yang kamu temukan..."
-                    rows={2}
-                    className={`w-full p-2 text-sm border rounded-xl outline-none focus:ring-2 transition ${theme.input}`}
-                  />
-                </label>
+                    <div className="flex justify-between items-center mt-2">
+                      <p className={`text-[10px] ${theme.mutedText}`}>Minimal 1 kalimat tentang isi buku</p>
+                      {form.summary.length > 0 && (
+                        <span className={`text-[10px] font-medium ${form.summary.length < 10 ? "text-orange-500" : "text-emerald-600"}`}>
+                          {form.summary.length} karakter
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section 4: Nilai Karakter */}
+                <div className={`rounded-2xl border ${darkMode ? "border-slate-700 bg-slate-800/40" : "border-emerald-100 bg-emerald-50/30"} overflow-hidden`}>
+                  <div className={`px-4 py-3 border-b ${darkMode ? "border-slate-700 bg-slate-800/60" : "border-emerald-100 bg-emerald-50/50"}`}>
+                    <div className="flex items-center gap-2">
+                      <Heart className={`w-4 h-4 ${darkMode ? "text-emerald-400" : "text-emerald-600"}`} />
+                      <h3 className={`text-sm font-bold ${darkMode ? "text-emerald-200" : "text-emerald-800"}`}>Nilai Karakter yang Ditemukan</h3>
+                    </div>
+                    <p className={`text-xs mt-1 ${theme.mutedText}`}>Pilih nilai karakter yang kamu temukan dalam bacaan ini (bisa pilih lebih dari satu)</p>
+                  </div>
+                  <div className="p-4 space-y-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                      {CHARACTER_OPTIONS.map((c) => {
+                        const isSelected = selectedCharacters.has(c);
+                        return (
+                          <button
+                            key={c}
+                            type="button"
+                            onClick={() => toggleCharacter(c)}
+                            className={`relative p-3 rounded-xl border-2 text-sm font-medium transition-all duration-200 transform hover:scale-[1.02] active:scale-[0.98] ${
+                              isSelected
+                                ? darkMode
+                                  ? "bg-emerald-900/50 border-emerald-600 text-emerald-100 shadow-md shadow-emerald-900/20"
+                                  : "bg-emerald-100 border-emerald-400 text-emerald-900 shadow-md shadow-emerald-100"
+                                : darkMode
+                                ? "bg-slate-700/30 border-slate-600 text-emerald-300/70 hover:bg-slate-700/50 hover:border-slate-500"
+                                : "bg-white border-slate-200 text-emerald-700/70 hover:bg-emerald-50 hover:border-emerald-300"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                                isSelected
+                                  ? "bg-emerald-500 border-emerald-500"
+                                  : darkMode ? "border-slate-500" : "border-slate-300"
+                              }`}>
+                                {isSelected && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                </svg>}
+                              </div>
+                              <span className="truncate">{c}</span>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <div className={`p-4 rounded-xl border-2 border-dashed ${darkMode ? "border-slate-600 bg-slate-700/20" : "border-emerald-200 bg-emerald-50/50"}`}>
+                      <label className={`block text-xs font-semibold mb-2 ${darkMode ? "text-emerald-300" : "text-emerald-700"}`}>
+                        ✨ Nilai karakter lainnya (opsional)
+                      </label>
+                      <textarea
+                        value={customCharacter}
+                        onChange={(e) => setCustomCharacter(e.target.value)}
+                        placeholder="Tuliskan nilai karakter lain yang kamu temukan..."
+                        rows={2}
+                        className={`w-full p-3 text-sm border rounded-xl outline-none focus:ring-2 transition resize-none ${theme.input}`}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Draft Indicator */}
+                {!editingJournalId && (form.bookTitle || form.author || form.summary) && (
+                  <div className={`flex items-center gap-2 text-xs ${theme.mutedText} animate-pulse`}>
+                    <div className={`w-2 h-2 rounded-full ${darkMode ? "bg-emerald-400" : "bg-emerald-500"}`} />
+                    <span>Draf disimpan otomatis di perangkat ini</span>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className={`flex flex-col-reverse sm:flex-row gap-3 pt-4 border-t ${darkMode ? "border-slate-700" : "border-emerald-100"}`}>
+                  {editingJournalId ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingJournalId(null);
+                          setEditingFeedback("");
+                          setForm(EMPTY_FORM);
+                          setSelectedCharacters(new Set());
+                          setCustomCharacter("");
+                          setFormError("");
+                        }}
+                        className={`flex-1 sm:flex-none px-6 py-3 border-2 text-sm font-bold rounded-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${
+                          darkMode
+                            ? "border-slate-600 text-emerald-200 bg-slate-800 hover:bg-slate-700"
+                            : "border-emerald-200 text-emerald-700 bg-white hover:bg-emerald-50"
+                        }`}
+                      >
+                        Batal Edit
+                      </button>
+                      <button
+                        onClick={handleSaveJournal}
+                        disabled={saving}
+                        className="flex-[2] sm:flex-none px-8 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white text-sm font-bold rounded-xl shadow-lg shadow-emerald-600/25 hover:from-emerald-700 hover:to-emerald-800 active:scale-[0.98] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2"
+                      >
+                        {saving ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            Menyimpan...
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-4 h-4" />
+                            Edit & Kirim Ulang
+                          </>
+                        )}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {(form.bookTitle || form.author || form.genre || form.startPage || form.endPage || form.summary || selectedCharacters.size > 0 || customCharacter) && (
+                        <button
+                          type="button"
+                          onClick={handleClearForm}
+                          className={`flex-1 sm:flex-none px-6 py-3 border-2 text-sm font-bold rounded-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] ${
+                            darkMode
+                              ? "border-slate-600 text-red-300 bg-slate-800 hover:bg-slate-700"
+                              : "border-red-200 text-red-600 bg-white hover:bg-red-50"
+                          }`}
+                        >
+                          Bersihkan Form
+                        </button>
+                      )}
+                      <button
+                        onClick={handleSaveJournal}
+                        disabled={saving}
+                        className="flex-[2] sm:flex-none px-8 py-3 bg-gradient-to-r from-emerald-600 to-emerald-700 text-white text-sm font-bold rounded-xl shadow-lg shadow-emerald-600/25 hover:from-emerald-700 hover:to-emerald-800 active:scale-[0.98] transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center justify-center gap-2"
+                      >
+                        {saving ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            Menyimpan...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="w-4 h-4" />
+                            Simpan Jurnal
+                          </>
+                        )}
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-
-            {/* Fitur #8: indikator draf tersimpan otomatis */}
-            {!editingJournalId && (form.bookTitle || form.author || form.summary) && (
-              <p className={`text-xs italic ${theme.mutedText}`}>Draf disimpan otomatis di perangkat ini.</p>
-            )}
-
-            <div className="flex flex-col sm:flex-row flex-wrap gap-2">
-              {editingJournalId && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingJournalId(null);
-                    setForm(EMPTY_FORM);
-                    setSelectedCharacters(new Set());
-                    setCustomCharacter("");
-                    setFormError("");
-                  }}
-                  className={`px-4 py-2.5 sm:py-2 border text-sm font-semibold rounded-xl transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
-                    darkMode ? "border-slate-600 text-emerald-200 bg-slate-800 hover:bg-slate-700" : "border-emerald-200 text-emerald-700 bg-white hover:bg-emerald-50"
-                  }`}
-                >
-                  Batal Edit
-                </button>
-              )}
-              <button
-                onClick={handleSaveJournal}
-                disabled={saving}
-                className="px-5 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-xl shadow-sm shadow-emerald-900/20 hover:bg-emerald-700 active:scale-[0.98] transition disabled:opacity-50 disabled:active:scale-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 focus-visible:ring-offset-2"
-              >
-                {saving ? "Menyimpan..." : editingJournalId ? "Edit & Kirim Ulang" : "Simpan Jurnal"}
-              </button>
             </div>
           </div>
         )}
@@ -3381,6 +4314,12 @@ export default function StudentDashboard() {
         {/* ---- Tab: Riwayat Jurnal ---- */}
         {activeTab === "riwayat" && (
           <div className={`p-4 sm:p-6 lg:p-7 rounded-3xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
+            {successMessage && (
+              <p className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 mb-4">
+                {successMessage}
+              </p>
+            )}
+
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <h2 className={`text-lg font-bold tracking-tight ${theme.headingText}`}>Riwayat Jurnal Saya</h2>
               {/* Fitur #2: pencarian & filter status */}

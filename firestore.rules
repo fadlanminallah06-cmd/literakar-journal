@@ -106,5 +106,23 @@ service cloud.firestore {
       allow delete: if isStaff();
     }
 
+    match /studentAlerts/{alertId} {
+      allow read: if isSignedIn()
+        && (
+          isStaff()
+          || (isStudent() && resource.data.studentId == request.auth.uid)
+        );
+
+      allow create: if isSignedIn() && isStaff();
+
+      allow update: if isSignedIn()
+        && (
+          isStaff()
+          || (isStudent() && resource.data.studentId == request.auth.uid)
+        );
+
+      allow delete: if isSignedIn() && isStaff();
+    }
+
   }
 }

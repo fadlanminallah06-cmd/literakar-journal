@@ -79,6 +79,17 @@ interface Journal {
   updatedAt?: Date | string | number | { toDate?: () => Date } | null;
 }
 
+interface StudentAlert {
+  id: string;
+  studentId: string;
+  studentName: string;
+  classCode: string;
+  message: string;
+  sentBy?: string;
+  createdAt?: Date | string | number | { toDate?: () => Date } | null;
+  readAt?: Date | string | number | { toDate?: () => Date } | null;
+}
+
 /** Baris agregat leaderboard: statistik gabungan seorang siswa dari SEMUA jurnalnya,
  *  dihitung lintas siswa (bukan hanya milik siswa yang sedang login). */
 interface LeaderboardEntry {
@@ -1649,6 +1660,7 @@ export default function StudentDashboard() {
   const router = useRouter();
 
   const [journals, setJournals] = useState<Journal[]>([]);
+  const [studentAlerts, setStudentAlerts] = useState<StudentAlert[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>("beranda");
 
   const [form, setForm] = useState(EMPTY_FORM);
@@ -1881,6 +1893,17 @@ export default function StudentDashboard() {
     }
   }, [fetchLeaderboard, fetchMyJournals, isRefreshingData]);
 
+  const markStudentAlertAsRead = useCallback(async (alertId: string) => {
+    try {
+      await updateDoc(doc(db, "studentAlerts", alertId), {
+        readAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } catch {
+      setFormError("Gagal menandai peringatan sebagai dibaca. Silakan coba lagi.");
+    }
+  }, []);
+
   useEffect(() => {
     if (!loading && (!user || userProfile?.role !== "student")) {
       router.push("/login");
@@ -1937,6 +1960,42 @@ export default function StudentDashboard() {
 
     return unsubscribe;
   }, [user, userProfile, loading, router]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubscribe = onSnapshot(
+      query(collection(db, "studentAlerts"), where("studentId", "==", user.uid)),
+      (snapshot) => {
+        const docs: StudentAlert[] = [];
+        snapshot.forEach((alertDoc) => docs.push({ id: alertDoc.id, ...alertDoc.data() } as StudentAlert));
+        docs.sort((a, b) => (toDateSafe(b.createdAt)?.getTime() ?? 0) - (toDateSafe(a.createdAt)?.getTime() ?? 0));
+        setStudentAlerts(docs);
+      },
+      () => setFormError("Gagal memuat peringatan dari guru.")
+    );
+
+    return unsubscribe;
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || studentAlerts.length === 0) return;
+
+    const unreadAlert = [...studentAlerts]
+      .filter((alert) => !alert.readAt)
+      .sort((a, b) => (toDateSafe(b.createdAt)?.getTime() ?? 0) - (toDateSafe(a.createdAt)?.getTime() ?? 0))[0];
+
+    if (!unreadAlert || typeof window === "undefined" || !("Notification" in window) || Notification.permission !== "granted") {
+      return;
+    }
+
+    const notification = new Notification("Peringatan dari guru", {
+      body: unreadAlert.message,
+      tag: unreadAlert.id,
+    });
+
+    return () => notification.close();
+  }, [studentAlerts, user]);
 
   // Muat leaderboard sekali saat dashboard siap (bukan hanya saat tab Leaderboard
   // dibuka), karena kartu peringkat kelas di Beranda juga butuh data ini.
@@ -2053,6 +2112,13 @@ export default function StudentDashboard() {
     if (Number.isNaN(s) || Number.isNaN(e) || e < s) return 0;
     return e - s;
   }, [form.startPage, form.endPage]);
+
+  const latestUnreadAlert = useMemo(() => {
+    const alerts = [...studentAlerts]
+      .filter((alert) => !alert.readAt)
+      .sort((a, b) => (toDateSafe(b.createdAt)?.getTime() ?? 0) - (toDateSafe(a.createdAt)?.getTime() ?? 0));
+    return alerts[0] ?? null;
+  }, [studentAlerts]);
 
   // Fitur #7: peringatan (non-blocking) kalau rentang halaman tumpang tindih
   // dengan jurnal lain untuk judul buku yang sama — mencegah halaman terhitung dua kali.
@@ -2920,6 +2986,53 @@ export default function StudentDashboard() {
             ))}
           </div>
         </nav>
+
+        {latestUnreadAlert && (
+          <div
+            className={`mb-4 rounded-3xl border p-4 sm:p-5 shadow-[0_10px_30px_-16px_rgba(251,146,60,0.65)] transition-all duration-300 ${
+              darkMode
+                ? "border-orange-500/40 bg-gradient-to-r from-orange-950/60 via-amber-900/40 to-yellow-900/20"
+                : "border-orange-300 bg-gradient-to-r from-orange-50 via-amber-50 to-yellow-50"
+            }`}
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3 min-w-0 flex-1">
+                <div
+                  className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl shadow-inner animate-pulse ${
+                    darkMode ? "bg-orange-500/20 text-orange-200" : "bg-orange-100 text-orange-700"
+                  }`}
+                >
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className={`text-sm sm:text-base font-black uppercase tracking-wide ${darkMode ? "text-orange-200" : "text-orange-800"}`}>
+                    Peringatan dari Guru
+                  </p>
+                  <p className={`mt-1 text-sm sm:text-base leading-relaxed ${darkMode ? "text-orange-50/90" : "text-orange-800/90"}`}>
+                    {latestUnreadAlert.message}
+                  </p>
+                  {latestUnreadAlert.sentBy && (
+                    <p className={`mt-2 text-[10px] sm:text-xs font-medium ${darkMode ? "text-orange-300/80" : "text-orange-700/70"}`}>
+                      Dari: {latestUnreadAlert.sentBy}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => void markStudentAlertAsRead(latestUnreadAlert.id)}
+                className={`shrink-0 px-4 py-2 text-xs sm:text-sm font-bold rounded-xl border transition-all duration-200 hover:scale-[1.02] ${
+                  darkMode
+                    ? "border-orange-300/60 bg-orange-500/10 text-orange-100 hover:bg-orange-500/20"
+                    : "border-orange-300 bg-white/80 text-orange-700 hover:bg-orange-100"
+                }`}
+              >
+                Saya Mengerti
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ---- Tab: Beranda (Enhanced UI) ---- */}
         {activeTab === "beranda" && (

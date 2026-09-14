@@ -11,6 +11,7 @@ import {
   where,
   orderBy,
   getDocs,
+  addDoc,
   doc,
   updateDoc,
   deleteDoc,
@@ -111,6 +112,17 @@ interface StudentSummary {
 
 interface FlaggedStudent extends StudentSummary {
   reasons: string[];
+}
+
+interface StudentAlert {
+  id: string;
+  studentId: string;
+  studentName: string;
+  classCode: string;
+  message: string;
+  sentBy?: string;
+  createdAt?: Date | string | number | { toDate?: () => Date } | null;
+  readAt?: Date | string | number | { toDate?: () => Date } | null;
 }
 
 interface ClassSummary {
@@ -267,6 +279,19 @@ function formatTanggal(d: Date | null): string {
     day: "numeric",
     month: "long",
     year: "numeric",
+  }).format(d);
+}
+
+function formatTanggalWaktu(d: Date | null): string {
+  if (!d) return "-";
+  return new Intl.DateTimeFormat("id-ID", {
+    timeZone: "Asia/Jakarta",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
   }).format(d);
 }
 
@@ -989,6 +1014,7 @@ export default function TeacherDashboard() {
   const router = useRouter();
   const [journals, setJournals] = useState<Journal[]>([]);
   const [allStudents, setAllStudents] = useState<RosterStudent[]>([]);
+  const [studentAlerts, setStudentAlerts] = useState<StudentAlert[]>([]);
   const [feedbackInput, setFeedbackInput] = useState<{ [key: string]: string }>({});
   const [activeTab, setActiveTab] = useState<TabKey>("ringkasan");
   const [selectedStudent, setSelectedStudent] = useState<string | null>(null);
@@ -1011,6 +1037,7 @@ export default function TeacherDashboard() {
   const [managementClassFilter, setManagementClassFilter] = useState("all");
   const [managementMessage, setManagementMessage] = useState("");
   const [managementError, setManagementError] = useState("");
+  const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [managementLoading, setManagementLoading] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0.5, y: 0.5 });
   // id jurnal yang sedang diproses (approve/revisi/batalkan) -> mencegah klik ganda
@@ -1020,6 +1047,7 @@ export default function TeacherDashboard() {
   const [selectedJournalIds, setSelectedJournalIds] = useState<Set<string>>(new Set());
   const [bulkJournalLoading, setBulkJournalLoading] = useState(false);
   const [journalClassFilter, setJournalClassFilter] = useState("all");
+  const [sendingWarningStudentId, setSendingWarningStudentId] = useState<string | null>(null);
   // id jurnal yang sedang dihapus -> mencegah klik ganda dan memberi feedback visual
   const [deleteJournalLoading, setDeleteJournalLoading] = useState<string | null>(null);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
@@ -1076,6 +1104,16 @@ export default function TeacherDashboard() {
       queueMicrotask(() => setDarkMode(savedTheme === "1"));
     }
   }, []);
+
+  useEffect(() => {
+    if (!toast) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setToast(null);
+    }, 3500);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [toast]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1165,9 +1203,29 @@ export default function TeacherDashboard() {
     setAllStudents(list);
   }, []);
 
+  const fetchStudentAlerts = useCallback(async () => {
+    const querySnapshot = await getDocs(collection(db, "studentAlerts"));
+    const alerts: StudentAlert[] = [];
+    querySnapshot.forEach((d) => {
+      const data = d.data();
+      alerts.push({
+        id: d.id,
+        studentId: data.studentId || "",
+        studentName: data.studentName || "Tanpa Nama",
+        classCode: data.classCode || "-",
+        message: data.message || "",
+        sentBy: data.sentBy || "",
+        createdAt: data.createdAt || null,
+        readAt: data.readAt || null,
+      });
+    });
+    alerts.sort((a, b) => (toDateSafe(b.createdAt)?.getTime() ?? 0) - (toDateSafe(a.createdAt)?.getTime() ?? 0));
+    setStudentAlerts(alerts);
+  }, []);
+
   const loadDashboardData = useCallback(async () => {
-    await Promise.all([fetchClassJournals(), fetchAllStudents()]);
-  }, [fetchClassJournals, fetchAllStudents]);
+    await Promise.all([fetchClassJournals(), fetchAllStudents(), fetchStudentAlerts()]);
+  }, [fetchClassJournals, fetchAllStudents, fetchStudentAlerts]);
 
   const handleManualRefresh = useCallback(async () => {
     if (isRefreshingData) return;
@@ -1368,6 +1426,76 @@ export default function TeacherDashboard() {
     window.setTimeout(() => {
       document.getElementById(`journal-class-${classCode}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 0);
+  };
+
+  const handleSendStudentWarning = async (student: FlaggedStudent) => {
+    if (!student.key.startsWith("uid:")) {
+      setManagementError("Peringatan hanya bisa dikirim ke siswa yang memiliki akun aktif.");
+      return;
+    }
+
+    const studentUid = student.key.slice(4);
+    if (warningSentTodayByStudent.get(studentUid)) {
+      setToast({
+        type: "success",
+        message: `Peringatan untuk ${student.name} sudah dikirim hari ini.`,
+      });
+      setManagementMessage(`Peringatan untuk ${student.name} sudah dikirim hari ini.`);
+      return;
+    }
+
+    const defaultMessage = student.totalJournals === 0
+      ? "Peringatan: Anda belum pernah mengirim jurnal membaca. Segera buka menu Jurnal dan kirim jurnal bacaan terbaru agar aktivitas membaca Anda tetap terpantau."
+      : `Peringatan: ${student.reasons.join(" ")} Mohon segera mengirim jurnal membaca dan memperbarui aktivitas membaca Anda.`;
+
+    setManagementError("");
+    setSendingWarningStudentId(studentUid);
+
+    try {
+      const newAlertRef = await addDoc(collection(db, "studentAlerts"), {
+        studentId: studentUid,
+        studentName: student.name,
+        classCode: student.classCode,
+        message: defaultMessage,
+        sentBy: userProfile?.name || user?.email || "Guru",
+        createdAt: serverTimestamp(),
+        readAt: null,
+        updatedAt: serverTimestamp(),
+      });
+
+      setStudentAlerts((current) => [
+        {
+          id: newAlertRef.id,
+          studentId: studentUid,
+          studentName: student.name,
+          classCode: student.classCode,
+          message: defaultMessage,
+          sentBy: userProfile?.name || user?.email || "Guru",
+          createdAt: new Date(),
+          readAt: null,
+        },
+        ...current,
+      ]);
+
+      setToast({
+        type: "success",
+        message: `Peringatan berhasil dikirim ke ${student.name}. Siswa akan menerima notifikasi saat login atau membuka aplikasi.`,
+      });
+      setManagementMessage(`Peringatan berhasil dikirim ke ${student.name}.`);
+    } catch (error) {
+      console.error("Gagal mengirim peringatan siswa:", error);
+      const errorMessage = error instanceof Error
+        ? `Gagal mengirim peringatan ke siswa: ${error.message}`
+        : "Gagal mengirim peringatan ke siswa. Periksa koneksi/izin dan coba lagi.";
+
+      setToast({
+        type: "error",
+        message: errorMessage,
+      });
+      setManagementError(errorMessage);
+    } finally {
+      setSendingWarningStudentId(null);
+    }
   };
 
   const handleBulkCancelRevision = async () => {
@@ -1795,6 +1923,15 @@ export default function TeacherDashboard() {
     });
     return Array.from(counts.entries()).sort(([classA], [classB]) => classA.localeCompare(classB, "id"));
   }, [journals]);
+  const pendingJournalsByClass = useMemo(() => {
+    const counts = new Map<string, number>();
+    journals.forEach((journal) => {
+      if (getStatusInfo(journal.status).key !== "pending") return;
+      const classCode = journal.classCode || "Tanpa Kelas";
+      counts.set(classCode, (counts.get(classCode) || 0) + 1);
+    });
+    return Array.from(counts.entries()).sort(([classA], [classB]) => classA.localeCompare(classB, "id"));
+  }, [journals]);
   const selectedPendingJournalCount = useMemo(
     () => journals.filter((journal) => selectedJournalIds.has(journal.id) && getStatusInfo(journal.status).key !== "approved").length,
     [journals, selectedJournalIds]
@@ -1807,6 +1944,34 @@ export default function TeacherDashboard() {
     () => journals.filter((journal) => selectedJournalIds.has(journal.id) && getStatusInfo(journal.status).key === "revision").length,
     [journals, selectedJournalIds]
   );
+
+  const warningSentTodayByStudent = useMemo(() => {
+    const todayKey = toJakartaDateKey(new Date());
+    const alertMap = new Map<string, boolean>();
+
+    studentAlerts.forEach((alert) => {
+      const createdAt = toDateSafe(alert.createdAt);
+      if (!createdAt || !alert.studentId) return;
+      const alertDateKey = toJakartaDateKey(createdAt);
+      if (alertDateKey === todayKey) alertMap.set(alert.studentId, true);
+    });
+
+    return alertMap;
+  }, [studentAlerts]);
+
+  const lastWarningAtByStudent = useMemo(() => {
+    const alertMap = new Map<string, Date>();
+
+    studentAlerts.forEach((alert) => {
+      if (!alert.studentId) return;
+      const createdAt = toDateSafe(alert.createdAt);
+      if (!createdAt) return;
+      const existing = alertMap.get(alert.studentId);
+      if (!existing || createdAt > existing) alertMap.set(alert.studentId, createdAt);
+    });
+
+    return alertMap;
+  }, [studentAlerts]);
 
   const studentsNeedingAttention: FlaggedStudent[] = useMemo(() => {
     if (studentSummaries.length === 0) return [];
@@ -2283,6 +2448,25 @@ export default function TeacherDashboard() {
             <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
             {managementError}
           </p>
+        )}
+
+        {toast && (
+          <div
+            role="status"
+            aria-live="polite"
+            className={`mb-4 flex items-start gap-3 rounded-2xl border px-3 py-2.5 shadow-sm ${
+              toast.type === "success"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-red-200 bg-red-50 text-red-700"
+            }`}
+          >
+            {toast.type === "success" ? (
+              <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            ) : (
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            )}
+            <span className="text-sm font-medium leading-relaxed">{toast.message}</span>
+          </div>
         )}
 
         {/* ---- Tab: Rekap Kelas ---- */}
@@ -3105,38 +3289,67 @@ export default function TeacherDashboard() {
                       <span className="text-[11px] text-emerald-700/60">{students.length} murid</span>
                     </div>
                     <div className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0 lg:items-start">
-                    {students.map((s) => (
-                  <div key={s.key} className="border border-orange-200 bg-orange-50/80 p-3 sm:p-4 rounded-2xl">
-                    <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:justify-between sm:items-start sm:gap-4">
-                      <div className="flex gap-3">
-                        <Avatar gender={s.gender} name={s.name} className="h-9 w-9" />
-                        <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
-                          <AlertTriangle className="w-4 h-4" />
+                    {students.map((s) => {
+                      const studentUid = s.key.startsWith("uid:") ? s.key.slice(4) : "";
+                      const alreadyWarnedToday = Boolean(studentUid && warningSentTodayByStudent.get(studentUid));
+                      const lastWarningAt = studentUid ? lastWarningAtByStudent.get(studentUid) ?? null : null;
+
+                      return (
+                        <div key={s.key} className="border border-orange-200 bg-orange-50/80 p-3 sm:p-4 rounded-2xl">
+                          <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:justify-between sm:items-start sm:gap-4">
+                            <div className="flex gap-3">
+                              <Avatar gender={s.gender} name={s.name} className="h-9 w-9" />
+                              <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+                                <AlertTriangle className="w-4 h-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-bold text-slate-800 break-words">
+                                  {s.name}{" "}
+                                  <span className="font-normal text-slate-500 text-xs">
+                                    · Kelas {s.classCode}
+                                    {s.gender ? ` · ${formatGender(s.gender)}` : ""}
+                                  </span>
+                                </p>
+                                <ul className="list-disc list-inside text-xs text-slate-600 mt-1 space-y-0.5">
+                                  {s.reasons.map((r, i) => (
+                                    <li key={`${s.key}-${r}-${i}`}>{r}</li>
+                                  ))}
+                                </ul>
+                                {lastWarningAt && (
+                                  <p className="mt-2 text-[11px] font-medium text-orange-700/70">
+                                    Peringatan terakhir: {formatTanggalWaktu(lastWarningAt)}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex flex-col gap-2 w-full sm:w-auto shrink-0">
+                              <button
+                                onClick={() => setSelectedStudent(s.key)}
+                                className="w-full sm:w-auto px-3 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700 active:scale-[0.98] transition"
+                              >
+                                Lihat Detail
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleSendStudentWarning(s)}
+                                disabled={sendingWarningStudentId === studentUid || alreadyWarnedToday || !studentUid}
+                                className={`w-full sm:w-auto px-3 py-2 text-xs font-semibold rounded-lg border transition disabled:opacity-50 ${
+                                  darkMode
+                                    ? "border-orange-500/30 bg-orange-500/10 text-orange-300 hover:bg-orange-500/20"
+                                    : "border-orange-300 bg-orange-50 text-orange-700 hover:bg-orange-100"
+                                }`}
+                              >
+                                {sendingWarningStudentId === studentUid
+                                  ? "Mengirim..."
+                                  : alreadyWarnedToday
+                                  ? "Peringatan Hari Ini Sudah Dikirim"
+                                  : "Kirim Peringatan"}
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <p className="font-bold text-slate-800 break-words">
-                            {s.name}{" "}
-                            <span className="font-normal text-slate-500 text-xs">
-                              · Kelas {s.classCode}
-                              {s.gender ? ` · ${formatGender(s.gender)}` : ""}
-                            </span>
-                          </p>
-                          <ul className="list-disc list-inside text-xs text-slate-600 mt-1 space-y-0.5">
-                            {s.reasons.map((r, i) => (
-                              <li key={`${s.key}-${r}-${i}`}>{r}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => setSelectedStudent(s.key)}
-                        className="w-full sm:w-auto shrink-0 px-3 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700 active:scale-[0.98] transition"
-                      >
-                        Lihat Detail
-                      </button>
-                    </div>
-                  </div>
-                    ))}
+                      );
+                    })}
                     </div>
                   </section>
                 ))}
@@ -3236,6 +3449,41 @@ export default function TeacherDashboard() {
                     ))}
                   </select>
                 </div>
+
+                {/* Pending Journal Warning */}
+                {pendingJournalsByClass.length > 0 && (
+                  <div className={`rounded-2xl border p-4 ${darkMode ? "border-yellow-500/30 bg-gradient-to-r from-yellow-900/20 to-amber-900/10" : "border-yellow-200 bg-gradient-to-r from-yellow-50 to-amber-50"}`}>
+                    <div className="flex items-start gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${darkMode ? "bg-yellow-500/20 text-yellow-400" : "bg-yellow-100 text-yellow-600"}`}>
+                        <Clock className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1">
+                        <p className={`text-sm font-semibold ${darkMode ? "text-yellow-200" : "text-yellow-800"}`}>
+                          Jurnal Sudah Diupload, Belum Divalidasi
+                        </p>
+                        <p className={`text-xs mt-1 mb-3 ${darkMode ? "text-yellow-300/70" : "text-yellow-700/70"}`}>
+                          Murid sudah mengirim jurnal berikut, namun guru belum melakukan validasi:
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {pendingJournalsByClass.map(([classCode, count]) => (
+                            <button
+                              key={classCode}
+                              type="button"
+                              onClick={() => jumpToJournalClass(classCode)}
+                              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all hover:scale-105 ${
+                                journalClassFilter === classCode
+                                  ? darkMode ? "border-yellow-400 bg-yellow-500/30 text-yellow-200" : "border-yellow-400 bg-yellow-200 text-yellow-900"
+                                  : darkMode ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-300 hover:bg-yellow-500/20" : "border-yellow-200 bg-white/70 text-yellow-800 hover:bg-yellow-100"
+                              }`}
+                            >
+                              Kelas {classCode}: {count} jurnal
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {/* Missing Feedback Warning */}
                 {missingValidationFeedbackByClass.length > 0 && (

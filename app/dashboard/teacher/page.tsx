@@ -887,22 +887,22 @@ function CuteBackground({ mouse }: { mouse: { x: number; y: number } }) {
 
       <div
         className="absolute -top-24 -left-24 w-72 h-72 bg-pink-200/40 rounded-full blur-3xl transition-transform duration-700 ease-out"
-        style={{ transform: `translate(${dx * 0.3}px, ${dy * 0.3}px)` }}
+        style={{ transform: `translate(${dx * 0.3}px, ${dy * 0.3}px) translateZ(0)`, willChange: "transform" }}
       />
       <div
         className="absolute -bottom-24 -right-24 w-72 h-72 bg-teal-200/40 rounded-full blur-3xl transition-transform duration-700 ease-out"
-        style={{ transform: `translate(${-dx * 0.3}px, ${-dy * 0.3}px)` }}
+        style={{ transform: `translate(${-dx * 0.3}px, ${-dy * 0.3}px) translateZ(0)`, willChange: "transform" }}
       />
       <div
         className="absolute top-1/3 right-1/4 w-56 h-56 bg-amber-100/40 rounded-full blur-3xl transition-transform duration-700 ease-out"
-        style={{ transform: `translate(${dx * 0.2}px, ${-dy * 0.2}px)` }}
+        style={{ transform: `translate(${dx * 0.2}px, ${-dy * 0.2}px) translateZ(0)`, willChange: "transform" }}
       />
 
       {floaters.map(({ Icon, top, left, size, depth, color, duration, delay }, i) => (
         <div
           key={`${Icon.displayName ?? "floater"}-${top}-${left}-${size}-${i}`}
           className="absolute transition-transform duration-500 ease-out hidden xs:block"
-          style={{ top, left, transform: `translate(${dx * depth}px, ${dy * depth}px)` }}
+          style={{ top, left, transform: `translate(${dx * depth}px, ${dy * depth}px) translateZ(0)`, willChange: "transform" }}
         >
           <div
             className="cute-float-item"
@@ -1060,6 +1060,7 @@ export default function TeacherDashboard() {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const swipeStartX = useRef<number | null>(null);
+  const swipeStartTime = useRef<number | null>(null);
 
   const handleSwipeStart = (event: React.TouchEvent<HTMLDivElement>) => {
     if (!window.matchMedia("(hover: none) and (pointer: coarse)").matches) return;
@@ -1068,19 +1069,30 @@ export default function TeacherDashboard() {
     if (target.closest("[data-weather-scroll='true']")) return;
     if (target.closest("[data-stats-scroll='true']")) return;
     swipeStartX.current = event.touches[0]?.clientX ?? null;
+    swipeStartTime.current = Date.now();
   };
 
   const handleSwipeEnd = (event: React.TouchEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
     if (target.closest("[data-weather-scroll='true']") || target.closest("[data-stats-scroll='true']")) {
       swipeStartX.current = null;
+      swipeStartTime.current = null;
       return;
     }
     const startX = swipeStartX.current;
+    const startTime = swipeStartTime.current;
     swipeStartX.current = null;
-    if (startX === null) return;
+    swipeStartTime.current = null;
+    if (startX === null || startTime === null) return;
     const endX = event.changedTouches[0]?.clientX;
-    if (endX === undefined || Math.abs(endX - startX) < 70) return;
+    if (endX === undefined) return;
+
+    const distance = Math.abs(endX - startX);
+    if (distance < 120) return;
+
+    const duration = Date.now() - startTime;
+    const velocity = distance / Math.max(duration, 1);
+    if (velocity < 0.5) return;
 
     const tabKeys: TabKey[] = ["ringkasan", "jurnal", "pendampingan", "leaderboard", "laporan", "kelola"];
     const currentIndex = tabKeys.indexOf(activeTab);
@@ -2285,6 +2297,7 @@ export default function TeacherDashboard() {
       className={`teacher-dashboard ${darkMode ? "teacher-dark" : ""} min-h-screen w-full overflow-x-hidden relative print:bg-white print:p-0 ${darkMode ? "bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950" : "bg-gradient-to-br from-emerald-50 via-green-50 to-teal-100"}`}
       onTouchStart={handleSwipeStart}
       onTouchEnd={handleSwipeEnd}
+      style={{ contain: "layout style paint" }}
     >
       {darkMode && (
         <style>{`

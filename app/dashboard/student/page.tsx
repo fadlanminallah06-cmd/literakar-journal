@@ -1709,6 +1709,7 @@ export default function StudentDashboard() {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const swipeStartX = useRef<number | null>(null);
+  const swipeStartTime = useRef<number | null>(null);
 
   const handleSwipeStart = (event: React.TouchEvent<HTMLDivElement>) => {
     if (!window.matchMedia("(hover: none) and (pointer: coarse)").matches) return;
@@ -1716,19 +1717,30 @@ export default function StudentDashboard() {
     if (target.closest("nav, button, input, textarea, select, a")) return;
     if (target.closest("[data-weather-scroll='true']")) return;
     swipeStartX.current = event.touches[0]?.clientX ?? null;
+    swipeStartTime.current = Date.now();
   };
 
   const handleSwipeEnd = (event: React.TouchEvent<HTMLDivElement>) => {
     const target = event.target as HTMLElement;
     if (target.closest("[data-weather-scroll='true']")) {
       swipeStartX.current = null;
+      swipeStartTime.current = null;
       return;
     }
     const startX = swipeStartX.current;
+    const startTime = swipeStartTime.current;
     swipeStartX.current = null;
-    if (startX === null) return;
+    swipeStartTime.current = null;
+    if (startX === null || startTime === null) return;
     const endX = event.changedTouches[0]?.clientX;
-    if (endX === undefined || Math.abs(endX - startX) < 70) return;
+    if (endX === undefined) return;
+
+    const distance = Math.abs(endX - startX);
+    if (distance < 120) return;
+
+    const duration = Date.now() - startTime;
+    const velocity = distance / Math.max(duration, 1);
+    if (velocity < 0.5) return;
 
     const tabKeys: TabKey[] = ["beranda", "jurnal", "pohon", "badge", "leaderboard", "riwayat"];
     const currentIndex = tabKeys.indexOf(activeTab);
@@ -2841,6 +2853,7 @@ export default function StudentDashboard() {
       className={`min-h-screen p-2 sm:p-4 md:p-6 relative ${theme.pageBg}`}
       onTouchStart={handleSwipeStart}
       onTouchEnd={handleSwipeEnd}
+      style={{ contain: "layout style" }}
     >
       {/* Modal perayaan Literakar saat target harian tercapai */}
       <GoalCelebrationModal
@@ -2852,12 +2865,12 @@ export default function StudentDashboard() {
       />
 
       {/* Soft decorative blobs — pure CSS, ringan di mobile */}
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className={`absolute -top-24 -left-24 w-72 h-72 rounded-full blur-3xl ${theme.blobA}`} />
-        <div className={`absolute -bottom-24 -right-24 w-72 h-72 rounded-full blur-3xl ${theme.blobB}`} />
+      <div className="pointer-events-none fixed inset-0 overflow-hidden" style={{ willChange: "contents" }}>
+        <div className={`absolute -top-24 -left-24 w-72 h-72 rounded-full blur-3xl ${theme.blobA}`} style={{ transform: "translateZ(0)" }} />
+        <div className={`absolute -bottom-24 -right-24 w-72 h-72 rounded-full blur-3xl ${theme.blobB}`} style={{ transform: "translateZ(0)" }} />
       </div>
 
-      <div className="relative w-full max-w-6xl xl:max-w-7xl 2xl:max-w-[96rem] mx-auto lg:px-2">
+      <div className="relative w-full max-w-6xl xl:max-w-7xl 2xl:max-w-[96rem] mx-auto lg:px-2" style={{ contain: "layout style paint" }}>
         <header className={`relative overflow-hidden flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 sm:gap-4 lg:gap-5 mb-4 sm:mb-6 p-3.5 sm:p-4 lg:p-5 rounded-2xl shadow-md border backdrop-blur-sm ${theme.panel}`}>
           <div className={`pointer-events-none absolute inset-x-0 top-0 h-0.5 ${darkMode ? "bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-400" : "bg-gradient-to-r from-emerald-500 via-teal-400 to-amber-300"}`} />
           <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 w-full sm:flex-1">

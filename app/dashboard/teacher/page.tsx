@@ -2297,7 +2297,6 @@ export default function TeacherDashboard() {
       className={`teacher-dashboard ${darkMode ? "teacher-dark" : ""} min-h-screen w-full overflow-x-hidden relative print:bg-white print:p-0 ${darkMode ? "bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950" : "bg-gradient-to-br from-emerald-50 via-green-50 to-teal-100"}`}
       onTouchStart={handleSwipeStart}
       onTouchEnd={handleSwipeEnd}
-      style={{ contain: "layout style paint" }}
     >
       {darkMode && (
         <style>{`
@@ -4744,7 +4743,7 @@ export default function TeacherDashboard() {
           onClick={handleScrollToTop}
           aria-label="Kembali ke atas"
           title="Kembali ke atas"
-          className={`fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] right-4 z-40 flex h-12 w-12 touch-manipulation select-none items-center justify-center rounded-2xl border shadow-lg transition duration-200 hover:-translate-y-0.5 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 motion-reduce:transition-none sm:bottom-7 sm:right-7 sm:h-11 sm:w-11 sm:rounded-full ${
+          className={`fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] right-4 z-50 flex h-12 w-12 touch-manipulation select-none items-center justify-center rounded-2xl border shadow-lg transition duration-200 hover:-translate-y-0.5 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 motion-reduce:transition-none sm:bottom-7 sm:right-7 sm:h-11 sm:w-11 sm:rounded-full ${
             darkMode
               ? "border-emerald-700 bg-slate-800 text-emerald-300 shadow-black/30 hover:bg-slate-700"
               : "border-emerald-200 bg-white text-emerald-700 shadow-emerald-900/15 hover:bg-emerald-50"

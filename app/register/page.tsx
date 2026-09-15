@@ -120,21 +120,21 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-green-50 to-teal-100 flex items-center justify-center p-4 relative">
+    <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-green-50 to-teal-100 flex items-center justify-center p-4 sm:p-6 relative">
       {/* Soft decorative blobs — konsisten dengan dashboard */}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -top-24 -left-24 w-72 h-72 bg-emerald-200/40 rounded-full blur-3xl" />
-        <div className="absolute -bottom-24 -right-24 w-72 h-72 bg-teal-200/40 rounded-full blur-3xl" />
+        <div className="absolute -top-24 -left-24 w-72 h-72 sm:w-96 sm:h-96 bg-emerald-200/40 rounded-full blur-3xl" />
+        <div className="absolute -bottom-24 -right-24 w-72 h-72 sm:w-96 sm:h-96 bg-teal-200/40 rounded-full blur-3xl" />
       </div>
 
       <div className="relative w-full max-w-md">
-        <div className="bg-white/80 backdrop-blur-sm p-8 rounded-2xl shadow-sm shadow-emerald-900/5 border border-white w-full">
+        <div className="bg-white/80 backdrop-blur-sm p-6 sm:p-8 rounded-2xl shadow-sm shadow-emerald-900/5 border border-white w-full">
           {/* Header */}
           <div className="flex flex-col items-center mb-6">
             <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mb-3">
               <Sprout className="w-6 h-6" />
             </div>
-            <h2 className="text-xl font-bold text-center text-emerald-900">
+            <h2 className="text-xl sm:text-2xl font-bold text-center text-emerald-900">
               Daftar Akun Baru
             </h2>
             <p className="text-sm text-emerald-700/60 text-center mt-1">
@@ -143,15 +143,18 @@ export default function RegisterPage() {
           </div>
 
           {error && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2 mb-4">
-              {error}
-            </p>
+            <div className="flex items-start gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5 mb-4">
+              <svg className="w-4 h-4 mt-0.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+              </svg>
+              <span>{error}</span>
+            </div>
           )}
 
           <form onSubmit={handleRegister} className="space-y-4">
             {/* Nama */}
             <div>
-              <label className="text-xs text-emerald-700/70 mb-1 block">
+              <label className="text-xs font-medium text-emerald-700/70 mb-1.5 block">
                 Nama Lengkap
               </label>
               <div className="relative">
@@ -162,7 +165,7 @@ export default function RegisterPage() {
                   type="text"
                   required
                   placeholder="Nama sesuai identitas"
-                  className="w-full pl-10 pr-3 p-2 text-sm text-slate-800 bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 transition"
+                  className="w-full pl-10 pr-3 py-2.5 text-sm text-slate-800 bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 focus:bg-white transition placeholder:text-emerald-700/30"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                 />
@@ -171,7 +174,7 @@ export default function RegisterPage() {
 
             {/* Email */}
             <div>
-              <label className="text-xs text-emerald-700/70 mb-1 block">Email</label>
+              <label className="text-xs font-medium text-emerald-700/70 mb-1.5 block">Email</label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Mail className="w-4 h-4 text-blue-600" />
@@ -180,7 +183,7 @@ export default function RegisterPage() {
                   type="email"
                   required
                   placeholder="nama@email.com"
-                  className="w-full pl-10 pr-3 p-2 text-sm text-slate-800 bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition"
+                  className="w-full pl-10 pr-3 py-2.5 text-sm text-slate-800 bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:bg-white transition placeholder:text-emerald-700/30"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                 />
@@ -189,7 +192,7 @@ export default function RegisterPage() {
 
             {/* Password */}
             <div>
-              <label className="text-xs text-emerald-700/70 mb-1 block">Password</label>
+              <label className="text-xs font-medium text-emerald-700/70 mb-1.5 block">Password</label>
               <div className="relative">
                 <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                   <Lock className="w-4 h-4 text-orange-500" />
@@ -199,14 +202,14 @@ export default function RegisterPage() {
                   required
                   minLength={6}
                   placeholder="Minimal 6 karakter"
-                  className="w-full pl-10 pr-10 p-2 text-sm text-slate-800 bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400 transition"
+                  className="w-full pl-10 pr-10 py-2.5 text-sm text-slate-800 bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400 focus:bg-white transition placeholder:text-emerald-700/30"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-emerald-700/40 hover:text-emerald-700/70"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-emerald-700/40 hover:text-emerald-700/70 transition-colors"
                   aria-label={showPassword ? "Sembunyikan password" : "Tampilkan password"}
                 >
                   {showPassword ? (
@@ -220,17 +223,17 @@ export default function RegisterPage() {
 
             {/* Peran Pengguna */}
             <div>
-              <label className="text-xs text-emerald-700/70 mb-1.5 block">
+              <label className="text-xs font-medium text-emerald-700/70 mb-1.5 block">
                 Peran Pengguna
               </label>
               <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => setRole("student")}
-                  className={`flex flex-col items-center gap-1.5 rounded-xl border py-3 px-2 transition ${
+                  className={`flex flex-col items-center gap-1.5 rounded-xl border py-3 px-2 transition active:scale-[0.98] ${
                     role === "student"
-                      ? "bg-emerald-100 border-emerald-300 text-emerald-900"
-                      : "border-emerald-200 text-emerald-700/60 hover:bg-emerald-50"
+                      ? "bg-emerald-100 border-emerald-300 text-emerald-900 shadow-sm shadow-emerald-200/50"
+                      : "border-emerald-200 text-emerald-700/60 hover:bg-emerald-50 hover:border-emerald-300"
                   }`}
                 >
                   <BookOpen className="w-5 h-5" />
@@ -239,10 +242,10 @@ export default function RegisterPage() {
                 <button
                   type="button"
                   onClick={() => setRole("teacher")}
-                  className={`flex flex-col items-center gap-1.5 rounded-xl border py-3 px-2 transition ${
+                  className={`flex flex-col items-center gap-1.5 rounded-xl border py-3 px-2 transition active:scale-[0.98] ${
                     role === "teacher"
-                      ? "bg-blue-100 border-blue-300 text-blue-700"
-                      : "border-emerald-200 text-emerald-700/60 hover:bg-emerald-50"
+                      ? "bg-blue-100 border-blue-300 text-blue-700 shadow-sm shadow-blue-200/50"
+                      : "border-emerald-200 text-emerald-700/60 hover:bg-emerald-50 hover:border-emerald-300"
                   }`}
                 >
                   <GraduationCap className="w-5 h-5" />
@@ -250,15 +253,16 @@ export default function RegisterPage() {
                 </button>
               </div>
               {role === "teacher" && (
-                <p className="text-xs text-blue-700/70 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2 mt-2">
-                  Masukkan kode rahasia dari admin sekolah untuk membuat akun guru.
-                </p>
+                <div className="flex items-start gap-2 text-xs text-blue-700/70 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2.5 mt-2">
+                  <ShieldCheck className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                  <span>Masukkan kode rahasia dari admin sekolah untuk membuat akun guru.</span>
+                </div>
               )}
             </div>
 
             {role === "teacher" && (
               <div>
-                <label className="text-xs text-emerald-700/70 mb-1 block">Kode Rahasia Guru</label>
+                <label className="text-xs font-medium text-emerald-700/70 mb-1.5 block">Kode Rahasia Guru</label>
                 <div className="relative">
                   <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-600" />
                   <input
@@ -267,7 +271,7 @@ export default function RegisterPage() {
                     value={teacherCode}
                     onChange={(e) => setTeacherCode(e.target.value)}
                     placeholder="Masukkan kode rahasia"
-                    className="w-full pl-10 pr-3 p-2 text-sm text-slate-800 bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition"
+                    className="w-full pl-10 pr-3 py-2.5 text-sm text-slate-800 bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 focus:bg-white transition placeholder:text-emerald-700/30"
                   />
                 </div>
               </div>
@@ -276,7 +280,7 @@ export default function RegisterPage() {
             {/* Pilih Kelas — hanya untuk siswa */}
             {role === "student" && (
               <div>
-                <label className="text-xs text-emerald-700/70 mb-1 block">Pilih Kelas</label>
+                <label className="text-xs font-medium text-emerald-700/70 mb-1.5 block">Pilih Kelas</label>
                 <div className="relative">
                   <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <KeySquare className="w-4 h-4 text-yellow-600" />
@@ -285,7 +289,7 @@ export default function RegisterPage() {
                     required
                     value={classCode}
                     onChange={(e) => setClassCode(e.target.value)}
-                    className="w-full pl-10 pr-8 p-2 text-sm text-slate-800 bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 transition appearance-none"
+                    className="w-full pl-10 pr-8 py-2.5 text-sm text-slate-800 bg-emerald-50/50 border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-yellow-400 focus:border-yellow-400 focus:bg-white transition appearance-none cursor-pointer"
                   >
                     <option value="" disabled>
                       Pilih kelas kamu
@@ -313,17 +317,17 @@ export default function RegisterPage() {
             {/* Gender — hanya untuk siswa */}
             {role === "student" && (
               <div>
-                <label className="text-xs text-emerald-700/70 mb-1.5 block">
+                <label className="text-xs font-medium text-emerald-700/70 mb-1.5 block">
                   Gender
                 </label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => setGender("laki-laki")}
-                    className={`flex items-center justify-center gap-2 rounded-xl border py-2.5 px-2 transition ${
+                    className={`flex items-center justify-center gap-2 rounded-xl border py-2.5 px-2 transition active:scale-[0.98] ${
                       gender === "laki-laki"
-                        ? "bg-emerald-100 border-emerald-300 text-emerald-900"
-                        : "border-emerald-200 text-emerald-700/60 hover:bg-emerald-50"
+                        ? "bg-emerald-100 border-emerald-300 text-emerald-900 shadow-sm shadow-emerald-200/50"
+                        : "border-emerald-200 text-emerald-700/60 hover:bg-emerald-50 hover:border-emerald-300"
                     }`}
                   >
                     <Users className="w-4 h-4" />
@@ -333,10 +337,10 @@ export default function RegisterPage() {
                   <button
                     type="button"
                     onClick={() => setGender("perempuan")}
-                    className={`flex items-center justify-center gap-2 rounded-xl border py-2.5 px-2 transition ${
+                    className={`flex items-center justify-center gap-2 rounded-xl border py-2.5 px-2 transition active:scale-[0.98] ${
                       gender === "perempuan"
-                        ? "bg-pink-100 border-pink-300 text-pink-800"
-                        : "border-emerald-200 text-emerald-700/60 hover:bg-emerald-50"
+                        ? "bg-pink-100 border-pink-300 text-pink-800 shadow-sm shadow-pink-200/50"
+                        : "border-emerald-200 text-emerald-700/60 hover:bg-emerald-50 hover:border-emerald-300"
                     }`}
                   >
                     <Users className="w-4 h-4" />
@@ -349,9 +353,19 @@ export default function RegisterPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 active:scale-[0.98] transition disabled:opacity-50 disabled:active:scale-100"
+              className="w-full py-3 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 active:scale-[0.98] transition disabled:opacity-50 disabled:active:scale-100 shadow-sm shadow-emerald-600/20 mt-2"
             >
-              {loading ? "Mendaftarkan..." : "Daftar Akun"}
+              {loading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <svg className="animate-spin w-4 h-4" viewBox="0 0 24 24" fill="none">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Mendaftarkan...
+                </span>
+              ) : (
+                "Daftar Akun"
+              )}
             </button>
           </form>
 
@@ -359,7 +373,7 @@ export default function RegisterPage() {
             Sudah punya akun?{" "}
             <Link
               href="/login"
-              className="text-emerald-700 font-semibold hover:text-emerald-800 hover:underline"
+              className="text-emerald-700 font-semibold hover:text-emerald-800 hover:underline transition-colors"
             >
               Masuk
             </Link>

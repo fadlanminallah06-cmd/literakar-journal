@@ -1047,6 +1047,7 @@ export default function TeacherDashboard() {
   const [selectedJournalIds, setSelectedJournalIds] = useState<Set<string>>(new Set());
   const [bulkJournalLoading, setBulkJournalLoading] = useState(false);
   const [journalClassFilter, setJournalClassFilter] = useState("all");
+  const [journalStudentSearch, setJournalStudentSearch] = useState("");
   const [sendingWarningStudentId, setSendingWarningStudentId] = useState<string | null>(null);
   // id jurnal yang sedang dihapus -> mencegah klik ganda dan memberi feedback visual
   const [deleteJournalLoading, setDeleteJournalLoading] = useState<string | null>(null);
@@ -1920,12 +1921,22 @@ export default function TeacherDashboard() {
         ),
       }));
   }, [journals]);
-  const filteredGroupedJournalsByClass = useMemo(
-    () => journalClassFilter === "all"
-      ? groupedJournalsByClass
-      : groupedJournalsByClass.filter(({ classCode }) => classCode === journalClassFilter),
-    [groupedJournalsByClass, journalClassFilter]
-  );
+  const filteredGroupedJournalsByClass = useMemo(() => {
+    const studentQuery = journalStudentSearch.trim().toLowerCase();
+
+    const filteredByStudent = groupedJournalsByClass
+      .map(({ classCode, journals: classJournals }) => ({
+        classCode,
+        journals: studentQuery
+          ? classJournals.filter((journal) => (journal.studentName || "").toLowerCase().includes(studentQuery))
+          : classJournals,
+      }))
+      .filter(({ journals }) => journals.length > 0);
+
+    return journalClassFilter === "all"
+      ? filteredByStudent
+      : filteredByStudent.filter(({ classCode }) => classCode === journalClassFilter);
+  }, [groupedJournalsByClass, journalClassFilter, journalStudentSearch]);
   const missingValidationFeedbackByClass = useMemo(() => {
     const counts = new Map<string, number>();
     journals.forEach((journal) => {
@@ -2316,8 +2327,129 @@ export default function TeacherDashboard() {
           .teacher-dark input, .teacher-dark select { color-scheme: dark; }
           .teacher-dark input, .teacher-dark select { background-color: rgba(51, 65, 85, 0.5) !important; color: #ecfdf5 !important; border-color: rgba(52, 211, 153, 0.35) !important; }
           .teacher-dark input::placeholder { color: rgba(167, 243, 208, 0.5) !important; }
+          
+          /* Download Button Animations */
+          @keyframes downloadPulse {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-3px); }
+          }
+          
+          @keyframes iconSpin {
+            0% { transform: rotate(0deg) scale(1); }
+            50% { transform: rotate(180deg) scale(1.1); }
+            100% { transform: rotate(360deg) scale(1); }
+          }
+          
+          @keyframes glowPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.4), inset 0 1px 2px rgba(0,0,0,0.1); }
+            50% { box-shadow: 0 0 20px 8px rgba(5, 150, 105, 0.15), inset 0 1px 2px rgba(0,0,0,0.1); }
+          }
+          
+          @keyframes gradientShift {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+          }
+          
+          @keyframes ripple {
+            0% { transform: scale(0); opacity: 1; }
+            100% { transform: scale(4); opacity: 0; }
+          }
+          
+          .download-btn {
+            position: relative;
+            overflow: hidden;
+          }
+          
+          .download-btn:hover {
+            animation: glowPulse 2s ease-in-out;
+          }
+          
+          .download-btn-icon {
+            display: inline-block;
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+          }
+          
+          .download-btn:hover .download-btn-icon {
+            animation: iconSpin 0.6s ease-in-out;
+          }
+          
+          .download-btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            transform: scale(0);
+            pointer-events: none;
+          }
+          
+          .download-btn:active::before {
+            animation: ripple 0.6s ease-out;
+          }
         `}</style>
       )}
+      <style>{`
+        /* Download Button Animations - Always available */
+        @keyframes downloadPulse {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-3px); }
+        }
+        
+        @keyframes iconSpin {
+          0% { transform: rotate(0deg) scale(1); }
+          50% { transform: rotate(180deg) scale(1.1); }
+          100% { transform: rotate(360deg) scale(1); }
+        }
+        
+        @keyframes glowPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(5, 150, 105, 0.4), inset 0 1px 2px rgba(0,0,0,0.1); }
+          50% { box-shadow: 0 0 20px 8px rgba(5, 150, 105, 0.15), inset 0 1px 2px rgba(0,0,0,0.1); }
+        }
+        
+        @keyframes ripple {
+          0% { transform: scale(0); opacity: 1; }
+          100% { transform: scale(4); opacity: 0; }
+        }
+        
+        .download-btn {
+          position: relative;
+          overflow: hidden;
+        }
+        
+        .download-btn:hover {
+          animation: glowPulse 2s ease-in-out;
+        }
+        
+        .download-btn-icon {
+          display: inline-block;
+          transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        
+        .download-btn:hover .download-btn-icon {
+          animation: iconSpin 0.6s ease-in-out;
+        }
+        
+        .download-btn::before {
+          content: '';
+          position: absolute;
+          top: 50%;
+          left: 50%;
+          width: 100%;
+          height: 100%;
+          background: rgba(255, 255, 255, 0.3);
+          border-radius: 50%;
+          transform: scale(0);
+          pointer-events: none;
+        }
+        
+        .download-btn:active::before {
+          animation: ripple 0.6s ease-out;
+        }
+      `}</style>
       <CuteBackground mouse={mousePos} />
 
       <div className="relative w-full max-w-6xl xl:max-w-7xl 2xl:max-w-[96rem] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 box-border print:hidden">
@@ -3441,25 +3573,48 @@ export default function TeacherDashboard() {
               {/* Filter & Bulk Actions */}
               <div className="space-y-4">
                 {/* Class Filter */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                  <label htmlFor="teacher-journal-class-filter" className={`text-xs font-semibold uppercase tracking-wider ${darkMode ? "text-emerald-400" : "text-emerald-600"}`}>
-                    Filter Kelas
-                  </label>
-                  <select
-                    id="teacher-journal-class-filter"
-                    value={journalClassFilter}
-                    onChange={(event) => setJournalClassFilter(event.target.value)}
-                    className={`flex-1 sm:flex-none sm:w-48 px-4 py-2.5 text-sm border rounded-xl outline-none transition focus:ring-2 focus:ring-emerald-400 ${
-                      darkMode
-                        ? "border-slate-600 bg-slate-800/60 text-emerald-100"
-                        : "border-emerald-200 bg-white text-emerald-900"
-                    }`}
-                  >
-                    <option value="all">Semua Kelas</option>
-                    {availableClasses.map((classCode) => (
-                      <option key={classCode} value={classCode}>Kelas {classCode}</option>
-                    ))}
-                  </select>
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                    <label htmlFor="teacher-journal-class-filter" className={`text-xs font-semibold uppercase tracking-wider ${darkMode ? "text-emerald-400" : "text-emerald-600"}`}>
+                      Filter Kelas
+                    </label>
+                    <select
+                      id="teacher-journal-class-filter"
+                      value={journalClassFilter}
+                      onChange={(event) => setJournalClassFilter(event.target.value)}
+                      className={`flex-1 sm:flex-none sm:w-48 px-4 py-2.5 text-sm border rounded-xl outline-none transition focus:ring-2 focus:ring-emerald-400 ${
+                        darkMode
+                          ? "border-slate-600 bg-slate-800/60 text-emerald-100"
+                          : "border-emerald-200 bg-white text-emerald-900"
+                      }`}
+                    >
+                      <option value="all">Semua Kelas</option>
+                      {availableClasses.map((classCode) => (
+                        <option key={classCode} value={classCode}>Kelas {classCode}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:ml-auto lg:min-w-[320px]">
+                    <label htmlFor="teacher-journal-student-search" className={`text-xs font-semibold uppercase tracking-wider ${darkMode ? "text-emerald-400" : "text-emerald-600"}`}>
+                      Cari Siswa
+                    </label>
+                    <div className="relative flex-1">
+                      <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? "text-emerald-400/60" : "text-emerald-600/60"}`} />
+                      <input
+                        id="teacher-journal-student-search"
+                        type="text"
+                        value={journalStudentSearch}
+                        onChange={(event) => setJournalStudentSearch(event.target.value)}
+                        placeholder="Nama siswa..."
+                        className={`w-full pl-9 pr-4 py-2.5 text-sm border rounded-xl outline-none transition focus:ring-2 focus:ring-emerald-400 ${
+                          darkMode
+                            ? "border-slate-600 bg-slate-800/60 text-emerald-100 placeholder:text-emerald-400/40"
+                            : "border-emerald-200 bg-white text-emerald-900 placeholder:text-emerald-700/40"
+                        }`}
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {/* Pending Journal Warning */}
@@ -3611,7 +3766,9 @@ export default function TeacherDashboard() {
                 <div className={`text-center py-12 rounded-2xl border-2 border-dashed ${darkMode ? "border-slate-700 bg-slate-800/30" : "border-emerald-200 bg-emerald-50/30"}`}>
                   <Search className={`w-12 h-12 mx-auto mb-3 ${darkMode ? "text-slate-600" : "text-emerald-300"}`} />
                   <p className={`text-sm font-medium ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
-                    Tidak ada jurnal pada kelas yang dipilih
+                    {journalStudentSearch.trim()
+                      ? `Tidak ada jurnal dari siswa dengan nama "${journalStudentSearch.trim()}" pada filter yang dipilih.`
+                      : "Tidak ada jurnal pada kelas yang dipilih"}
                   </p>
                 </div>
               ) : (
@@ -4346,23 +4503,23 @@ export default function TeacherDashboard() {
             <div className="flex flex-wrap gap-3">
               <button
                 onClick={handleExportCSV}
-                className="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 active:scale-[0.98] transition"
+                className="download-btn flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-sm font-semibold rounded-xl hover:from-emerald-700 hover:to-emerald-600 active:scale-[0.98] transition duration-300 shadow-lg hover:shadow-emerald-600/40"
               >
-                <Download className="w-4 h-4" />
+                <Download className="download-btn-icon w-4 h-4" />
                 Unduh CSV / Excel (Detail)
               </button>
               <button
                 onClick={handleExportBooksAndCharacters}
-                className="flex items-center gap-2 px-4 py-2 bg-teal-600 text-white text-sm font-semibold rounded-xl hover:bg-teal-700 active:scale-[0.98] transition"
+                className="download-btn flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-600 to-teal-500 text-white text-sm font-semibold rounded-xl hover:from-teal-700 hover:to-teal-600 active:scale-[0.98] transition duration-300 shadow-lg hover:shadow-teal-600/40"
               >
-                <Download className="w-4 h-4" />
+                <Download className="download-btn-icon w-4 h-4" />
                 Unduh Buku & Karakter
               </button>
               <button
                 onClick={handlePrint}
-                className="flex items-center gap-2 px-4 py-2 border border-emerald-200 text-emerald-800 text-sm font-semibold rounded-xl hover:bg-emerald-50 active:scale-[0.98] transition"
+                className="download-btn flex items-center gap-2 px-4 py-2 border border-emerald-200 text-emerald-800 text-sm font-semibold rounded-xl hover:bg-emerald-50 active:scale-[0.98] transition duration-300 hover:border-emerald-400 hover:shadow-lg hover:shadow-emerald-600/20"
               >
-                <Printer className="w-4 h-4" />
+                <Printer className="download-btn-icon w-4 h-4" />
                 Cetak
               </button>
             </div>

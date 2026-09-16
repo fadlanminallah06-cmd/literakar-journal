@@ -1806,11 +1806,24 @@ export default function StudentDashboard() {
   }, []);
 
   useEffect(() => {
-    const handleScroll = () => setShowScrollTop(window.scrollY > 400);
+    let frameId: number | null = null;
+    const handleScroll = () => {
+      if (frameId !== null) return;
+      frameId = window.requestAnimationFrame(() => {
+        setShowScrollTop((current) => {
+          const next = window.scrollY > 400;
+          return current === next ? current : next;
+        });
+        frameId = null;
+      });
+    };
 
     handleScroll();
     window.addEventListener("scroll", handleScroll, { passive: true });
-    return () => window.removeEventListener("scroll", handleScroll);
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      if (frameId !== null) window.cancelAnimationFrame(frameId);
+    };
   }, []);
 
   const handleScrollToTop = () => {
@@ -2850,7 +2863,7 @@ export default function StudentDashboard() {
 
   return (
     <div
-      className={`min-h-screen p-2 sm:p-4 md:p-6 relative ${theme.pageBg}`}
+      className={`min-h-screen p-2 sm:p-4 md:p-6 relative touch-pan-y ${theme.pageBg}`}
       onTouchStart={handleSwipeStart}
       onTouchEnd={handleSwipeEnd}
     >

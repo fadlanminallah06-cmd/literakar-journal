@@ -329,12 +329,6 @@ function getStudentIdentityKey(studentId: string | undefined | null, name: strin
   return `legacy:${(classCode || "-").trim()}|${(name || "Tanpa Nama").trim().toLowerCase()}`;
 }
 
-function getStartOfMonth(date: Date): Date {
-  const start = new Date(date.getFullYear(), date.getMonth(), 1);
-  start.setHours(0, 0, 0, 0);
-  return start;
-}
-
 function getCharacterList(j: Journal): string[] {
   if (j.characterValues && j.characterValues.length > 0) return j.characterValues;
   if (j.characterValue) return [j.characterValue];
@@ -1059,6 +1053,8 @@ export default function TeacherDashboard() {
   const [reportStudentSearch, setReportStudentSearch] = useState("");
   const [classSummaryMonth, setClassSummaryMonth] = useState(getCurrentMonthInput());
   const [studentSummaryMonth, setStudentSummaryMonth] = useState(getCurrentMonthInput());
+  const [overviewPeriod, setOverviewPeriod] = useState<ReportPeriod>("month");
+  const [overviewMonth, setOverviewMonth] = useState(getCurrentMonthInput());
   const [classSummaryClass, setClassSummaryClass] = useState("all");
   const [editingStudent, setEditingStudent] = useState<RosterStudent | null>(null);
   const [studentForm, setStudentForm] = useState({ name: "", classCode: "", gender: "" });
@@ -1791,6 +1787,15 @@ export default function TeacherDashboard() {
     [journals, allStudents, studentSummaryMonth]
   );
 
+  const overviewJournals = useMemo(
+    () => overviewPeriod === "all" ? journals : filterJournalsByJakartaMonth(journals, overviewMonth),
+    [journals, overviewMonth, overviewPeriod]
+  );
+  const overviewStudentSummaries = useMemo(
+    () => buildStudentSummaries(overviewJournals, allStudents),
+    [overviewJournals, allStudents]
+  );
+
   const availableClasses = useMemo(() => {
     const set = new Set<string>();
     journals.forEach((j) => {
@@ -1871,23 +1876,20 @@ export default function TeacherDashboard() {
   }, [allStudents, managementStudentSearch, managementClassFilter]);
 
   const classStats = useMemo(() => {
-    const totalSiswa = studentSummaries.length;
-    const totalJurnal = journals.length;
-    const totalTervalidasi = journals.filter((j) => getStatusInfo(j.status).key === "approved").length;
-    const totalRevisi = journals.filter((j) => getStatusInfo(j.status).key === "revision").length;
+    const totalSiswa = allStudents.length;
+    const totalJurnal = overviewJournals.length;
+    const totalTervalidasi = overviewJournals.filter((j) => getStatusInfo(j.status).key === "approved").length;
+    const totalRevisi = overviewJournals.filter((j) => getStatusInfo(j.status).key === "revision").length;
     const totalMenunggu = totalJurnal - totalTervalidasi - totalRevisi;
     const rataRata = totalSiswa > 0 ? totalJurnal / totalSiswa : 0;
-    const totalHalaman = studentSummaries.reduce((acc, s) => acc + s.totalPagesRead, 0);
-    const totalBukuSelesai = studentSummaries.reduce((acc, s) => acc + s.booksFinished, 0);
+    const totalHalaman = overviewStudentSummaries.reduce((acc, s) => acc + s.totalPagesRead, 0);
+    const totalBukuSelesai = overviewStudentSummaries.reduce((acc, s) => acc + s.booksFinished, 0);
+    const feedbackCount = overviewJournals.filter(
+      (journal) => getStatusInfo(journal.status).key === "approved" && !journal.teacherFeedback?.trim()
+    ).length;
 
-    const startOfMonth = getStartOfMonth(new Date());
-    const jurnalBulanIni = journals.filter((j) => {
-      const d = toDateSafe(j.createdAt);
-      return d ? d >= startOfMonth : false;
-    }).length;
-
-    const topBooks = getTopBooks(journals, 5);
-    const topCharacters = getTopCharacters(journals, 5);
+    const topBooks = getTopBooks(overviewJournals, 5);
+    const topCharacters = getTopCharacters(overviewJournals, 5);
 
     return {
       totalSiswa,
@@ -1898,13 +1900,13 @@ export default function TeacherDashboard() {
       rataRata,
       totalHalaman,
       totalBukuSelesai,
-      jurnalBulanIni,
+      feedbackCount,
       topBooks,
       topCharacters,
       bukuTerpopuler: topBooks[0] || null,
       nilaiKarakterTerbanyak: topCharacters[0] || null,
     };
-  }, [journals, studentSummaries]);
+  }, [allStudents, overviewJournals, overviewStudentSummaries]);
 
   useEffect(() => {
     if (!user || !["teacher", "admin"].includes(userProfile?.role || "")) return;
@@ -2677,12 +2679,64 @@ export default function TeacherDashboard() {
             Rekap Seluruh Siswa
           </h2>
           <p className="text-sm text-emerald-700/70 mt-1">
-            Pantau perkembangan literasi siswa secara real-time
+            Ringkasan aktivitas {overviewPeriod === "all" ? "sepanjang waktu" : `untuk ${formatMonthLabel(overviewMonth)}`}
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs sm:text-sm text-emerald-600 bg-emerald-50/80 px-3 py-1.5 rounded-full border border-emerald-100 w-fit">
-          <CalendarCheck className="w-4 h-4" />
-          <span className="font-medium">{todayLabel}</span>
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <div className="flex items-center rounded-full border border-emerald-100 bg-white/80 p-1 shadow-sm" role="group" aria-label="Periode rekap">
+            <button
+              type="button"
+              onClick={() => setOverviewPeriod("month")}
+              aria-pressed={overviewPeriod === "month"}
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${overviewPeriod === "month" ? "bg-emerald-600 text-white" : "text-emerald-700 hover:bg-emerald-50"}`}
+            >
+              Bulanan
+            </button>
+            <button
+              type="button"
+              onClick={() => setOverviewPeriod("all")}
+              aria-pressed={overviewPeriod === "all"}
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${overviewPeriod === "all" ? "bg-emerald-600 text-white" : "text-emerald-700 hover:bg-emerald-50"}`}
+            >
+              Sepanjang waktu
+            </button>
+          </div>
+          <div className="flex items-center gap-2 text-xs sm:text-sm text-emerald-600 bg-emerald-50/80 px-3 py-1.5 rounded-full border border-emerald-100 w-fit">
+            <CalendarCheck className="w-4 h-4 shrink-0" />
+            <span className="font-medium">{todayLabel}</span>
+          </div>
+          {overviewPeriod === "month" && <div className="flex items-center gap-1 rounded-full border border-emerald-100 bg-white/80 p-1 text-emerald-800 shadow-sm" aria-label="Navigasi bulan rekap">
+            <button
+              type="button"
+              onClick={() => setOverviewMonth((month) => shiftMonthInput(month, -1))}
+              aria-label="Lihat bulan sebelumnya"
+              title="Bulan sebelumnya"
+              className="flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <span className="min-w-[126px] px-1 text-center text-xs font-semibold capitalize sm:text-sm">
+              {formatMonthLabel(overviewMonth)}
+            </span>
+            <button
+              type="button"
+              onClick={() => setOverviewMonth((month) => shiftMonthInput(month, 1))}
+              disabled={overviewMonth >= currentMonthInput}
+              aria-label="Lihat bulan berikutnya"
+              title="Bulan berikutnya"
+              className="flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setOverviewMonth(currentMonthInput)}
+              disabled={overviewMonth === currentMonthInput}
+              className="rounded-full px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 transition hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-default disabled:opacity-50 sm:text-xs"
+            >
+              Bulan ini
+            </button>
+          </div>}
         </div>
       </div>
     </div>
@@ -2696,8 +2750,8 @@ export default function TeacherDashboard() {
         color="blue"
       />
       <StatCard
-        label="Jurnal Bulan Ini"
-        value={classStats.jurnalBulanIni}
+        label="Total Jurnal"
+        value={classStats.totalJurnal}
         icon={<CalendarCheck className="w-4 h-4" />}
         color="yellow"
       />
@@ -2753,7 +2807,7 @@ export default function TeacherDashboard() {
         <div className="min-w-[140px] md:min-w-0 snap-start">
           <StatCard
             label="Perlu Feedback"
-            value={missingValidationFeedbackByClass.reduce((total, [, count]) => total + count, 0)}
+            value={classStats.feedbackCount}
             icon={<Mail className="w-4 h-4" />}
             color="blue"
           />

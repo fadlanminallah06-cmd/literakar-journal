@@ -50,6 +50,7 @@ import {
   FileBarChart2,
   Settings2,
   ChevronRight,
+  ChevronLeft,
   ArrowUp,
   Cloud,
   CloudRain,
@@ -203,6 +204,21 @@ function getCurrentMonthInput(): string {
   const date = new Date();
   const parts = getJakartaDateParts(date);
   return `${parts.year}-${String(parts.month).padStart(2, "0")}`;
+}
+
+function shiftMonthInput(month: string, offset: number): string {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const shifted = new Date(Date.UTC(year, monthNumber - 1 + offset, 1));
+  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function formatMonthLabel(month: string): string {
+  const [year, monthNumber] = month.split("-").map(Number);
+  return new Intl.DateTimeFormat("id-ID", {
+    timeZone: "Asia/Jakarta",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(Date.UTC(year, monthNumber - 1, 1, 12)));
 }
 
 function getJakartaDateParts(date: Date): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
@@ -385,6 +401,16 @@ function filterJournalsByPeriod(
     if (!d) return false;
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
     return key === month;
+  });
+}
+
+function filterJournalsByJakartaMonth(journalsInput: Journal[], month: string): Journal[] {
+  if (!month) return [];
+  return journalsInput.filter((journal) => {
+    const date = toDateSafe(journal.createdAt);
+    if (!date) return false;
+    const parts = getJakartaDateParts(date);
+    return `${parts.year}-${String(parts.month).padStart(2, "0")}` === month;
   });
 }
 
@@ -745,15 +771,18 @@ function StatCard({
 }
 
 /** Simple pure-SVG line chart for daily reading progress (pages) */
-function DailyProgressChart({ journals }: { journals: Journal[] }) {
+function DailyProgressChart({ journals, month }: { journals: Journal[]; month: string }) {
   const data = useMemo(() => {
     const map = new Map<string, number>();
-    const now = new Date();
-    for (let i = 13; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      d.setHours(0, 0, 0, 0);
-      map.set(toJakartaDateKey(d), 0);
+    const [year, monthNumber] = month.split("-").map(Number);
+    const nowParts = getJakartaDateParts(new Date());
+    const daysInMonth = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+    const isCurrentMonth = year === nowParts.year && monthNumber === nowParts.month;
+    const lastDay = isCurrentMonth ? nowParts.day : daysInMonth;
+
+    for (let day = 1; day <= lastDay; day++) {
+      const dateKey = `${year}-${String(monthNumber).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      map.set(dateKey, 0);
     }
     journals.forEach((j) => {
       const d = toDateSafe(j.createdAt);
@@ -766,7 +795,7 @@ function DailyProgressChart({ journals }: { journals: Journal[] }) {
       }
     });
     return Array.from(map.entries()).map(([date, pages]) => ({ date, pages }));
-  }, [journals]);
+  }, [journals, month]);
 
   const max = Math.max(...data.map((d) => d.pages), 1);
   const w = 560;
@@ -838,7 +867,7 @@ function DailyProgressChart({ journals }: { journals: Journal[] }) {
           );
         })}
         <text x={pad} y={14} className="fill-emerald-700/50" fontSize="10">
-          Halaman / hari (14 hari terakhir)
+          Halaman / hari ({formatMonthLabel(month)})
         </text>
       </svg>
     </div>
@@ -1029,6 +1058,7 @@ export default function TeacherDashboard() {
   const [reportStudent, setReportStudent] = useState<string>("all");
   const [reportStudentSearch, setReportStudentSearch] = useState("");
   const [classSummaryMonth, setClassSummaryMonth] = useState(getCurrentMonthInput());
+  const [studentSummaryMonth, setStudentSummaryMonth] = useState(getCurrentMonthInput());
   const [classSummaryClass, setClassSummaryClass] = useState("all");
   const [editingStudent, setEditingStudent] = useState<RosterStudent | null>(null);
   const [studentForm, setStudentForm] = useState({ name: "", classCode: "", gender: "" });
@@ -1062,6 +1092,7 @@ export default function TeacherDashboard() {
   const [weatherLoading, setWeatherLoading] = useState(true);
   const swipeStartX = useRef<number | null>(null);
   const swipeStartTime = useRef<number | null>(null);
+  const currentMonthInput = getCurrentMonthInput();
 
   const handleSwipeStart = (event: React.TouchEvent<HTMLDivElement>) => {
     if (!window.matchMedia("(hover: none) and (pointer: coarse)").matches) return;
@@ -1755,6 +1786,11 @@ export default function TeacherDashboard() {
     [journals, allStudents]
   );
 
+  const monthlyStudentSummaries: StudentSummary[] = useMemo(
+    () => buildStudentSummaries(filterJournalsByJakartaMonth(journals, studentSummaryMonth), allStudents),
+    [journals, allStudents, studentSummaryMonth]
+  );
+
   const availableClasses = useMemo(() => {
     const set = new Set<string>();
     journals.forEach((j) => {
@@ -1773,14 +1809,14 @@ export default function TeacherDashboard() {
   );
 
   const filteredStudents = useMemo(() => {
-    return studentSummaries.filter((s) => {
+    return monthlyStudentSummaries.filter((s) => {
       const matchClass = classFilter === "all" || s.classCode === classFilter;
       const matchSearch =
         !searchQuery.trim() ||
         s.name.toLowerCase().includes(searchQuery.trim().toLowerCase());
       return matchClass && matchSearch;
     });
-  }, [studentSummaries, classFilter, searchQuery]);
+  }, [monthlyStudentSummaries, classFilter, searchQuery]);
 
   // Grouping students by class untuk tab Kelola Data
   const managementAvailableClasses = useMemo(() => {
@@ -2065,8 +2101,8 @@ export default function TeacherDashboard() {
   }, [mentoringClassFilter, mentoringSearch, studentsNeedingAttention]);
 
   const selectedStudentData = useMemo(
-    () => studentSummaries.find((s) => s.key === selectedStudent) || null,
-    [studentSummaries, selectedStudent]
+    () => monthlyStudentSummaries.find((s) => s.key === selectedStudent) || null,
+    [monthlyStudentSummaries, selectedStudent]
   );
 
   /* ---- Data khusus tab Laporan ---- */
@@ -2972,21 +3008,50 @@ export default function TeacherDashboard() {
     {/* Daftar Siswa - Enhanced List */}
     <div className="bg-white/80 backdrop-blur-sm rounded-3xl shadow-[0_4px_20px_-8px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/50 overflow-hidden">
       <div className="p-4 sm:p-6 border-b border-emerald-100/80 bg-gradient-to-r from-emerald-50/50 to-transparent">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <h2 className="text-lg font-bold text-emerald-900 flex items-center gap-2">
               <Users className="w-5 h-5 text-emerald-600" />
               Aktivitas per Murid
             </h2>
             <p className="text-xs text-emerald-700/60 mt-1">
-              Klik nama murid untuk melihat detail lengkap & grafik perkembangan
+              Rekap {formatMonthLabel(studentSummaryMonth)}. Klik nama murid untuk melihat detail jurnal bulan terpilih.
             </p>
           </div>
-          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+          <div className="grid w-full grid-cols-1 gap-2 md:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,1fr)] lg:flex lg:w-auto">
+            <div className="flex w-full items-center gap-1 rounded-xl border border-emerald-200 bg-white p-1 shadow-sm lg:w-auto">
+              <button
+                type="button"
+                onClick={() => setStudentSummaryMonth((month) => shiftMonthInput(month, -1))}
+                aria-label="Lihat bulan sebelumnya"
+                title="Bulan sebelumnya"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-emerald-700 transition hover:bg-emerald-50"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <input
+                type="month"
+                value={studentSummaryMonth}
+                max={currentMonthInput}
+                onChange={(event) => setStudentSummaryMonth(event.target.value)}
+                aria-label="Pilih bulan rekap siswa"
+                className="min-w-0 flex-1 bg-transparent px-1 py-2 text-sm text-emerald-900 outline-none sm:w-36 sm:flex-none"
+              />
+              <button
+                type="button"
+                onClick={() => setStudentSummaryMonth((month) => shiftMonthInput(month, 1))}
+                disabled={studentSummaryMonth >= currentMonthInput}
+                aria-label="Lihat bulan berikutnya"
+                title="Bulan berikutnya"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-emerald-700 transition hover:bg-emerald-50 disabled:cursor-not-allowed disabled:text-emerald-300 disabled:hover:bg-transparent"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
             <select
               value={classFilter}
               onChange={(e) => setClassFilter(e.target.value)}
-              className="w-full sm:w-36 p-2.5 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 shadow-sm"
+              className="w-full p-2.5 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 shadow-sm lg:w-36"
             >
               <option value="all">Semua Kelas</option>
               {availableClasses.map((c) => (
@@ -3000,7 +3065,7 @@ export default function TeacherDashboard() {
                 placeholder="Cari nama murid..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full sm:w-52 pl-9 pr-3 py-2.5 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 shadow-sm placeholder:text-emerald-400"
+                className="w-full pl-9 pr-3 py-2.5 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 shadow-sm placeholder:text-emerald-400 lg:w-52"
               />
             </div>
           </div>
@@ -4944,7 +5009,10 @@ export default function TeacherDashboard() {
                     : ""}
                 </p>
                 <p className="text-xs text-emerald-700/50 mt-0.5">
-                  Kirim jurnal terakhir: {formatTanggal(selectedStudentData.lastSubmission)}
+                  Rekap {formatMonthLabel(studentSummaryMonth)}
+                </p>
+                <p className="text-xs text-emerald-700/50 mt-0.5">
+                  Jurnal terakhir pada periode ini: {formatTanggal(selectedStudentData.lastSubmission)}
                 </p>
               </div>
               <button
@@ -4987,7 +5055,7 @@ export default function TeacherDashboard() {
               <h3 className="text-sm font-semibold text-emerald-800 mb-2">
                 Grafik Perkembangan Membaca (Harian)
               </h3>
-              <DailyProgressChart journals={selectedStudentData.journals} />
+              <DailyProgressChart journals={selectedStudentData.journals} month={studentSummaryMonth} />
             </div>
 
             <h3 className="text-sm font-semibold text-emerald-800 mb-2">Riwayat Jurnal</h3>

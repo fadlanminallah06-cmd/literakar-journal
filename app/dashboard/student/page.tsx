@@ -50,6 +50,7 @@ import {
   NotebookPen,
   History,
   TreeDeciduous,
+  ChevronLeft,
   ChevronRight,
   ArrowUp,
   Cloud,
@@ -283,10 +284,19 @@ function formatTanggal(d: Date | null): string {
   }).format(d);
 }
 
-function getStartOfMonth(date: Date): Date {
-  const start = new Date(date.getFullYear(), date.getMonth(), 1);
-  start.setHours(0, 0, 0, 0);
-  return start;
+function shiftMonthKey(monthKey: string, offset: number): string {
+  const [year, month] = monthKey.split("-").map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1 + offset, 1));
+  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function formatMonthLabel(monthKey: string): string {
+  const [year, month] = monthKey.split("-").map(Number);
+  return new Intl.DateTimeFormat("id-ID", {
+    timeZone: "UTC",
+    month: "long",
+    year: "numeric",
+  }).format(new Date(Date.UTC(year, month - 1, 1, 12)));
 }
 
 function formatGender(g?: string): string {
@@ -1662,6 +1672,8 @@ export default function StudentDashboard() {
   const [journals, setJournals] = useState<Journal[]>([]);
   const [studentAlerts, setStudentAlerts] = useState<StudentAlert[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>("beranda");
+  const [selectedRecapMonth, setSelectedRecapMonth] = useState(() => toJakartaDateKey(new Date()).slice(0, 7));
+  const currentRecapMonth = toJakartaDateKey(new Date()).slice(0, 7);
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [selectedCharacters, setSelectedCharacters] = useState<Set<string>>(new Set());
@@ -2398,10 +2410,11 @@ export default function StudentDashboard() {
   }, [dailyGoalReached, user]);
 
   const monthlyStats = useMemo(() => {
-    const startOfMonth = getStartOfMonth(new Date());
     const monthlyJournals = journals.filter((journal) => {
       const date = toDateSafe(journal.createdAt);
-      return date ? date >= startOfMonth : false;
+      if (!date) return false;
+      const parts = getJakartaDateParts(date);
+      return `${parts.year}-${String(parts.month).padStart(2, "0")}` === selectedRecapMonth;
     });
     const monthlyPages = monthlyJournals.reduce((total, journal) => {
       const pages = Number(journal.endPage) - Number(journal.startPage);
@@ -2415,16 +2428,19 @@ export default function StudentDashboard() {
     const monthlyDates = new Set<string>();
     monthlyJournals.forEach((journal) => {
       const date = toDateSafe(journal.createdAt);
-      if (date) monthlyDates.add(date.toDateString());
+      if (date) monthlyDates.add(toJakartaDateKey(date));
     });
 
     let monthlyStreak = 0;
-    const cursor = new Date();
-    cursor.setHours(0, 0, 0, 0);
-    while (cursor >= startOfMonth && monthlyDates.has(cursor.toDateString())) {
-      monthlyStreak += 1;
-      cursor.setDate(cursor.getDate() - 1);
-    }
+    let currentStreak = 0;
+    let previousDay: number | null = null;
+    Array.from(monthlyDates).sort().forEach((dateKey) => {
+      const [year, month, day] = dateKey.split("-").map(Number);
+      const dayNumber = Date.UTC(year, month - 1, day) / 86_400_000;
+      currentStreak = previousDay === dayNumber - 1 ? currentStreak + 1 : 1;
+      monthlyStreak = Math.max(monthlyStreak, currentStreak);
+      previousDay = dayNumber;
+    });
 
     return {
       journals: monthlyJournals.length,
@@ -2432,7 +2448,7 @@ export default function StudentDashboard() {
       finishedBooks: monthlyFinishedBooks.size,
       streak: monthlyStreak,
     };
-  }, [journals]);
+  }, [journals, selectedRecapMonth]);
 
   // Daftar badge/achievement lengkap dengan progres dari snapshot jurnal tervalidasi.
   const badges: BadgeComputed[] = useMemo(() => {
@@ -3167,13 +3183,49 @@ export default function StudentDashboard() {
               </div>
             )}
 
-            {/* Stats Grid - Mobile Optimized */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
-              <StatCard label="Buku Selesai Bulan Ini" value={monthlyStats.finishedBooks} icon={<Library className="w-4 h-4" />} color="blue" dark={darkMode} />
-              <StatCard label="Halaman Bulan Ini" value={monthlyStats.pages} icon={<BookOpen className="w-4 h-4" />} color="emerald" dark={darkMode} />
-              <StatCard label="Streak Bulan Ini" value={`${monthlyStats.streak} hari`} icon={<Flame className="w-4 h-4" />} color="orange" dark={darkMode} />
-              <StatCard label="Jurnal Bulan Ini" value={monthlyStats.journals} icon={<CalendarCheck className="w-4 h-4" />} color="yellow" dark={darkMode} />
-            </div>
+            {/* Rekap bulanan */}
+            <section aria-label="Rekap bulanan" className="space-y-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <h3 className={`text-base font-bold ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>Rekap Bulanan</h3>
+                  <p aria-live="polite" className={`text-sm capitalize ${darkMode ? "text-emerald-300/70" : "text-emerald-700/70"}`}>
+                    {formatMonthLabel(selectedRecapMonth)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <button
+                    type="button"
+                    aria-label="Lihat bulan sebelumnya"
+                    onClick={() => setSelectedRecapMonth((month) => shiftMonthKey(month, -1))}
+                    className={`flex h-10 w-10 items-center justify-center rounded-xl border transition ${darkMode ? "border-slate-700 bg-slate-800 text-emerald-200 hover:bg-slate-700" : "border-emerald-100 bg-white/80 text-emerald-800 hover:bg-emerald-50"}`}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRecapMonth(currentRecapMonth)}
+                    disabled={selectedRecapMonth === currentRecapMonth}
+                    className={`h-10 rounded-xl border px-3 text-sm font-semibold transition disabled:cursor-default disabled:opacity-50 ${darkMode ? "border-slate-700 bg-slate-800 text-emerald-200 hover:bg-slate-700" : "border-emerald-100 bg-white/80 text-emerald-800 hover:bg-emerald-50"}`}
+                  >
+                    Bulan ini
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Lihat bulan berikutnya"
+                    onClick={() => setSelectedRecapMonth((month) => shiftMonthKey(month, 1))}
+                    className={`flex h-10 w-10 items-center justify-center rounded-xl border transition ${darkMode ? "border-slate-700 bg-slate-800 text-emerald-200 hover:bg-slate-700" : "border-emerald-100 bg-white/80 text-emerald-800 hover:bg-emerald-50"}`}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
+                <StatCard label="Buku Selesai" value={monthlyStats.finishedBooks} icon={<Library className="w-4 h-4" />} color="blue" dark={darkMode} />
+                <StatCard label="Halaman Dibaca" value={monthlyStats.pages} icon={<BookOpen className="w-4 h-4" />} color="emerald" dark={darkMode} />
+                <StatCard label="Streak Terbaik" value={`${monthlyStats.streak} hari`} icon={<Flame className="w-4 h-4" />} color="orange" dark={darkMode} />
+                <StatCard label="Jurnal" value={monthlyStats.journals} icon={<CalendarCheck className="w-4 h-4" />} color="yellow" dark={darkMode} />
+              </div>
+            </section>
 
             {/* Target Membaca Harian - Enhanced Card */}
             <div className="relative overflow-hidden rounded-3xl bg-white/40 backdrop-blur-md border border-white/60 shadow-[0_8px_30px_-12px_rgba(6,95,70,0.15)]">

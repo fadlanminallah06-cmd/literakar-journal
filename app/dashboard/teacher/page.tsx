@@ -167,7 +167,7 @@ interface ClassLeaderboardEntry {
 
 type TabKey = "ringkasan" | "jurnal" | "pendampingan" | "leaderboard" | "laporan" | "kelola";
 type ReportView = "kelas" | "siswa";
-type ReportPeriod = "all" | "month";
+type ReportPeriod = "all" | "month" | "range";
 type LeaderboardSubTab = "semua" | "kelas" | "kelas-terajin";
 
 interface WeatherData {
@@ -274,6 +274,7 @@ function getLatestMondaySnapshotCutoff(now = new Date()): Date {
 }
 
 const INACTIVITY_DAYS = 7;
+const REPORT_PREVIEW_ROW_LIMIT = 25;
 const LOW_ACTIVITY_RATIO = 0.5;
 const PENDING_BACKLOG_THRESHOLD = 3;
 
@@ -383,19 +384,37 @@ function getStatusInfo(status: string): {
 /* Helper murni (bukan hook) untuk memfilter & meringkas jurnal.       */
 /* ------------------------------------------------------------------ */
 
+function filterJournalsByDateRange(
+  journalsInput: Journal[],
+  startDate: string,
+  endDate: string
+): Journal[] {
+  if (!startDate || !endDate) return journalsInput;
+  return journalsInput.filter((journal) => {
+    const date = toDateSafe(journal.createdAt);
+    if (!date) return false;
+    const dateKey = toJakartaDateKey(date);
+    return dateKey >= startDate && dateKey <= endDate;
+  });
+}
+
 function filterJournalsByPeriod(
   journalsInput: Journal[],
   period: ReportPeriod,
-  month: string
+  month: string,
+  startDate?: string,
+  endDate?: string
 ): Journal[] {
   if (period === "all") return journalsInput;
-  if (!month) return journalsInput;
-  return journalsInput.filter((j) => {
-    const d = toDateSafe(j.createdAt);
-    if (!d) return false;
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    return key === month;
-  });
+  if (period === "range") return filterJournalsByDateRange(journalsInput, startDate || "", endDate || "");
+  return filterJournalsByJakartaMonth(journalsInput, month);
+}
+
+function parseDateKeyToDate(dateKey: string): Date | null {
+  if (!dateKey) return null;
+  const [year, month, day] = dateKey.split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(Date.UTC(year, month - 1, day, 12));
 }
 
 function filterJournalsByJakartaMonth(journalsInput: Journal[], month: string): Journal[] {
@@ -733,33 +752,37 @@ function StatCard({
   sub,
   icon,
   color = "emerald",
+  dark = false,
 }: {
   label: string;
   value: string | number;
   sub?: string;
   icon?: React.ReactNode;
   color?: "emerald" | "orange" | "blue" | "yellow" | "slate";
+  dark?: boolean;
 }) {
   const c = STAT_COLOR_MAP[color];
   return (
     <div
-      className={`group relative overflow-hidden bg-white/85 backdrop-blur-sm p-4 lg:p-5 rounded-2xl ring-1 ${c.ring} shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] transition-all hover:shadow-[0_1px_2px_rgba(6,95,70,0.04),0_14px_28px_-14px_rgba(6,95,70,0.22)] hover:-translate-y-0.5 flex flex-col gap-1.5 lg:gap-2`}
+      className={`group relative overflow-hidden p-3.5 sm:p-4 rounded-2xl border shadow-md flex flex-col gap-1.5 sm:gap-2 transition-transform duration-200 hover:-translate-y-0.5 ${
+        dark ? "bg-slate-800/80 border-slate-700 shadow-black/20" : "bg-white/90 backdrop-blur-sm border-emerald-100/80 shadow-emerald-900/[0.06]"
+      }`}
     >
       <div
         className={`pointer-events-none absolute -right-6 -top-6 w-20 h-20 rounded-full bg-gradient-to-br ${c.glow} to-transparent blur-xl`}
       />
       {icon && (
-        <div className={`relative w-8 h-8 lg:w-10 lg:h-10 rounded-xl ${c.chip} flex items-center justify-center`}>
+        <div className={`relative w-8 h-8 sm:w-9 sm:h-9 rounded-xl ${c.chip} flex items-center justify-center`}>
           {icon}
         </div>
       )}
-      <span className="relative text-xl sm:text-2xl lg:text-[2rem] font-bold text-emerald-900 tabular-nums leading-tight">
+      <span className={`relative text-xl sm:text-2xl font-bold tracking-tight ${dark ? "text-emerald-100" : "text-emerald-900"}`}>
         {value}
       </span>
-      <span className="relative text-[11px] sm:text-xs lg:text-sm font-medium text-emerald-700/70 leading-snug">
+      <span className={`relative text-[11px] sm:text-xs font-medium leading-snug ${dark ? "text-emerald-300/70" : "text-emerald-700/70"}`}>
         {label}
       </span>
-      {sub && <span className="relative text-[10px] sm:text-xs text-emerald-700/50">{sub}</span>}
+      {sub && <span className={`relative text-[10px] ${dark ? "text-emerald-400/50" : "text-emerald-700/50"}`}>{sub}</span>}
     </div>
   );
 }
@@ -1032,6 +1055,106 @@ function StudentSummaryCard({ s, onOpen }: { s: StudentSummary; onOpen?: () => v
   );
 }
 
+function TeacherFilterBar({
+  searchValue,
+  onSearchChange,
+  searchPlaceholder = "Cari nama murid...",
+  classValue,
+  onClassChange,
+  classOptions,
+  darkMode = false,
+}: {
+  searchValue: string;
+  onSearchChange: (value: string) => void;
+  searchPlaceholder?: string;
+  classValue?: string;
+  onClassChange?: (value: string) => void;
+  classOptions?: string[];
+  darkMode?: boolean;
+}) {
+  return (
+    <div
+      className={`flex flex-col gap-2 rounded-2xl border p-2 sm:flex-row sm:items-center sm:gap-2.5 ${
+        darkMode ? "border-slate-700 bg-slate-800/40" : "border-emerald-100 bg-white/70"
+      }`}
+    >
+      <div className="relative min-w-0 flex-1">
+        <Search
+          className={`pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 ${
+            darkMode ? "text-emerald-400/60" : "text-emerald-600/60"
+          }`}
+        />
+        <input
+          type="text"
+          value={searchValue}
+          onChange={(event) => onSearchChange(event.target.value)}
+          placeholder={searchPlaceholder}
+          className={`w-full rounded-xl border py-2.5 pl-9 pr-3 text-sm outline-none transition focus:ring-2 ${
+            darkMode
+              ? "border-slate-600 bg-slate-700/50 text-emerald-100 placeholder:text-emerald-400/40 focus:ring-emerald-500 focus:border-emerald-500"
+              : "border-emerald-200 bg-white text-emerald-900 placeholder:text-emerald-700/40 focus:ring-emerald-400 focus:border-emerald-400"
+          }`}
+        />
+      </div>
+      {classOptions && onClassChange && (
+        <select
+          value={classValue}
+          onChange={(event) => onClassChange(event.target.value)}
+          className={`w-full shrink-0 rounded-xl border px-3 py-2.5 text-sm outline-none transition focus:ring-2 sm:w-44 ${
+            darkMode
+              ? "border-slate-600 bg-slate-700/50 text-emerald-100 focus:ring-emerald-500 focus:border-emerald-500"
+              : "border-emerald-200 bg-white text-emerald-900 focus:ring-emerald-400 focus:border-emerald-400"
+          }`}
+        >
+          <option value="all">Semua Kelas</option>
+          {classOptions.map((classCode) => (
+            <option key={classCode} value={classCode}>
+              Kelas {classCode}
+            </option>
+          ))}
+        </select>
+      )}
+    </div>
+  );
+}
+
+function EmptyState({
+  icon,
+  title,
+  description,
+  actionLabel,
+  onAction,
+  dark = false,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  description?: string;
+  actionLabel?: string;
+  onAction?: () => void;
+  dark?: boolean;
+}) {
+  return (
+    <div className={`text-center py-10 sm:py-12 rounded-2xl border-2 border-dashed px-4 ${dark ? "border-slate-700 bg-slate-800/30" : "border-emerald-200 bg-emerald-50/30"}`}>
+      <div className={`mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl ${dark ? "bg-slate-700 text-slate-400" : "bg-emerald-100 text-emerald-400"}`}>
+        {icon}
+      </div>
+      <p className={`text-sm font-semibold ${dark ? "text-emerald-200" : "text-emerald-800"}`}>{title}</p>
+      {description && (
+        <p className={`text-xs mt-1 max-w-sm mx-auto ${dark ? "text-emerald-300/60" : "text-emerald-700/60"}`}>{description}</p>
+      )}
+      {actionLabel && onAction && (
+        <button
+          type="button"
+          onClick={onAction}
+          className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm shadow-emerald-600/25 transition hover:bg-emerald-700 active:scale-[0.98]"
+        >
+          {actionLabel}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function TeacherDashboard() {
   const { user, userProfile, logout, loading } = useAuth();
   const router = useRouter();
@@ -1048,6 +1171,14 @@ export default function TeacherDashboard() {
   const [reportView, setReportView] = useState<ReportView>("kelas");
   const [reportPeriod, setReportPeriod] = useState<ReportPeriod>("all");
   const [reportMonth, setReportMonth] = useState(getCurrentMonthInput());
+  const [reportStartDate, setReportStartDate] = useState<string>(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 6);
+    return toJakartaDateKey(date);
+  });
+  const [reportEndDate, setReportEndDate] = useState<string>(() => toJakartaDateKey(new Date()));
+  const [isExportingReport, setIsExportingReport] = useState(false);
+  const [showFullPreview, setShowFullPreview] = useState(false);
   const [reportClass, setReportClass] = useState("all");
   const [reportStudent, setReportStudent] = useState<string>("all");
   const [reportStudentSearch, setReportStudentSearch] = useState("");
@@ -1074,6 +1205,8 @@ export default function TeacherDashboard() {
   const [bulkJournalLoading, setBulkJournalLoading] = useState(false);
   const [journalClassFilter, setJournalClassFilter] = useState("all");
   const [journalStudentSearch, setJournalStudentSearch] = useState("");
+  const [compactJournalView, setCompactJournalView] = useState(false);
+  const [expandedJournalCardIds, setExpandedJournalCardIds] = useState<Set<string>>(new Set());
   const [sendingWarningStudentId, setSendingWarningStudentId] = useState<string | null>(null);
   // id jurnal yang sedang dihapus -> mencegah klik ganda dan memberi feedback visual
   const [deleteJournalLoading, setDeleteJournalLoading] = useState<string | null>(null);
@@ -1083,12 +1216,39 @@ export default function TeacherDashboard() {
   const [selectedLeaderboardClass, setSelectedLeaderboardClass] = useState("");
   const [leaderboardRefreshKey, setLeaderboardRefreshKey] = useState<string>(() => new Date().toISOString());
   const [darkMode, setDarkMode] = useState(false);
+  const [navFade, setNavFade] = useState({ left: false, right: true });
+  const navScrollRef = useRef<HTMLDivElement | null>(null);
+  const [flashJournalId, setFlashJournalId] = useState<string | null>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const swipeStartX = useRef<number | null>(null);
   const swipeStartTime = useRef<number | null>(null);
   const currentMonthInput = getCurrentMonthInput();
+
+  const updateNavFade = useCallback(() => {
+    const element = navScrollRef.current;
+    if (!element) return;
+    setNavFade({
+      left: element.scrollLeft > 4,
+      right: element.scrollLeft + element.clientWidth < element.scrollWidth - 4,
+    });
+  }, []);
+
+  useEffect(() => {
+    updateNavFade();
+    window.addEventListener("resize", updateNavFade);
+    return () => window.removeEventListener("resize", updateNavFade);
+  }, [updateNavFade]);
+
+  const toggleJournalCardExpand = (id: string) => {
+    setExpandedJournalCardIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const handleSwipeStart = (event: React.TouchEvent<HTMLDivElement>) => {
     if (!window.matchMedia("(hover: none) and (pointer: coarse)").matches) return;
@@ -1273,8 +1433,10 @@ export default function TeacherDashboard() {
     setManagementError("");
     try {
       await loadDashboardData();
+      setToast({ type: "success", message: "Data dashboard berhasil dimuat ulang." });
     } catch {
       setManagementError("Gagal memuat ulang data. Periksa koneksi dan coba lagi.");
+      setToast({ type: "error", message: "Gagal memuat ulang data. Periksa koneksi dan coba lagi." });
     } finally {
       setIsRefreshingData(false);
     }
@@ -1361,8 +1523,10 @@ export default function TeacherDashboard() {
             : item
         )
       );
+      setToast({ type: "success", message: "Feedback validasi berhasil disimpan." });
     } catch {
       setManagementError("Feedback validasi gagal disimpan. Periksa koneksi/izin dan coba lagi.");
+      setToast({ type: "error", message: "Feedback validasi gagal disimpan. Periksa koneksi/izin dan coba lagi." });
     } finally {
       setJournalActionLoading(null);
     }
@@ -1396,6 +1560,7 @@ export default function TeacherDashboard() {
     setManagementError("");
     setBulkJournalLoading(true);
     const teacherName = userProfile?.name || "Guru";
+    const targetCount = selectedJournals.filter((journal) => getStatusInfo(journal.status).key !== "approved").length;
     try {
       await Promise.all(
         selectedJournals
@@ -1411,8 +1576,10 @@ export default function TeacherDashboard() {
       );
       setSelectedJournalIds(new Set());
       await fetchClassJournals();
+      setToast({ type: "success", message: `${targetCount} jurnal berhasil divalidasi sekaligus.` });
     } catch {
       setManagementError("Validasi massal gagal diperbarui. Periksa koneksi/izin dan coba lagi.");
+      setToast({ type: "error", message: "Validasi massal gagal diperbarui. Periksa koneksi/izin dan coba lagi." });
     } finally {
       setBulkJournalLoading(false);
     }
@@ -1439,8 +1606,10 @@ export default function TeacherDashboard() {
       );
       setSelectedJournalIds(new Set());
       await fetchClassJournals();
+      setToast({ type: "success", message: `Validasi ${selectedApprovedJournals.length} jurnal berhasil dibatalkan.` });
     } catch {
       setManagementError("Pembatalan validasi massal gagal. Periksa koneksi/izin dan coba lagi.");
+      setToast({ type: "error", message: "Pembatalan validasi massal gagal. Periksa koneksi/izin dan coba lagi." });
     } finally {
       setBulkJournalLoading(false);
     }
@@ -1467,8 +1636,10 @@ export default function TeacherDashboard() {
             : item
         )
       );
+      setToast({ type: "success", message: "Revisi jurnal berhasil dibatalkan." });
     } catch {
       setManagementError("Pembatalan revisi gagal. Periksa koneksi/izin dan coba lagi.");
+      setToast({ type: "error", message: "Pembatalan revisi gagal. Periksa koneksi/izin dan coba lagi." });
     } finally {
       setJournalActionLoading(null);
     }
@@ -1573,8 +1744,10 @@ export default function TeacherDashboard() {
       );
       setSelectedJournalIds(new Set());
       await fetchClassJournals();
+      setToast({ type: "success", message: `Revisi ${selectedRevisionJournals.length} jurnal berhasil dibatalkan.` });
     } catch {
       setManagementError("Pembatalan revisi massal gagal. Periksa koneksi/izin dan coba lagi.");
+      setToast({ type: "error", message: "Pembatalan revisi massal gagal. Periksa koneksi/izin dan coba lagi." });
     } finally {
       setBulkJournalLoading(false);
     }
@@ -1624,8 +1797,22 @@ export default function TeacherDashboard() {
             : item
         )
       );
+      setFlashJournalId(journalId);
+      window.setTimeout(() => {
+        setFlashJournalId((current) => (current === journalId ? null : current));
+      }, 900);
+      setToast({
+        type: "success",
+        message:
+          newStatus === "approved"
+            ? `Jurnal "${journal.bookTitle}" berhasil divalidasi.`
+            : newStatus === "revision"
+            ? `Jurnal "${journal.bookTitle}" ditandai perlu revisi.`
+            : `Status jurnal "${journal.bookTitle}" dikembalikan ke Menunggu.`,
+      });
     } catch {
       setManagementError("Status jurnal gagal diperbarui. Periksa koneksi/izin dan coba lagi.");
+      setToast({ type: "error", message: "Status jurnal gagal diperbarui. Periksa koneksi/izin dan coba lagi." });
       return;
     } finally {
       setJournalActionLoading(null);
@@ -1648,8 +1835,10 @@ export default function TeacherDashboard() {
     try {
       await deleteDoc(doc(db, "journals", journalId));
       setJournals((current) => current.filter((journal) => journal.id !== journalId));
+      setToast({ type: "success", message: "Jurnal berhasil dihapus." });
     } catch {
       setManagementError("Jurnal gagal dihapus. Periksa izin Firebase dan coba lagi.");
+      setToast({ type: "error", message: "Jurnal gagal dihapus. Periksa izin Firebase dan coba lagi." });
     } finally {
       setDeleteJournalLoading(null);
     }
@@ -1694,10 +1883,12 @@ export default function TeacherDashboard() {
       setEditingStudent(null);
       setStudentForm({ name: "", classCode: "", gender: "" });
       setManagementMessage("Profil siswa berhasil diperbarui.");
+      setToast({ type: "success", message: "Profil siswa berhasil diperbarui." });
       await Promise.all([fetchAllStudents(), fetchClassJournals()]);
     } catch (error) {
       console.error(error);
       setManagementError("Profil siswa gagal diperbarui. Coba lagi.");
+      setToast({ type: "error", message: "Profil siswa gagal diperbarui. Coba lagi." });
     } finally {
       setManagementLoading(false);
     }
@@ -1713,9 +1904,11 @@ export default function TeacherDashboard() {
       await Promise.all(journalSnapshot.docs.map((journal) => deleteDoc(doc(db, "journals", journal.id))));
       await deleteDoc(doc(db, "users", student.uid));
       setManagementMessage(`Profil ${student.name} dan semua jurnal berhasil dihapus.`);
+      setToast({ type: "success", message: `Profil ${student.name} dan semua jurnal berhasil dihapus.` });
       await Promise.all([fetchAllStudents(), fetchClassJournals()]);
     } catch {
       setManagementError("Profil siswa gagal dihapus. Coba lagi.");
+      setToast({ type: "error", message: "Profil siswa gagal dihapus. Coba lagi." });
     } finally {
       setManagementLoading(false);
     }
@@ -1768,9 +1961,11 @@ export default function TeacherDashboard() {
       );
       setSelectedStudentsForDelete(new Set());
       setManagementMessage(`${count} siswa dan semua jurnal mereka berhasil dihapus.`);
+      setToast({ type: "success", message: `${count} siswa dan semua jurnal mereka berhasil dihapus.` });
       await Promise.all([fetchAllStudents(), fetchClassJournals()]);
     } catch {
       setManagementError("Gagal menghapus siswa. Coba lagi.");
+      setToast({ type: "error", message: "Gagal menghapus siswa. Coba lagi." });
     } finally {
       setManagementLoading(false);
     }
@@ -2110,8 +2305,8 @@ export default function TeacherDashboard() {
   /* ---- Data khusus tab Laporan ---- */
 
   const reportPeriodJournals = useMemo(
-    () => filterJournalsByPeriod(journals, reportPeriod, reportMonth),
-    [journals, reportPeriod, reportMonth]
+    () => filterJournalsByPeriod(journals, reportPeriod, reportMonth, reportStartDate, reportEndDate),
+    [journals, reportPeriod, reportMonth, reportStartDate, reportEndDate]
   );
 
   const reportClassSummaries: ClassSummary[] = useMemo(
@@ -2199,7 +2394,14 @@ export default function TeacherDashboard() {
   const reportTopBooks = useMemo(() => getTopBooks(reportPeriodJournals, 10), [reportPeriodJournals]);
   const reportTopCharacters = useMemo(() => getTopCharacters(reportPeriodJournals, 10), [reportPeriodJournals]);
 
-  const reportPeriodLabel = reportPeriod === "all" ? "sepanjang waktu" : `bulan ${reportMonth || "-"}`;
+  const reportPeriodLabel =
+    reportPeriod === "all"
+      ? "sepanjang waktu"
+      : reportPeriod === "range"
+      ? reportStartDate && reportEndDate
+        ? `${formatTanggal(parseDateKeyToDate(reportStartDate))} - ${formatTanggal(parseDateKeyToDate(reportEndDate))}`
+        : "rentang tanggal terpilih"
+      : `bulan ${reportMonth || "-"}`;
 
   const downloadCSV = (headers: string[], rows: (string | number)[][], filename: string) => {
     const csvContent = [headers, ...rows]
@@ -2219,42 +2421,44 @@ export default function TeacherDashboard() {
   // Export CSV utama untuk tab Laporan — selalu detail per buku, baik untuk
   // Rekapan Per Kelas maupun Rekapan Per Siswa.
   const handleExportCSV = () => {
-    const todayStr = toJakartaDateKey(new Date());
+    setIsExportingReport(true);
+    window.setTimeout(() => {
+      try {
+        const todayStr = toJakartaDateKey(new Date());
+        const periodSlug = reportPeriod === "all"
+          ? "semua"
+          : reportPeriod === "range"
+          ? `${reportStartDate}_${reportEndDate}`
+          : reportMonth;
 
-    if (reportView === "siswa") {
-      if (reportStudent !== "all" && reportSelectedStudentSummary) {
-        // Laporan personal: rincian jurnal siswa itu pada periode terpilih.
-        const rows = buildDetailedRows([reportSelectedStudentSummary]);
-        const studentSlug = reportSelectedStudentSummary.name.trim().replace(/\s+/g, "_");
-        downloadCSV(
-          DETAILED_HEADERS,
-          rows,
-          `laporan-personal-${studentSlug}-${reportPeriod === "all" ? "semua" : reportMonth}-${todayStr}.csv`
-        );
-      } else {
-        // Semua siswa: satu baris per buku, ditambah baris untuk siswa yang
-        // belum kirim jurnal sama sekali (tetap tercatat).
-        const rows = buildDetailedRows(reportStudentSummariesForExport);
-        downloadCSV(
-          DETAILED_HEADERS,
-          rows,
-          `laporan-persiswa-detail-${reportPeriod === "all" ? "semua" : reportMonth}-${todayStr}.csv`
-        );
+        if (reportView === "siswa") {
+          if (reportStudent !== "all" && reportSelectedStudentSummary) {
+            const rows = buildDetailedRows([reportSelectedStudentSummary]);
+            const studentSlug = reportSelectedStudentSummary.name.trim().replace(/\s+/g, "_");
+            downloadCSV(DETAILED_HEADERS, rows, `laporan-personal-${studentSlug}-${periodSlug}-${todayStr}.csv`);
+          } else {
+            const rows = buildDetailedRows(reportStudentSummariesForExport);
+            downloadCSV(DETAILED_HEADERS, rows, `laporan-persiswa-detail-${periodSlug}-${todayStr}.csv`);
+          }
+        } else {
+          const rows = buildDetailedRows(reportClassStudentSummaries);
+          downloadCSV(DETAILED_HEADERS, rows, `laporan-perkelas-detail-${reportClass}-${periodSlug}-${todayStr}.csv`);
+        }
+
+        setToast({ type: "success", message: "Laporan CSV berhasil diunduh." });
+      } catch {
+        setToast({ type: "error", message: "Gagal membuat laporan CSV. Silakan coba lagi." });
+      } finally {
+        setIsExportingReport(false);
       }
-    } else {
-      // Rekapan Per Kelas: detail per siswa & per buku di kelas terpilih
-      // (atau seluruh kelas jika "Semua kelas" dipilih).
-      const rows = buildDetailedRows(reportClassStudentSummaries);
-      downloadCSV(
-        DETAILED_HEADERS,
-        rows,
-        `laporan-perkelas-detail-${reportClass}-${reportPeriod === "all" ? "semua" : reportMonth}-${todayStr}.csv`
-      );
-    }
+    }, 30);
   };
 
   /** Export khusus daftar Buku & Nilai Karakter pada periode terpilih */
   const handleExportBooksAndCharacters = () => {
+    setIsExportingReport(true);
+    window.setTimeout(() => {
+      try {
     const bookHeaders = ["Peringkat", "Judul Buku", "Nama Murid", "Jumlah Murid Membaca", "Tanggal Upload", "Divalidasi Oleh"];
     const bookRows = reportTopBooks.map(([title, count], idx) => {
       const matchingJournals = reportPeriodJournals.filter(
@@ -2307,13 +2511,56 @@ export default function TeacherDashboard() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `laporan-buku-dan-karakter-${reportPeriod === "all" ? "semua" : reportMonth}-${new Date()
+    const periodSlug = reportPeriod === "all"
+      ? "semua"
+      : reportPeriod === "range"
+      ? `${reportStartDate}_${reportEndDate}`
+      : reportMonth;
+    link.download = `laporan-buku-dan-karakter-${periodSlug}-${new Date()
       .toISOString()
       .slice(0, 10)}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+        setToast({ type: "success", message: "Laporan Buku & Karakter berhasil diunduh." });
+      } catch {
+        setToast({ type: "error", message: "Gagal membuat laporan. Silakan coba lagi." });
+      } finally {
+        setIsExportingReport(false);
+      }
+    }, 30);
+  };
+
+  const applyReportPreset = (preset: "today" | "7d" | "30d" | "thisMonth" | "lastMonth" | "all" | "custom") => {
+    const todayKey = toJakartaDateKey(new Date());
+    if (preset === "today") {
+      setReportPeriod("range");
+      setReportStartDate(todayKey);
+      setReportEndDate(todayKey);
+    } else if (preset === "7d") {
+      const date = new Date();
+      date.setDate(date.getDate() - 6);
+      setReportPeriod("range");
+      setReportStartDate(toJakartaDateKey(date));
+      setReportEndDate(todayKey);
+    } else if (preset === "30d") {
+      const date = new Date();
+      date.setDate(date.getDate() - 29);
+      setReportPeriod("range");
+      setReportStartDate(toJakartaDateKey(date));
+      setReportEndDate(todayKey);
+    } else if (preset === "thisMonth") {
+      setReportPeriod("month");
+      setReportMonth(currentMonthInput);
+    } else if (preset === "lastMonth") {
+      setReportPeriod("month");
+      setReportMonth(shiftMonthInput(currentMonthInput, -1));
+    } else if (preset === "all") {
+      setReportPeriod("all");
+    } else {
+      setReportPeriod("range");
+    }
   };
 
   const handlePrint = () => {
@@ -2445,6 +2692,12 @@ export default function TeacherDashboard() {
       )}
       <style>{`
         /* Download Button Animations - Always available */
+        @keyframes card-flash-success {
+          0% { box-shadow: 0 0 0 0 rgba(16,185,129,0.45); }
+          100% { box-shadow: 0 0 0 14px rgba(16,185,129,0); }
+        }
+        .card-flash-success { animation: card-flash-success 0.9s ease-out; }
+
         @keyframes downloadPulse {
           0%, 100% { transform: translateY(0px); }
           50% { transform: translateY(-3px); }
@@ -2616,26 +2869,38 @@ export default function TeacherDashboard() {
           </div>
         </header>
 
-        <nav className="mb-5 sm:mb-6 lg:mb-8 w-full max-w-full overflow-x-auto rounded-2xl bg-white/80 backdrop-blur-sm p-1.5 lg:p-2 shadow-sm shadow-emerald-900/5 border border-white [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <div className="flex min-w-max gap-1.5 lg:gap-2 lg:min-w-0 lg:justify-between">
-            {tabs.map((t) => (
-              <button
-                key={t.key}
-                data-dashboard-tab={t.key}
-                onClick={() => setActiveTab(t.key)}
-                className={`shrink-0 whitespace-nowrap flex items-center justify-center gap-1.5 px-3 sm:px-4 lg:px-5 py-2 lg:py-2.5 rounded-xl text-xs sm:text-sm font-semibold tracking-wide transition lg:flex-1 ${
-                  activeTab === t.key
-                    ? "bg-emerald-600 text-white shadow-sm shadow-emerald-900/20"
-                    : "text-emerald-800/70 hover:bg-emerald-50"
-                }`}
-              >
-                {t.icon}
-                <span className="sm:hidden">{t.shortLabel}</span>
-                <span className="hidden sm:inline">{t.label}</span>
-              </button>
-            ))}
-          </div>
-        </nav>
+        <div className="relative mb-5 sm:mb-6 lg:mb-8">
+          <nav
+            ref={navScrollRef}
+            onScroll={updateNavFade}
+            className="w-full max-w-full overflow-x-auto rounded-2xl bg-white/80 backdrop-blur-sm p-1.5 lg:p-2 shadow-sm shadow-emerald-900/5 border border-white [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
+            <div className="flex min-w-max gap-1.5 lg:gap-2 lg:min-w-0 lg:justify-between">
+              {tabs.map((t) => (
+                <button
+                  key={t.key}
+                  data-dashboard-tab={t.key}
+                  onClick={() => setActiveTab(t.key)}
+                  className={`shrink-0 whitespace-nowrap flex items-center justify-center gap-1.5 px-3 sm:px-4 lg:px-5 py-2 lg:py-2.5 rounded-xl text-xs sm:text-sm font-semibold tracking-wide transition lg:flex-1 ${
+                    activeTab === t.key
+                      ? "bg-emerald-600 text-white shadow-sm shadow-emerald-900/20"
+                      : "text-emerald-800/70 hover:bg-emerald-50"
+                  }`}
+                >
+                  {t.icon}
+                  <span className="sm:hidden">{t.shortLabel}</span>
+                  <span className="hidden sm:inline">{t.label}</span>
+                </button>
+              ))}
+            </div>
+          </nav>
+          {navFade.left && (
+            <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-8 rounded-l-2xl bg-gradient-to-r from-emerald-50 to-transparent lg:hidden" />
+          )}
+          {navFade.right && (
+            <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 rounded-r-2xl bg-gradient-to-l from-emerald-50 to-transparent lg:hidden" />
+          )}
+        </div>
 
         {/* Pesan error global untuk aksi jurnal/siswa (approve, revisi, batalkan, hapus, dll) */}
         {managementError && activeTab !== "kelola" && (
@@ -2649,10 +2914,10 @@ export default function TeacherDashboard() {
           <div
             role="status"
             aria-live="polite"
-            className={`mb-4 flex items-start gap-3 rounded-2xl border px-3 py-2.5 shadow-sm ${
+            className={`fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-[60] mx-auto flex w-auto max-w-sm items-start gap-3 rounded-2xl border px-4 py-3 shadow-lg backdrop-blur-sm animate-in fade-in slide-in-from-bottom-4 duration-300 sm:inset-x-auto sm:bottom-auto sm:right-6 sm:top-6 sm:w-96 sm:slide-in-from-top-4 ${
               toast.type === "success"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                : "border-red-200 bg-red-50 text-red-700"
+                ? "border-emerald-200 bg-emerald-50/95 text-emerald-800"
+                : "border-red-200 bg-red-50/95 text-red-700"
             }`}
           >
             {toast.type === "success" ? (
@@ -2660,7 +2925,15 @@ export default function TeacherDashboard() {
             ) : (
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
             )}
-            <span className="text-sm font-medium leading-relaxed">{toast.message}</span>
+            <span className="flex-1 text-sm font-medium leading-relaxed">{toast.message}</span>
+            <button
+              type="button"
+              onClick={() => setToast(null)}
+              aria-label="Tutup notifikasi"
+              className="shrink-0 rounded-lg p-1 opacity-60 transition hover:opacity-100 hover:bg-black/5"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
           </div>
         )}
 
@@ -2705,38 +2978,55 @@ export default function TeacherDashboard() {
             <CalendarCheck className="w-4 h-4 shrink-0" />
             <span className="font-medium">{todayLabel}</span>
           </div>
-          {overviewPeriod === "month" && <div className="flex items-center gap-1 rounded-full border border-emerald-100 bg-white/80 p-1 text-emerald-800 shadow-sm" aria-label="Navigasi bulan rekap">
-            <button
-              type="button"
-              onClick={() => setOverviewMonth((month) => shiftMonthInput(month, -1))}
-              aria-label="Lihat bulan sebelumnya"
-              title="Bulan sebelumnya"
-              className="flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+          {overviewPeriod === "month" && (
+            <div
+              className="flex w-full items-center gap-1 rounded-2xl border border-emerald-200/70 bg-gradient-to-r from-white via-emerald-50/50 to-white p-1.5 shadow-sm shadow-emerald-900/5 sm:w-auto"
+              aria-label="Navigasi bulan rekap"
             >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <span className="min-w-[126px] px-1 text-center text-xs font-semibold capitalize sm:text-sm">
-              {formatMonthLabel(overviewMonth)}
-            </span>
-            <button
-              type="button"
-              onClick={() => setOverviewMonth((month) => shiftMonthInput(month, 1))}
-              disabled={overviewMonth >= currentMonthInput}
-              aria-label="Lihat bulan berikutnya"
-              title="Bulan berikutnya"
-              className="flex h-8 w-8 items-center justify-center rounded-full transition hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setOverviewMonth(currentMonthInput)}
-              disabled={overviewMonth === currentMonthInput}
-              className="rounded-full px-2.5 py-1.5 text-[11px] font-semibold text-emerald-700 transition hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 disabled:cursor-default disabled:opacity-50 sm:text-xs"
-            >
-              Bulan ini
-            </button>
-          </div>}
+              <button
+                type="button"
+                onClick={() => setOverviewMonth((month) => shiftMonthInput(month, -1))}
+                aria-label="Lihat bulan sebelumnya"
+                title="Bulan sebelumnya"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-emerald-600 transition-all hover:bg-emerald-100 hover:text-emerald-800 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 sm:h-8 sm:w-8"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+
+              <div className="flex flex-1 items-center justify-center gap-1.5 px-1 sm:flex-none">
+                <CalendarCheck className="h-3.5 w-3.5 shrink-0 text-emerald-500/70" />
+                <span className="min-w-[104px] text-center text-xs font-bold capitalize text-emerald-900 sm:min-w-[120px] sm:text-sm">
+                  {formatMonthLabel(overviewMonth)}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setOverviewMonth((month) => shiftMonthInput(month, 1))}
+                disabled={overviewMonth >= currentMonthInput}
+                aria-label="Lihat bulan berikutnya"
+                title="Bulan berikutnya"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-emerald-600 transition-all hover:bg-emerald-100 hover:text-emerald-800 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent sm:h-8 sm:w-8"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+
+              <div className="mx-0.5 h-5 w-px shrink-0 bg-emerald-200/80 sm:mx-1" />
+
+              <button
+                type="button"
+                onClick={() => setOverviewMonth(currentMonthInput)}
+                disabled={overviewMonth === currentMonthInput}
+                className={`shrink-0 rounded-xl px-2.5 py-1.5 text-[11px] font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 sm:text-xs ${
+                  overviewMonth === currentMonthInput
+                    ? "cursor-default bg-emerald-600/10 text-emerald-400"
+                    : "bg-emerald-600 text-white shadow-sm shadow-emerald-600/30 hover:bg-emerald-700 active:scale-95"
+                }`}
+              >
+                Bulan ini
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -3102,24 +3392,14 @@ export default function TeacherDashboard() {
                 <ChevronRight className="h-4 w-4" />
               </button>
             </div>
-            <select
-              value={classFilter}
-              onChange={(e) => setClassFilter(e.target.value)}
-              className="w-full p-2.5 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 shadow-sm lg:w-36"
-            >
-              <option value="all">Semua Kelas</option>
-              {availableClasses.map((c) => (
-                <option key={c} value={c}>Kelas {c}</option>
-              ))}
-            </select>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-emerald-500" />
-              <input
-                type="text"
-                placeholder="Cari nama murid..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-2.5 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400 shadow-sm placeholder:text-emerald-400 lg:w-52"
+            <div className="md:col-span-2 lg:col-span-1 lg:w-80">
+              <TeacherFilterBar
+                searchValue={searchQuery}
+                onSearchChange={setSearchQuery}
+                classValue={classFilter}
+                onClassChange={setClassFilter}
+                classOptions={availableClasses}
+                darkMode={darkMode}
               />
             </div>
           </div>
@@ -3522,29 +3802,16 @@ export default function TeacherDashboard() {
               jumlah jurnal jauh di bawah rata-rata, atau tumpukan jurnal belum divalidasi/masih
               perlu revisi.
             </p>
-            <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_12rem] lg:max-w-2xl">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-500" aria-hidden="true" />
-                <input
-                  type="search"
-                  value={mentoringSearch}
-                  onChange={(event) => setMentoringSearch(event.target.value)}
-                  placeholder="Cari nama siswa..."
-                  aria-label="Cari nama murid yang perlu pendampingan"
-                  className="w-full rounded-xl border border-emerald-200 bg-white px-3 py-2.5 pl-9 text-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-400"
-                />
-              </div>
-              <select
-                value={mentoringClassFilter}
-                onChange={(event) => setMentoringClassFilter(event.target.value)}
-                aria-label="Filter kelas murid yang perlu pendampingan"
-                className="w-full rounded-xl border border-emerald-200 bg-emerald-50/50 px-3 py-2.5 text-sm outline-none transition focus:ring-2 focus:ring-emerald-400"
-              >
-                <option value="all">Semua Kelas</option>
-                {availableClasses.map((classCode) => (
-                  <option key={classCode} value={classCode}>Kelas {classCode}</option>
-                ))}
-              </select>
+            <div className="mb-4 lg:max-w-2xl">
+              <TeacherFilterBar
+                searchValue={mentoringSearch}
+                onSearchChange={setMentoringSearch}
+                searchPlaceholder="Cari nama siswa..."
+                classValue={mentoringClassFilter}
+                onClassChange={setMentoringClassFilter}
+                classOptions={availableClasses}
+                darkMode={darkMode}
+              />
             </div>
             {studentsNeedingAttention.length === 0 ? (
               <p className="text-emerald-700 text-sm bg-emerald-50 p-3 rounded-xl flex items-center gap-2">
@@ -3682,6 +3949,20 @@ export default function TeacherDashboard() {
                     <p className={`text-[10px] uppercase tracking-wide font-semibold ${darkMode ? "text-orange-400/70" : "text-orange-600/70"}`}>Menunggu</p>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => setCompactJournalView((current) => !current)}
+                  className={`px-3 sm:px-4 py-2 rounded-xl text-xs font-semibold border transition flex items-center gap-1.5 ${
+                    compactJournalView
+                      ? "bg-emerald-600 text-white border-emerald-600"
+                      : darkMode
+                      ? "border-slate-600 text-emerald-300 hover:bg-slate-700"
+                      : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                  }`}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  {compactJournalView ? "Tampilan Ringkas" : "Tampilan Lengkap"}
+                </button>
               </div>
 
               {/* Info Banner */}
@@ -3705,49 +3986,15 @@ export default function TeacherDashboard() {
               {/* Filter & Bulk Actions */}
               <div className="space-y-4">
                 {/* Class Filter */}
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-                    <label htmlFor="teacher-journal-class-filter" className={`text-xs font-semibold uppercase tracking-wider ${darkMode ? "text-emerald-400" : "text-emerald-600"}`}>
-                      Filter Kelas
-                    </label>
-                    <select
-                      id="teacher-journal-class-filter"
-                      value={journalClassFilter}
-                      onChange={(event) => setJournalClassFilter(event.target.value)}
-                      className={`flex-1 sm:flex-none sm:w-48 px-4 py-2.5 text-sm border rounded-xl outline-none transition focus:ring-2 focus:ring-emerald-400 ${
-                        darkMode
-                          ? "border-slate-600 bg-slate-800/60 text-emerald-100"
-                          : "border-emerald-200 bg-white text-emerald-900"
-                      }`}
-                    >
-                      <option value="all">Semua Kelas</option>
-                      {availableClasses.map((classCode) => (
-                        <option key={classCode} value={classCode}>Kelas {classCode}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:ml-auto lg:min-w-[320px]">
-                    <label htmlFor="teacher-journal-student-search" className={`text-xs font-semibold uppercase tracking-wider ${darkMode ? "text-emerald-400" : "text-emerald-600"}`}>
-                      Cari Siswa
-                    </label>
-                    <div className="relative flex-1">
-                      <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${darkMode ? "text-emerald-400/60" : "text-emerald-600/60"}`} />
-                      <input
-                        id="teacher-journal-student-search"
-                        type="text"
-                        value={journalStudentSearch}
-                        onChange={(event) => setJournalStudentSearch(event.target.value)}
-                        placeholder="Nama siswa..."
-                        className={`w-full pl-9 pr-4 py-2.5 text-sm border rounded-xl outline-none transition focus:ring-2 focus:ring-emerald-400 ${
-                          darkMode
-                            ? "border-slate-600 bg-slate-800/60 text-emerald-100 placeholder:text-emerald-400/40"
-                            : "border-emerald-200 bg-white text-emerald-900 placeholder:text-emerald-700/40"
-                        }`}
-                      />
-                    </div>
-                  </div>
-                </div>
+                <TeacherFilterBar
+                  searchValue={journalStudentSearch}
+                  onSearchChange={setJournalStudentSearch}
+                  searchPlaceholder="Cari nama siswa..."
+                  classValue={journalClassFilter}
+                  onClassChange={setJournalClassFilter}
+                  classOptions={availableClasses}
+                  darkMode={darkMode}
+                />
 
                 {/* Pending Journal Warning */}
                 {pendingJournalsByClass.length > 0 && (
@@ -3972,12 +4219,13 @@ export default function TeacherDashboard() {
                             const isBusy = journalActionLoading === j.id;
                             const hasValidationFeedback = statusInfo.key === "approved" && Boolean(j.teacherFeedback?.trim());
                             const isSelected = selectedJournalIds.has(j.id);
+                            const isCardOpen = !compactJournalView || expandedJournalCardIds.has(j.id);
 
                             return (
                               <div
                                 key={j.id}
                                 id={`journal-card-${j.id}`}
-                                className={`relative rounded-2xl border p-4 transition-all duration-200 ${
+                                className={`relative rounded-2xl border p-4 transition-all duration-200 ${flashJournalId === j.id ? "card-flash-success" : ""} ${
                                   journalInlineError?.id === j.id
                                     ? "border-red-300 ring-2 ring-red-200"
                                     : isSelected
@@ -4033,7 +4281,17 @@ export default function TeacherDashboard() {
                                   </div>
                                 </div>
 
+                                {compactJournalView && (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleJournalCardExpand(j.id)}
+                                    className={`mb-2 text-[11px] font-semibold underline-offset-2 hover:underline ${darkMode ? "text-emerald-300" : "text-emerald-700"}`}
+                                  >
+                                    {isCardOpen ? "Sembunyikan detail" : "Lihat detail lengkap"}
+                                  </button>
+                                )}
                                 {/* Book Details */}
+                                {isCardOpen && (
                                 <div className={`rounded-xl p-3 mb-3 ${darkMode ? "bg-slate-700/30" : "bg-emerald-50/50"}`}>
                                   <p className={`text-sm font-semibold ${darkMode ? "text-emerald-200" : "text-emerald-800"}`}>
                                     {j.bookTitle} <span className={`font-normal ${darkMode ? "text-emerald-400/70" : "text-emerald-600/70"}`}>({j.author})</span>
@@ -4055,15 +4313,19 @@ export default function TeacherDashboard() {
                                     <strong>Nilai Karakter:</strong> {getCharacterList(j).join(", ") || "-"}
                                   </p>
                                 </div>
+                                )}
 
                                 {/* Summary */}
+                                {isCardOpen && (
                                 <div className="mb-3">
                                   <p className={`text-xs italic leading-relaxed line-clamp-3 ${darkMode ? "text-emerald-300/70" : "text-emerald-700/70"}`}>
                                     &quot;{j.summary}&quot;
                                   </p>
                                 </div>
+                                )}
 
                                 {/* Metadata */}
+                                {isCardOpen && (
                                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] mb-3">
                                   <span className={darkMode ? "text-emerald-400/60" : "text-emerald-600/60"}>
                                     Upload: {formatTanggal(toDateSafe(j.createdAt))}
@@ -4079,6 +4341,7 @@ export default function TeacherDashboard() {
                                     </span>
                                   )}
                                 </div>
+                                )}
 
                                 {/* Feedback Display */}
                                 {statusInfo.key === "revision" && (
@@ -4248,45 +4511,16 @@ export default function TeacherDashboard() {
 
 
             <div className="bg-white/85 backdrop-blur-sm p-4 sm:p-6 lg:p-7 rounded-2xl sm:rounded-3xl shadow-[0_1px_2px_rgba(6,95,70,0.04),0_8px_20px_-12px_rgba(6,95,70,0.15)] ring-1 ring-emerald-100/70">
-              <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3">
-                <Search className="w-5 h-5 text-emerald-700/60 shrink-0" />
-                <input
-                  type="text"
-                  placeholder="Cari nama siswa..."
-                  value={managementStudentSearch}
-                  onChange={(e) => setManagementStudentSearch(e.target.value)}
-                  className="flex-1 px-4 py-2 text-sm border border-emerald-200 rounded-xl bg-emerald-50/50 outline-none focus:ring-2 focus:ring-emerald-400 lg:max-w-md"
+              <div className="mb-4">
+                <TeacherFilterBar
+                  searchValue={managementStudentSearch}
+                  onSearchChange={setManagementStudentSearch}
+                  searchPlaceholder="Cari nama siswa..."
+                  classValue={managementClassFilter}
+                  onClassChange={setManagementClassFilter}
+                  classOptions={managementAvailableClasses}
+                  darkMode={darkMode}
                 />
-              </div>
-
-              {/* Filter Kelas */}
-              <div className="mb-4 pb-4 border-b border-emerald-100">
-                <p className="text-xs sm:text-sm font-semibold text-emerald-700/70 mb-2.5">Filter Kelas</p>
-                <div className="flex flex-wrap gap-1.5 sm:gap-2">
-                  <button
-                    onClick={() => setManagementClassFilter("all")}
-                    className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-md sm:rounded-lg text-xs font-semibold transition ${
-                      managementClassFilter === "all"
-                        ? "bg-emerald-600 text-white shadow-sm"
-                        : "bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
-                    }`}
-                  >
-                    Semua Kelas
-                  </button>
-                  {managementAvailableClasses.map((classCode) => (
-                    <button
-                      key={classCode}
-                      onClick={() => setManagementClassFilter(classCode)}
-                      className={`px-2 sm:px-3 py-0.5 sm:py-1.5 rounded-md sm:rounded-lg text-xs font-semibold transition ${
-                        managementClassFilter === classCode
-                          ? "bg-emerald-600 text-white shadow-sm"
-                          : "bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
-                      }`}
-                    >
-                      {classCode}
-                    </button>
-                  ))}
-                </div>
               </div>
 
               {selectedStudentsForDelete.size > 0 &&
@@ -4316,7 +4550,14 @@ export default function TeacherDashboard() {
                 )}
 
               {allStudents.length === 0 ? (
-                <p className="text-sm text-emerald-700/60">Belum ada akun murid.</p>
+                <EmptyState
+                  icon={<Users className="w-6 h-6" />}
+                  title="Belum ada akun murid"
+                  description="Data murid akan muncul di sini setelah mereka mendaftar dan bergabung ke kelas."
+                  actionLabel="Muat Ulang Data"
+                  onAction={() => void handleManualRefresh()}
+                  dark={darkMode}
+                />
               ) : groupedStudentsByClass.length === 0 ? (
                 <p className="text-sm text-emerald-700/60">Tidak ada murid yang cocok dengan pencarian &quot;{managementStudentSearch}&quot;.</p>
               ) : (
@@ -4590,33 +4831,101 @@ export default function TeacherDashboard() {
                   </div>
                 )}
 
-                <div className="min-w-0">
-                  <label className="text-[11px] font-medium text-emerald-700/70 mb-1 block">
-                    Periode
+                <div className="min-w-0 sm:col-span-2 xl:col-span-4">
+                  <label className="text-[11px] font-medium text-emerald-700/70 mb-1.5 block">
+                    Rentang Waktu
                   </label>
-                  <select
-                    value={reportPeriod}
-                    onChange={(e) => setReportPeriod(e.target.value as ReportPeriod)}
-                    className="min-h-[42px] w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
-                  >
-                    <option value="all">Semua waktu (all time)</option>
-                    <option value="month">Bulanan</option>
-                  </select>
-                </div>
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                    {([
+                      ["thisMonth", "Bulan Ini"],
+                      ["lastMonth", "Bulan Lalu"],
+                      ["today", "Hari Ini"],
+                      ["7d", "7 Hari Terakhir"],
+                      ["30d", "30 Hari Terakhir"],
+                      ["custom", "Rentang Kustom"],
+                      ["all", "Semua Waktu"],
+                    ] as [Parameters<typeof applyReportPreset>[0], string][]).map(([key, label]) => {
+                      const todayKey = toJakartaDateKey(new Date());
+                      const sevenStartDate = new Date();
+                      sevenStartDate.setDate(sevenStartDate.getDate() - 6);
+                      const thirtyStartDate = new Date();
+                      thirtyStartDate.setDate(thirtyStartDate.getDate() - 29);
+                      const sevenStart = toJakartaDateKey(sevenStartDate);
+                      const thirtyStart = toJakartaDateKey(thirtyStartDate);
+                      const isTodayRange = reportPeriod === "range" && reportStartDate === todayKey && reportEndDate === todayKey;
+                      const isSevenDayRange = reportPeriod === "range" && reportStartDate === sevenStart && reportEndDate === todayKey;
+                      const isThirtyDayRange = reportPeriod === "range" && reportStartDate === thirtyStart && reportEndDate === todayKey;
+                      const isActive =
+                        (key === "thisMonth" && reportPeriod === "month" && reportMonth === currentMonthInput) ||
+                        (key === "lastMonth" && reportPeriod === "month" && reportMonth === shiftMonthInput(currentMonthInput, -1)) ||
+                        (key === "today" && isTodayRange) ||
+                        (key === "7d" && isSevenDayRange) ||
+                        (key === "30d" && isThirtyDayRange) ||
+                        (key === "custom" && reportPeriod === "range" && !isTodayRange && !isSevenDayRange && !isThirtyDayRange) ||
+                        (key === "all" && reportPeriod === "all");
 
-                {reportPeriod === "month" && (
-                  <div className="min-w-0">
-                    <label className="text-[11px] font-medium text-emerald-700/70 mb-1 block">
-                      Pilih bulan
-                    </label>
-                    <input
-                      type="month"
-                      value={reportMonth}
-                      onChange={(e) => setReportMonth(e.target.value)}
-                      className="min-h-[42px] w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
-                    />
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => applyReportPreset(key)}
+                          className={`rounded-full px-3 py-1.5 text-[11px] sm:text-xs font-semibold transition ${
+                            isActive
+                              ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/25"
+                              : "bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
                   </div>
-                )}
+
+                  {reportPeriod === "month" && (
+                    <div className="mt-3 max-w-xs">
+                      <label className="text-[11px] font-medium text-emerald-700/70 mb-1 block">
+                        Pilih bulan
+                      </label>
+                      <input
+                        type="month"
+                        value={reportMonth}
+                        max={currentMonthInput}
+                        onChange={(event) => setReportMonth(event.target.value)}
+                        className="min-h-[42px] w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+                      />
+                    </div>
+                  )}
+
+                  {reportPeriod === "range" && (
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:max-w-md">
+                      <div className="min-w-0">
+                        <label className="text-[11px] font-medium text-emerald-700/70 mb-1 block">
+                          Dari tanggal
+                        </label>
+                        <input
+                          type="date"
+                          value={reportStartDate}
+                          max={reportEndDate || undefined}
+                          onChange={(event) => setReportStartDate(event.target.value)}
+                          className="min-h-[42px] w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <label className="text-[11px] font-medium text-emerald-700/70 mb-1 block">
+                          Sampai tanggal
+                        </label>
+                        <input
+                          type="date"
+                          value={reportEndDate}
+                          min={reportStartDate || undefined}
+                          max={toJakartaDateKey(new Date())}
+                          onChange={(event) => setReportEndDate(event.target.value)}
+                          className="min-h-[42px] w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -4632,24 +4941,34 @@ export default function TeacherDashboard() {
                   } (${reportPeriodLabel}).`}
             </p>
 
-            <div className="flex flex-wrap gap-3">
+            <div className="flex flex-wrap gap-2.5 sm:gap-3">
               <button
                 onClick={handleExportCSV}
-                className="download-btn flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-sm font-semibold rounded-xl hover:from-emerald-700 hover:to-emerald-600 active:scale-[0.98] transition duration-300 shadow-lg hover:shadow-emerald-600/40"
+                disabled={isExportingReport}
+                className="download-btn flex items-center gap-2 px-3.5 sm:px-4 py-2.5 sm:py-2 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-xs sm:text-sm font-semibold rounded-xl hover:from-emerald-700 hover:to-emerald-600 active:scale-[0.98] transition duration-300 shadow-lg hover:shadow-emerald-600/40 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <Download className="download-btn-icon w-4 h-4" />
-                Unduh CSV / Excel (Detail)
+                {isExportingReport ? (
+                  <RefreshCw className="download-btn-icon w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="download-btn-icon w-4 h-4" />
+                )}
+                {isExportingReport ? "Menyiapkan..." : "Unduh CSV (Detail)"}
               </button>
               <button
                 onClick={handleExportBooksAndCharacters}
-                className="download-btn flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-teal-600 to-teal-500 text-white text-sm font-semibold rounded-xl hover:from-teal-700 hover:to-teal-600 active:scale-[0.98] transition duration-300 shadow-lg hover:shadow-teal-600/40"
+                disabled={isExportingReport}
+                className="download-btn flex items-center gap-2 px-3.5 sm:px-4 py-2.5 sm:py-2 bg-gradient-to-r from-teal-600 to-teal-500 text-white text-xs sm:text-sm font-semibold rounded-xl hover:from-teal-700 hover:to-teal-600 active:scale-[0.98] transition duration-300 shadow-lg hover:shadow-teal-600/40 disabled:opacity-60 disabled:cursor-not-allowed"
               >
-                <Download className="download-btn-icon w-4 h-4" />
-                Unduh Buku & Karakter
+                {isExportingReport ? (
+                  <RefreshCw className="download-btn-icon w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="download-btn-icon w-4 h-4" />
+                )}
+                {isExportingReport ? "Menyiapkan..." : "Unduh Buku & Karakter (CSV)"}
               </button>
               <button
                 onClick={handlePrint}
-                className="download-btn flex items-center gap-2 px-4 py-2 border border-emerald-200 text-emerald-800 text-sm font-semibold rounded-xl hover:bg-emerald-50 active:scale-[0.98] transition duration-300 hover:border-emerald-400 hover:shadow-lg hover:shadow-emerald-600/20"
+                className="download-btn flex items-center gap-2 px-3.5 sm:px-4 py-2.5 sm:py-2 border border-emerald-200 text-emerald-800 text-xs sm:text-sm font-semibold rounded-xl hover:bg-emerald-50 active:scale-[0.98] transition duration-300 hover:border-emerald-400 hover:shadow-lg hover:shadow-emerald-600/20"
               >
                 <Printer className="download-btn-icon w-4 h-4" />
                 Cetak
@@ -4975,7 +5294,7 @@ export default function TeacherDashboard() {
                     </tr>
                   </thead>
                   <tbody className="text-slate-700">
-                    {printableRows.map((row, rowIndex) => (
+                    {(showFullPreview ? printableRows : printableRows.slice(0, REPORT_PREVIEW_ROW_LIMIT)).map((row, rowIndex) => (
                       <tr key={`${String(row[0])}-${rowIndex}`} className="border-b border-emerald-50 odd:bg-white even:bg-emerald-50/30 text-slate-700">
                         {row.map((field, fieldIndex) => (
                           <td key={`${rowIndex}-${fieldIndex}`} className="py-2 lg:py-2.5 pr-3 pl-2 align-top first:pl-3 text-slate-700">{field}</td>
@@ -4985,6 +5304,21 @@ export default function TeacherDashboard() {
                   </tbody>
                 </table>
               </div>
+              {printableRows.length > REPORT_PREVIEW_ROW_LIMIT && (
+                <div className="mt-3 flex flex-col items-center gap-2 sm:flex-row sm:justify-between">
+                  <p className="text-[11px] text-emerald-700/60">
+                    Menampilkan {showFullPreview ? printableRows.length : Math.min(REPORT_PREVIEW_ROW_LIMIT, printableRows.length)} dari {printableRows.length} baris.
+                    {!showFullPreview && " Unduh CSV untuk data lengkap, atau tampilkan semua di sini."}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setShowFullPreview((current) => !current)}
+                    className="rounded-full border border-emerald-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-emerald-700 transition hover:bg-emerald-50"
+                  >
+                    {showFullPreview ? "Tampilkan Ringkas" : `Tampilkan Semua ${printableRows.length} Baris`}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}

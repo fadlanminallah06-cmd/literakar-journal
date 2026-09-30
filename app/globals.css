@@ -8,6 +8,7 @@
 
 html {
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
 }
 
 @theme inline {
@@ -134,4 +135,47 @@ textarea::placeholder {
 option {
   color: #1e293b;
   background: #ffffff;
+}
+
+/* Scroll and touch behavior */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a,
+select,
+summary,
+[role="button"] {
+  touch-action: manipulation;
+}
+
+/* Interactive elements share a short color transition; utility classes can override it. */
+button,
+input,
+select,
+textarea {
+  transition-property: background-color, border-color, color, box-shadow, opacity, transform;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+/* Defer rendering for items in long lists. */
+.smooth-item {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 180px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

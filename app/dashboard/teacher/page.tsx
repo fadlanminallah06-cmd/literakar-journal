@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { Fragment, startTransition, useDeferredValue, useState, useEffect, useMemo, useCallback, useRef } from "react";
 import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
 import Avatar from "@/lib/AvatarComponent";
@@ -891,7 +891,28 @@ function DailyProgressChart({ journals, month }: { journals: Journal[]; month: s
   );
 }
 
-function CuteBackground({ mouse }: { mouse: { x: number; y: number } }) {
+function CuteBackground() {
+  const [mouse, setMouse] = useState({ x: 0.5, y: 0.5 });
+
+  useEffect(() => {
+    if (window.matchMedia("(hover: none)").matches) return;
+
+    let frame: number | null = null;
+    const handleMove = (event: MouseEvent) => {
+      if (frame !== null) return;
+      frame = window.requestAnimationFrame(() => {
+        setMouse({ x: event.clientX / window.innerWidth, y: event.clientY / window.innerHeight });
+        frame = null;
+      });
+    };
+
+    window.addEventListener("mousemove", handleMove, { passive: true });
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+      if (frame !== null) window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
   const dx = (mouse.x - 0.5) * 26;
   const dy = (mouse.y - 0.5) * 26;
 
@@ -973,7 +994,7 @@ function CuteBackground({ mouse }: { mouse: { x: number; y: number } }) {
  * sebagai pengganti tabel supaya tidak perlu scroll horizontal. */
 function ClassSummaryCard({ summary }: { summary: ClassSummary }) {
   return (
-    <div className="rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3.5">
+    <div className="smooth-item rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3.5">
       <div className="flex items-center justify-between mb-2.5">
         <span className="inline-flex items-center gap-1.5 text-sm font-bold text-emerald-900">
           <span className="w-6 h-6 rounded-lg bg-emerald-600 text-white text-xs flex items-center justify-center">
@@ -1018,7 +1039,7 @@ function StudentSummaryCard({ s, onOpen }: { s: StudentSummary; onOpen?: () => v
       type="button"
       onClick={onOpen}
       disabled={!onOpen}
-      className="w-full text-left rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3.5 disabled:cursor-default"
+      className="smooth-item w-full text-left rounded-2xl border border-emerald-100 bg-emerald-50/60 p-3.5 disabled:cursor-default"
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -1168,6 +1189,9 @@ export default function TeacherDashboard() {
   const [studentAlerts, setStudentAlerts] = useState<StudentAlert[]>([]);
   const [feedbackInput, setFeedbackInput] = useState<{ [key: string]: string }>({});
   const [activeTab, setActiveTab] = useState<TabKey>("ringkasan");
+  const changeTab = useCallback((key: TabKey) => {
+    startTransition(() => setActiveTab(key));
+  }, []);
   const [selectedStudent, setSelectedStudent] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [mentoringSearch, setMentoringSearch] = useState("");
@@ -1201,7 +1225,6 @@ export default function TeacherDashboard() {
   const [managementError, setManagementError] = useState("");
   const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [managementLoading, setManagementLoading] = useState(false);
-  const [mousePos, setMousePos] = useState({ x: 0.5, y: 0.5 });
   // id jurnal yang sedang diproses (approve/revisi/batalkan) -> mencegah klik ganda
   const [journalActionLoading, setJournalActionLoading] = useState<string | null>(null);
   // Error validasi spesifik per jurnal, ditampilkan langsung pada kartu jurnal terkait.
@@ -1230,6 +1253,11 @@ export default function TeacherDashboard() {
   const swipeStartX = useRef<number | null>(null);
   const swipeStartTime = useRef<number | null>(null);
   const currentMonthInput = getCurrentMonthInput();
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+  const deferredJournalSearch = useDeferredValue(journalStudentSearch);
+  const deferredMentoringSearch = useDeferredValue(mentoringSearch);
+  const deferredManagementSearch = useDeferredValue(managementStudentSearch);
+  const deferredReportSearch = useDeferredValue(reportStudentSearch);
 
   const updateNavFade = useCallback(() => {
     const element = navScrollRef.current;
@@ -1290,7 +1318,7 @@ export default function TeacherDashboard() {
     const tabKeys: TabKey[] = ["ringkasan", "jurnal", "pendampingan", "leaderboard", "laporan", "kelola"];
     const currentIndex = tabKeys.indexOf(activeTab);
     const nextIndex = endX < startX ? currentIndex + 1 : currentIndex - 1;
-    if (nextIndex >= 0 && nextIndex < tabKeys.length) setActiveTab(tabKeys[nextIndex]);
+    if (nextIndex >= 0 && nextIndex < tabKeys.length) changeTab(tabKeys[nextIndex]);
   };
 
   useEffect(() => {
@@ -1459,17 +1487,6 @@ export default function TeacherDashboard() {
 
   // Data jurnal di-fetch saat dashboard dimuat dan dapat disegarkan manual
   // melalui tombol "Muat Ulang" agar tidak memasang listener koleksi penuh.
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      setMousePos({
-        x: e.clientX / window.innerWidth,
-        y: e.clientY / window.innerHeight,
-      });
-    };
-    window.addEventListener("mousemove", handleMouseMove);
-    return () => window.removeEventListener("mousemove", handleMouseMove);
-  }, []);
 
   useEffect(() => {
     let frameId: number | null = null;
@@ -2014,14 +2031,12 @@ export default function TeacherDashboard() {
   );
 
   const filteredStudents = useMemo(() => {
+    const search = deferredSearchQuery.trim().toLowerCase();
     return monthlyStudentSummaries.filter((s) => {
       const matchClass = classFilter === "all" || s.classCode === classFilter;
-      const matchSearch =
-        !searchQuery.trim() ||
-        s.name.toLowerCase().includes(searchQuery.trim().toLowerCase());
-      return matchClass && matchSearch;
+      return matchClass && (!search || s.name.toLowerCase().includes(search));
     });
-  }, [monthlyStudentSummaries, classFilter, searchQuery]);
+  }, [monthlyStudentSummaries, classFilter, deferredSearchQuery]);
 
   // Grouping students by class untuk tab Kelola Data
   const managementAvailableClasses = useMemo(() => {
@@ -2042,25 +2057,21 @@ export default function TeacherDashboard() {
   }, [allStudents]);
 
   const groupedStudentsByClass = useMemo(() => {
-    const searchQ = managementStudentSearch.trim().toLowerCase();
+    const searchQ = deferredManagementSearch.trim().toLowerCase();
     let filtered = allStudents.filter((s) => !searchQ || s.name.toLowerCase().includes(searchQ));
-    
-    // Apply class filter
+
     if (managementClassFilter !== "all") {
       filtered = filtered.filter((s) => s.classCode === managementClassFilter);
     }
-    
+
     const grouped = new Map<string, RosterStudent[]>();
     filtered.forEach((s) => {
       const classCode = s.classCode || "Tanpa Kelas";
-      if (!grouped.has(classCode)) {
-        grouped.set(classCode, []);
-      }
+      if (!grouped.has(classCode)) grouped.set(classCode, []);
       grouped.get(classCode)!.push(s);
     });
 
-    // Sort by class code (7A-7H, 8A-8H, 9A-9H), siswa dalam setiap kelas juga di-sort by nama
-    const sorted = Array.from(grouped.entries())
+    return Array.from(grouped.entries())
       .sort(([a], [b]) => {
         const gradeA = parseInt(a[0], 10);
         const gradeB = parseInt(b[0], 10);
@@ -2071,9 +2082,7 @@ export default function TeacherDashboard() {
         classCode,
         students: students.sort((a, b) => a.name.localeCompare(b.name, "id")),
       }));
-
-    return sorted;
-  }, [allStudents, managementStudentSearch, managementClassFilter]);
+  }, [allStudents, deferredManagementSearch, managementClassFilter]);
 
   const classStats = useMemo(() => {
     const totalSiswa = allStudents.length;
@@ -2173,7 +2182,7 @@ export default function TeacherDashboard() {
       }));
   }, [journals]);
   const filteredGroupedJournalsByClass = useMemo(() => {
-    const studentQuery = journalStudentSearch.trim().toLowerCase();
+    const studentQuery = deferredJournalSearch.trim().toLowerCase();
 
     const filteredByStudent = groupedJournalsByClass
       .map(({ classCode, journals: classJournals }) => ({
@@ -2187,7 +2196,7 @@ export default function TeacherDashboard() {
     return journalClassFilter === "all"
       ? filteredByStudent
       : filteredByStudent.filter(({ classCode }) => classCode === journalClassFilter);
-  }, [groupedJournalsByClass, journalClassFilter, journalStudentSearch]);
+  }, [groupedJournalsByClass, journalClassFilter, deferredJournalSearch]);
   const missingValidationFeedbackByClass = useMemo(() => {
     const counts = new Map<string, number>();
     journals.forEach((journal) => {
@@ -2280,7 +2289,7 @@ export default function TeacherDashboard() {
   }, [studentSummaries, classStats]);
 
   const groupedStudentsNeedingAttention = useMemo(() => {
-    const search = mentoringSearch.trim().toLowerCase();
+    const search = deferredMentoringSearch.trim().toLowerCase();
     const filtered = studentsNeedingAttention.filter((student) => {
       const matchesName = !search || student.name.toLowerCase().includes(search);
       const matchesClass = mentoringClassFilter === "all" || student.classCode === mentoringClassFilter;
@@ -2300,7 +2309,7 @@ export default function TeacherDashboard() {
         classCode,
         students: students.sort((a, b) => a.name.localeCompare(b.name, "id")),
       }));
-  }, [mentoringClassFilter, mentoringSearch, studentsNeedingAttention]);
+  }, [mentoringClassFilter, deferredMentoringSearch, studentsNeedingAttention]);
 
   const selectedStudentData = useMemo(
     () => monthlyStudentSummaries.find((s) => s.key === selectedStudent) || null,
@@ -2347,20 +2356,17 @@ export default function TeacherDashboard() {
 
   // Grouped & filtered students untuk dropdown laporan per siswa
   const reportStudentsGroupedByClass = useMemo(() => {
-    const searchQ = reportStudentSearch.trim().toLowerCase();
+    const searchQ = deferredReportSearch.trim().toLowerCase();
     const filtered = reportStudentSummaries.filter((s) => !searchQ || s.name.toLowerCase().includes(searchQ));
 
     const grouped = new Map<string, StudentSummary[]>();
     filtered.forEach((s) => {
       const classCode = s.classCode || "Tanpa Kelas";
-      if (!grouped.has(classCode)) {
-        grouped.set(classCode, []);
-      }
+      if (!grouped.has(classCode)) grouped.set(classCode, []);
       grouped.get(classCode)!.push(s);
     });
 
-    // Sort by class (7A-7H, 8A-8H, 9A-9H), siswa dalam setiap kelas sorted by nama
-    const sorted = Array.from(grouped.entries())
+    return Array.from(grouped.entries())
       .sort(([a], [b]) => {
         const gradeA = parseInt(a[0], 10);
         const gradeB = parseInt(b[0], 10);
@@ -2371,9 +2377,7 @@ export default function TeacherDashboard() {
         classCode,
         students: students.sort((a, b) => a.name.localeCompare(b.name, "id")),
       }));
-
-    return sorted;
-  }, [reportStudentSummaries, reportStudentSearch]);
+  }, [reportStudentSummaries, deferredReportSearch]);
 
   // Daftar siswa untuk laporan Per Kelas — sama-sama bersumber dari
   // reportStudentSummaries (seluruh roster) agar tiap siswa di kelas
@@ -2759,7 +2763,7 @@ export default function TeacherDashboard() {
           animation: ripple 0.6s ease-out;
         }
       `}</style>
-      <CuteBackground mouse={mousePos} />
+      <CuteBackground />
 
       <div className="relative w-full max-w-6xl xl:max-w-7xl 2xl:max-w-[96rem] mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 box-border print:hidden">
         {/* ---- Header ---- */}
@@ -2885,7 +2889,7 @@ export default function TeacherDashboard() {
                 <button
                   key={t.key}
                   data-dashboard-tab={t.key}
-                  onClick={() => setActiveTab(t.key)}
+                  onClick={() => changeTab(t.key)}
                   className={`shrink-0 whitespace-nowrap flex items-center justify-center gap-1.5 px-3 sm:px-4 lg:px-5 py-2 lg:py-2.5 rounded-xl text-xs sm:text-sm font-semibold tracking-wide transition lg:flex-1 ${
                     activeTab === t.key
                       ? "bg-emerald-600 text-white shadow-sm shadow-emerald-900/20"
@@ -3435,7 +3439,7 @@ export default function TeacherDashboard() {
               <button
                 key={s.key}
                 onClick={() => setSelectedStudent(s.key)}
-                className="group w-full flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 p-4 rounded-2xl bg-emerald-50/50 hover:bg-emerald-100/70 border border-emerald-100/50 hover:border-emerald-200 transition-all duration-300 hover:shadow-md active:scale-[0.98] text-left animate-in fade-in slide-in-from-bottom-2"
+                className="smooth-item group w-full flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 p-4 rounded-2xl bg-emerald-50/50 hover:bg-emerald-100/70 border border-emerald-100/50 hover:border-emerald-200 transition-all duration-300 hover:shadow-md active:scale-[0.98] text-left animate-in fade-in slide-in-from-bottom-2"
                 style={{ animationDelay: `${idx * 30}ms` }}
               >
                 <div className="flex min-w-0 items-center gap-3">
@@ -3855,7 +3859,7 @@ export default function TeacherDashboard() {
                       const lastWarningAt = studentUid ? lastWarningAtByStudent.get(studentUid) ?? null : null;
 
                       return (
-                        <div key={s.key} className="border border-orange-200 bg-orange-50/80 p-3 sm:p-4 rounded-2xl">
+                        <div key={s.key} className="smooth-item border border-orange-200 bg-orange-50/80 p-3 sm:p-4 rounded-2xl">
                           <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:justify-between sm:items-start sm:gap-4">
                             <div className="flex gap-3">
                               <Avatar gender={s.gender} name={s.name} className="h-9 w-9" />
@@ -4242,7 +4246,7 @@ export default function TeacherDashboard() {
                               <div
                                 key={j.id}
                                 id={`journal-card-${j.id}`}
-                                className={`relative rounded-2xl border p-4 transition-all duration-200 ${flashJournalId === j.id ? "card-flash-success" : ""} ${
+                                className={`smooth-item relative rounded-2xl border p-4 transition-all duration-200 ${flashJournalId === j.id ? "card-flash-success" : ""} ${
                                   journalInlineError?.id === j.id
                                     ? "border-red-300 ring-2 ring-red-200"
                                     : isSelected
@@ -4638,94 +4642,94 @@ export default function TeacherDashboard() {
                             const isEditingThis = editingStudent?.uid === student.uid;
                             return (
                               <Fragment key={student.uid}>
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 sm:p-4">
-                              <div className="flex items-start gap-3 min-w-0 flex-1">
-                                <button
-                                  onClick={() => handleToggleSelectStudent(student.uid)}
-                                  aria-label={`${selectedStudentsForDelete.has(student.uid) ? "Deselect" : "Select"} ${student.name}`}
-                                  className="mt-0.5 p-1 hover:bg-emerald-100 rounded transition shrink-0"
-                                >
-                                  {selectedStudentsForDelete.has(student.uid) ? (
-                                    <CheckSquare2 className="w-5 h-5 text-emerald-600" />
-                                  ) : (
-                                    <Square className="w-5 h-5 text-emerald-600 opacity-40" />
-                                  )}
-                                </button>
-                                <Avatar gender={student.gender} name={student.name} className="h-9 w-9" />
-                                <div className="min-w-0 flex-1">
-                                  <p className="font-semibold text-emerald-900 truncate">{student.name}</p>
-                                  <p className="text-xs text-emerald-700/60 flex items-center gap-1 flex-wrap mt-0.5">
-                                    <Mail className="w-3 h-3 shrink-0" />
-                                    <span className="truncate">{student.email || "Email tidak tersedia"}</span>
-                                    {student.gender ? <span>· {formatGender(student.gender)}</span> : ""}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex gap-2 shrink-0 flex-wrap justify-end sm:justify-start">
-                                <button
-                                  onClick={() => startEditingStudent(student)}
-                                  aria-label={`Ubah profil ${student.name}`}
-                                  className="flex items-center justify-center gap-1.5 px-2.5 py-2 text-emerald-700 border border-emerald-200 bg-white rounded-lg text-[11px] font-semibold hover:bg-emerald-50 transition min-w-[76px]"
-                                >
-                                  <Pencil className="w-3.5 h-3.5" />
-                                  Ubah
-                                </button>
-                                <button
-                                  onClick={() => void handleDeleteStudent(student)}
-                                  disabled={managementLoading}
-                                  aria-label={`Hapus data ${student.name}`}
-                                  className="flex items-center justify-center gap-1.5 px-2.5 py-2 text-red-600 border border-red-200 bg-red-50 rounded-lg text-[11px] font-semibold hover:bg-red-100 disabled:opacity-50 transition min-w-[96px]"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                  Hapus Data
-                                </button>
-                              </div>
-                            </div>
-                            {isEditingThis && (
-                              <div className="bg-emerald-100/40 border-t-2 border-emerald-200 p-4 sm:p-5">
-                                <h3 className="text-sm font-semibold text-emerald-800 mb-3">Ubah Profil Murid: {student.name}</h3>
-                                <div className="space-y-3">
-                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                    <input
-                                      value={studentForm.name}
-                                      onChange={(e) => setStudentForm({ ...studentForm, name: e.target.value })}
-                                      placeholder="Nama lengkap"
-                                      className="p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
-                                    />
-                                    <input
-                                      value={studentForm.classCode}
-                                      onChange={(e) => setStudentForm({ ...studentForm, classCode: e.target.value })}
-                                      placeholder="Kelas, contoh 7A"
-                                      className="p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
-                                    />
-                                    <select
-                                      value={studentForm.gender}
-                                      onChange={(e) => setStudentForm({ ...studentForm, gender: e.target.value })}
-                                      className="p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
+                                <div className="smooth-item flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 sm:p-4">
+                                  <div className="flex items-start gap-3 min-w-0 flex-1">
+                                    <button
+                                      onClick={() => handleToggleSelectStudent(student.uid)}
+                                      aria-label={`${selectedStudentsForDelete.has(student.uid) ? "Deselect" : "Select"} ${student.name}`}
+                                      className="mt-0.5 p-1 hover:bg-emerald-100 rounded transition shrink-0"
                                     >
-                                      <option value="">Gender belum dipilih</option>
-                                      <option value="laki-laki">Laki-laki</option>
-                                      <option value="perempuan">Perempuan</option>
-                                    </select>
+                                      {selectedStudentsForDelete.has(student.uid) ? (
+                                        <CheckSquare2 className="w-5 h-5 text-emerald-600" />
+                                      ) : (
+                                        <Square className="w-5 h-5 text-emerald-600 opacity-40" />
+                                      )}
+                                    </button>
+                                    <Avatar gender={student.gender} name={student.name} className="h-9 w-9" />
+                                    <div className="min-w-0 flex-1">
+                                      <p className="font-semibold text-emerald-900 truncate">{student.name}</p>
+                                      <p className="text-xs text-emerald-700/60 flex items-center gap-1 flex-wrap mt-0.5">
+                                        <Mail className="w-3 h-3 shrink-0" />
+                                        <span className="truncate">{student.email || "Email tidak tersedia"}</span>
+                                        {student.gender ? <span>· {formatGender(student.gender)}</span> : ""}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex gap-2 shrink-0 flex-wrap justify-end sm:justify-start">
+                                    <button
+                                      onClick={() => startEditingStudent(student)}
+                                      aria-label={`Ubah profil ${student.name}`}
+                                      className="flex items-center justify-center gap-1.5 px-2.5 py-2 text-emerald-700 border border-emerald-200 bg-white rounded-lg text-[11px] font-semibold hover:bg-emerald-50 transition min-w-[76px]"
+                                    >
+                                      <Pencil className="w-3.5 h-3.5" />
+                                      Ubah
+                                    </button>
+                                    <button
+                                      onClick={() => void handleDeleteStudent(student)}
+                                      disabled={managementLoading}
+                                      aria-label={`Hapus data ${student.name}`}
+                                      className="flex items-center justify-center gap-1.5 px-2.5 py-2 text-red-600 border border-red-200 bg-red-50 rounded-lg text-[11px] font-semibold hover:bg-red-100 disabled:opacity-50 transition min-w-[96px]"
+                                    >
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                      Hapus Data
+                                    </button>
                                   </div>
                                 </div>
-                                <div className="flex gap-2 mt-3">
-                                  <button
-                                    onClick={handleUpdateStudent}
-                                    disabled={managementLoading}
-                                    className="px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition"
-                                  >
-                                    {managementLoading ? "Menyimpan..." : "Simpan Perubahan"}
-                                  </button>
-                                  <button
-                                    onClick={() => setEditingStudent(null)}
-                                    className="px-4 py-2 border border-emerald-200 text-emerald-800 text-sm font-semibold rounded-xl hover:bg-emerald-50 transition"
-                                  >
-                                    Batal
-                                  </button>
-                                </div>
-                              </div>
-                            )}
+                                {isEditingThis && (
+                                  <div className="bg-emerald-100/40 border-t-2 border-emerald-200 p-4 sm:p-5">
+                                    <h3 className="text-sm font-semibold text-emerald-800 mb-3">Ubah Profil Murid: {student.name}</h3>
+                                    <div className="space-y-3">
+                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                        <input
+                                          value={studentForm.name}
+                                          onChange={(e) => setStudentForm({ ...studentForm, name: e.target.value })}
+                                          placeholder="Nama lengkap"
+                                          className="p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
+                                        />
+                                        <input
+                                          value={studentForm.classCode}
+                                          onChange={(e) => setStudentForm({ ...studentForm, classCode: e.target.value })}
+                                          placeholder="Kelas, contoh 7A"
+                                          className="p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
+                                        />
+                                        <select
+                                          value={studentForm.gender}
+                                          onChange={(e) => setStudentForm({ ...studentForm, gender: e.target.value })}
+                                          className="p-2 text-sm bg-white border border-emerald-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-400"
+                                        >
+                                          <option value="">Gender belum dipilih</option>
+                                          <option value="laki-laki">Laki-laki</option>
+                                          <option value="perempuan">Perempuan</option>
+                                        </select>
+                                      </div>
+                                    </div>
+                                    <div className="flex gap-2 mt-3">
+                                      <button
+                                        onClick={handleUpdateStudent}
+                                        disabled={managementLoading}
+                                        className="px-4 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition"
+                                      >
+                                        {managementLoading ? "Menyimpan..." : "Simpan Perubahan"}
+                                      </button>
+                                      <button
+                                        onClick={() => setEditingStudent(null)}
+                                        className="px-4 py-2 border border-emerald-200 text-emerald-800 text-sm font-semibold rounded-xl hover:bg-emerald-50 transition"
+                                      >
+                                        Batal
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
                               </Fragment>
                             );
                           })}

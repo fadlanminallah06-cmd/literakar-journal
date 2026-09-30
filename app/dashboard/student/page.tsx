@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useId, useCallback, useRef, type CSSProperties } from "react";
+import { startTransition, useDeferredValue, useState, useEffect, useMemo, useId, useCallback, useRef, type CSSProperties } from "react";
 import { useAuth } from "@/context/AuthContext";
 import Avatar from "@/lib/AvatarComponent";
 import { db } from "@/lib/firebase";
@@ -1709,6 +1709,9 @@ export default function StudentDashboard() {
   const [journals, setJournals] = useState<Journal[]>([]);
   const [studentAlerts, setStudentAlerts] = useState<StudentAlert[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>("beranda");
+  const changeTab = useCallback((key: TabKey) => {
+    startTransition(() => setActiveTab(key));
+  }, []);
   const [selectedRecapMonth, setSelectedRecapMonth] = useState(() => toJakartaDateKey(new Date()).slice(0, 7));
   const currentRecapMonth = toJakartaDateKey(new Date()).slice(0, 7);
 
@@ -1728,6 +1731,7 @@ export default function StudentDashboard() {
 
   // Fitur #2: pencarian & filter status di Riwayat Jurnal
   const [riwayatSearch, setRiwayatSearch] = useState("");
+  const deferredRiwayatSearch = useDeferredValue(riwayatSearch);
   const [riwayatStatus, setRiwayatStatus] = useState<RiwayatStatusFilter>("semua");
   const [expandedJournalId, setExpandedJournalId] = useState<string | null>(null);
 
@@ -1811,7 +1815,7 @@ export default function StudentDashboard() {
     const tabKeys: TabKey[] = ["beranda", "jurnal", "pohon", "badge", "leaderboard", "riwayat"];
     const currentIndex = tabKeys.indexOf(activeTab);
     const nextIndex = endX < startX ? currentIndex + 1 : currentIndex - 1;
-    if (nextIndex >= 0 && nextIndex < tabKeys.length) setActiveTab(tabKeys[nextIndex]);
+    if (nextIndex >= 0 && nextIndex < tabKeys.length) changeTab(tabKeys[nextIndex]);
   };
 
   useEffect(() => {
@@ -2635,13 +2639,13 @@ export default function StudentDashboard() {
 
   // Fitur #2: daftar riwayat setelah pencarian judul/penulis & filter status.
   const filteredRiwayat = useMemo(() => {
-    const q = riwayatSearch.trim().toLowerCase();
+    const q = deferredRiwayatSearch.trim().toLowerCase();
     return journals.filter((j) => {
       const matchSearch = !q || j.bookTitle.toLowerCase().includes(q) || j.author.toLowerCase().includes(q);
       const matchStatus = riwayatStatus === "semua" || normalizeStatus(j.status) === riwayatStatus;
       return matchSearch && matchStatus;
     });
-  }, [journals, riwayatSearch, riwayatStatus]);
+  }, [journals, deferredRiwayatSearch, riwayatStatus]);
 
   // Fitur #6: jumlah jurnal berstatus "Perlu Revisi", ditampilkan sebagai badge pada tab.
   const revisionCount = useMemo(
@@ -2742,7 +2746,7 @@ export default function StudentDashboard() {
     setCustomCharacter("");
     setFormError("");
     setSuccessMessage("");
-    setActiveTab("jurnal");
+    changeTab("jurnal");
   };
 
   // Fitur #1: hapus jurnal milik sendiri. Hanya diizinkan selama jurnal belum
@@ -2836,7 +2840,7 @@ export default function StudentDashboard() {
       setCustomCharacter("");
       setEditingJournalId(null);
       setEditingFeedback("");
-      setActiveTab("riwayat");
+      changeTab("riwayat");
       if (user) {
         try {
           localStorage.removeItem(`literasi_jurnal_draft_${user.uid}`);
@@ -3066,7 +3070,7 @@ export default function StudentDashboard() {
                 <button
                   key={t.key}
                   data-dashboard-tab={t.key}
-                  onClick={() => setActiveTab(t.key)}
+                  onClick={() => changeTab(t.key)}
                   className={`shrink-0 whitespace-nowrap px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-150 flex items-center gap-1.5 sm:gap-2 ${
                     activeTab === t.key ? theme.navActive : theme.navInactive
                   }`}
@@ -3195,7 +3199,7 @@ export default function StudentDashboard() {
                   <button
                     type="button"
                     onClick={() => {
-                      setActiveTab("leaderboard");
+                      changeTab("leaderboard");
                       setLeaderboardSubTab("kelas");
                     }}
                     className="shrink-0 flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700 active:scale-[0.98] transition shadow-md shadow-emerald-600/20 w-full sm:w-auto"
@@ -3238,7 +3242,7 @@ export default function StudentDashboard() {
                     </p>
                   </div>
                   <button
-                    onClick={() => setActiveTab("jurnal")}
+                    onClick={() => changeTab("jurnal")}
                     className={`shrink-0 px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition active:scale-[0.98] shadow-md w-full sm:w-auto ${
                       readingStreak > 0 
                         ? "bg-orange-500 hover:bg-orange-600 shadow-orange-500/25" 
@@ -3503,7 +3507,7 @@ export default function StudentDashboard() {
                     Jurnal Terbaru
                   </h3>
                   <button
-                    onClick={() => setActiveTab("riwayat")}
+                    onClick={() => changeTab("riwayat")}
                     className={`text-xs font-semibold flex items-center gap-1 ${
                       darkMode ? "text-emerald-300 hover:text-emerald-200" : "text-emerald-600 hover:text-emerald-700"
                     }`}
@@ -4644,7 +4648,7 @@ export default function StudentDashboard() {
                 title="Belum ada jurnal"
                 description="Catat buku pertama yang kamu baca dan mulai kumpulkan jejak literasimu."
                 actionLabel="Isi Jurnal Sekarang"
-                onAction={() => setActiveTab("jurnal")}
+                onAction={() => changeTab("jurnal")}
                 dark={darkMode}
               />
             ) : filteredRiwayat.length === 0 ? (
@@ -4661,7 +4665,7 @@ export default function StudentDashboard() {
                   const isExpanded = expandedJournalId === j.id;
 
                   return (
-                    <div key={j.id} className={`border p-3.5 sm:p-4 rounded-2xl transition-colors ${darkMode ? "border-slate-700 bg-slate-700/40" : "border-emerald-100 bg-emerald-50/50"}`}>
+                    <div key={j.id} className={`smooth-item border p-3.5 sm:p-4 rounded-2xl transition-colors ${darkMode ? "border-slate-700 bg-slate-700/40" : "border-emerald-100 bg-emerald-50/50"}`}>
                       <div className="flex flex-wrap justify-between items-start mb-1 gap-2">
                         <p className={`font-bold text-sm sm:text-base ${theme.headingText}`}>
                           {j.bookTitle} <span className={`font-normal ${theme.mutedText}`}>({j.author})</span>

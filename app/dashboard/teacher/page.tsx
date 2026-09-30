@@ -2999,21 +2999,21 @@ export default function TeacherDashboard() {
         {overviewPeriod === "month" && (
           <div
             aria-label="Navigasi bulan rekap"
-            className="flex w-full items-center gap-1.5 rounded-2xl border border-emerald-200/70 bg-gradient-to-r from-white via-emerald-50/50 to-white p-1.5 shadow-sm shadow-emerald-900/5"
+            className="flex w-full items-center gap-1 rounded-2xl border border-emerald-200/70 bg-gradient-to-r from-white via-emerald-50/50 to-white p-1.5 shadow-sm shadow-emerald-900/5 sm:gap-1.5"
           >
             <button
               type="button"
               onClick={() => setOverviewMonth((month) => shiftMonthInput(month, -1))}
               aria-label="Lihat bulan sebelumnya"
               title="Bulan sebelumnya"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-emerald-600 transition-all hover:bg-emerald-100 hover:text-emerald-800 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-emerald-600 transition-all hover:bg-emerald-100 hover:text-emerald-800 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 sm:h-10 sm:w-10"
             >
-              <ChevronLeft className="h-5 w-5" />
+              <ChevronLeft className="h-4 w-4 sm:h-5 sm:w-5" />
             </button>
 
-            <div className="flex min-w-0 flex-1 items-center justify-center gap-2 px-1">
+            <div className="flex min-w-0 flex-1 items-center justify-center gap-1 px-1 sm:gap-2">
               <CalendarCheck className="hidden h-4 w-4 shrink-0 text-emerald-500/70 xs:block" />
-              <span className="truncate text-sm font-bold capitalize text-emerald-900 sm:text-base">
+              <span className="whitespace-nowrap text-center text-xs font-bold capitalize text-emerald-900 sm:text-base">
                 {formatMonthLabel(overviewMonth)}
               </span>
             </div>
@@ -3024,18 +3024,18 @@ export default function TeacherDashboard() {
               disabled={overviewMonth >= currentMonthInput}
               aria-label="Lihat bulan berikutnya"
               title="Bulan berikutnya"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-emerald-600 transition-all hover:bg-emerald-100 hover:text-emerald-800 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-emerald-600 transition-all hover:bg-emerald-100 hover:text-emerald-800 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent sm:h-10 sm:w-10"
             >
-              <ChevronRight className="h-5 w-5" />
+              <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5" />
             </button>
 
-            <div className="h-6 w-px shrink-0 bg-emerald-200/80" />
+            <div className="h-5 w-px shrink-0 bg-emerald-200/80 sm:h-6" />
 
             <button
               type="button"
               onClick={() => setOverviewMonth(currentMonthInput)}
               disabled={overviewMonth === currentMonthInput}
-              className={`h-10 shrink-0 rounded-xl px-3 text-xs font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 sm:px-5 sm:text-sm ${
+              className={`h-8 shrink-0 rounded-xl px-2.5 text-[11px] font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 sm:h-10 sm:px-5 sm:text-sm ${
                 overviewMonth === currentMonthInput
                   ? "cursor-default bg-emerald-600/10 text-emerald-400"
                   : "bg-emerald-600 text-white shadow-sm shadow-emerald-600/30 hover:bg-emerald-700 active:scale-95"

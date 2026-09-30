@@ -1155,6 +1155,11 @@ function EmptyState({
   );
 }
 
+const FIELD_CLASS =
+  "min-h-[44px] w-full rounded-xl border border-emerald-200 bg-white px-3.5 py-2.5 text-sm text-emerald-900 shadow-sm outline-none transition placeholder:text-emerald-700/40 hover:border-emerald-300 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200";
+const FIELD_LABEL_CLASS =
+  "mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-emerald-700/70";
+
 export default function TeacherDashboard() {
   const { user, userProfile, logout, loading } = useAuth();
   const router = useRouter();
@@ -2946,88 +2951,100 @@ export default function TeacherDashboard() {
       <div className="absolute -top-24 -right-24 w-64 h-64 bg-emerald-200/30 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute -bottom-24 -left-24 w-64 h-64 bg-teal-200/30 rounded-full blur-3xl pointer-events-none" />
       
-      <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
+      <div className="relative space-y-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
           <h2 className="text-xl sm:text-2xl font-bold text-emerald-900 tracking-tight">
             Rekap Seluruh Siswa
           </h2>
           <p className="text-sm text-emerald-700/70 mt-1">
             Ringkasan aktivitas {overviewPeriod === "all" ? "sepanjang waktu" : `untuk ${formatMonthLabel(overviewMonth)}`}
           </p>
+          </div>
+          <div className="inline-flex w-fit items-center gap-2 rounded-full border border-emerald-100 bg-emerald-50/80 px-3 py-1.5 text-xs font-medium text-emerald-600 sm:text-sm">
+            <CalendarCheck className="h-4 w-4 shrink-0" />
+            <span>{todayLabel}</span>
+          </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-          <div className="flex items-center rounded-full border border-emerald-100 bg-white/80 p-1 shadow-sm" role="group" aria-label="Periode rekap">
-            <button
-              type="button"
-              onClick={() => setOverviewPeriod("month")}
-              aria-pressed={overviewPeriod === "month"}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${overviewPeriod === "month" ? "bg-emerald-600 text-white" : "text-emerald-700 hover:bg-emerald-50"}`}
-            >
-              Bulanan
-            </button>
-            <button
-              type="button"
-              onClick={() => setOverviewPeriod("all")}
-              aria-pressed={overviewPeriod === "all"}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${overviewPeriod === "all" ? "bg-emerald-600 text-white" : "text-emerald-700 hover:bg-emerald-50"}`}
-            >
-              Sepanjang waktu
-            </button>
-          </div>
-          <div className="flex items-center gap-2 text-xs sm:text-sm text-emerald-600 bg-emerald-50/80 px-3 py-1.5 rounded-full border border-emerald-100 w-fit">
-            <CalendarCheck className="w-4 h-4 shrink-0" />
-            <span className="font-medium">{todayLabel}</span>
-          </div>
-          {overviewPeriod === "month" && (
-            <div
-              className="flex w-full items-center gap-1 rounded-2xl border border-emerald-200/70 bg-gradient-to-r from-white via-emerald-50/50 to-white p-1.5 shadow-sm shadow-emerald-900/5 sm:w-auto"
-              aria-label="Navigasi bulan rekap"
-            >
+
+        <div
+          role="group"
+          aria-label="Periode rekap"
+          className="grid w-full grid-cols-2 gap-1 rounded-2xl border border-emerald-100 bg-white/80 p-1 shadow-sm"
+        >
+          {([
+            { key: "month", label: "Bulanan", Icon: CalendarCheck },
+            { key: "all", label: "Sepanjang waktu", Icon: Clock },
+          ] as { key: ReportPeriod; label: string; Icon: typeof Clock }[]).map(({ key, label, Icon }) => {
+            const active = overviewPeriod === key;
+            return (
               <button
+                key={key}
                 type="button"
-                onClick={() => setOverviewMonth((month) => shiftMonthInput(month, -1))}
-                aria-label="Lihat bulan sebelumnya"
-                title="Bulan sebelumnya"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-emerald-600 transition-all hover:bg-emerald-100 hover:text-emerald-800 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 sm:h-8 sm:w-8"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-
-              <div className="flex flex-1 items-center justify-center gap-1.5 px-1 sm:flex-none">
-                <CalendarCheck className="h-3.5 w-3.5 shrink-0 text-emerald-500/70" />
-                <span className="min-w-[104px] text-center text-xs font-bold capitalize text-emerald-900 sm:min-w-[120px] sm:text-sm">
-                  {formatMonthLabel(overviewMonth)}
-                </span>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setOverviewMonth((month) => shiftMonthInput(month, 1))}
-                disabled={overviewMonth >= currentMonthInput}
-                aria-label="Lihat bulan berikutnya"
-                title="Bulan berikutnya"
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-emerald-600 transition-all hover:bg-emerald-100 hover:text-emerald-800 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent sm:h-8 sm:w-8"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-
-              <div className="mx-0.5 h-5 w-px shrink-0 bg-emerald-200/80 sm:mx-1" />
-
-              <button
-                type="button"
-                onClick={() => setOverviewMonth(currentMonthInput)}
-                disabled={overviewMonth === currentMonthInput}
-                className={`shrink-0 rounded-xl px-2.5 py-1.5 text-[11px] font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 sm:text-xs ${
-                  overviewMonth === currentMonthInput
-                    ? "cursor-default bg-emerald-600/10 text-emerald-400"
-                    : "bg-emerald-600 text-white shadow-sm shadow-emerald-600/30 hover:bg-emerald-700 active:scale-95"
+                onClick={() => setOverviewPeriod(key)}
+                aria-pressed={active}
+                className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 sm:text-sm ${
+                  active
+                    ? "bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-md shadow-emerald-600/25"
+                    : "text-emerald-700 hover:bg-emerald-50"
                 }`}
               >
-                Bulan ini
+                <Icon className="h-4 w-4 shrink-0" />
+                {label}
               </button>
-            </div>
-          )}
+            );
+          })}
         </div>
+
+        {overviewPeriod === "month" && (
+          <div
+            aria-label="Navigasi bulan rekap"
+            className="flex w-full items-center gap-1.5 rounded-2xl border border-emerald-200/70 bg-gradient-to-r from-white via-emerald-50/50 to-white p-1.5 shadow-sm shadow-emerald-900/5"
+          >
+            <button
+              type="button"
+              onClick={() => setOverviewMonth((month) => shiftMonthInput(month, -1))}
+              aria-label="Lihat bulan sebelumnya"
+              title="Bulan sebelumnya"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-emerald-600 transition-all hover:bg-emerald-100 hover:text-emerald-800 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+
+            <div className="flex min-w-0 flex-1 items-center justify-center gap-2 px-1">
+              <CalendarCheck className="hidden h-4 w-4 shrink-0 text-emerald-500/70 xs:block" />
+              <span className="truncate text-sm font-bold capitalize text-emerald-900 sm:text-base">
+                {formatMonthLabel(overviewMonth)}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setOverviewMonth((month) => shiftMonthInput(month, 1))}
+              disabled={overviewMonth >= currentMonthInput}
+              aria-label="Lihat bulan berikutnya"
+              title="Bulan berikutnya"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-emerald-600 transition-all hover:bg-emerald-100 hover:text-emerald-800 active:scale-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+
+            <div className="h-6 w-px shrink-0 bg-emerald-200/80" />
+
+            <button
+              type="button"
+              onClick={() => setOverviewMonth(currentMonthInput)}
+              disabled={overviewMonth === currentMonthInput}
+              className={`h-10 shrink-0 rounded-xl px-3 text-xs font-bold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 sm:px-5 sm:text-sm ${
+                overviewMonth === currentMonthInput
+                  ? "cursor-default bg-emerald-600/10 text-emerald-400"
+                  : "bg-emerald-600 text-white shadow-sm shadow-emerald-600/30 hover:bg-emerald-700 active:scale-95"
+              }`}
+            >
+              Bulan ini
+            </button>
+          </div>
+        )}
       </div>
     </div>
 
@@ -4735,29 +4752,38 @@ export default function TeacherDashboard() {
               penulis, genre, halaman, dan nilai karakter.
             </p>
 
-            <div className="flex flex-wrap gap-2">
-              {(
-                [
-                  { key: "kelas", label: "Rekapan Per Kelas" },
-                  { key: "siswa", label: "Rekapan Per Murid" },
-                ] as { key: ReportView; label: string }[]
-              ).map((r) => (
-                <button
-                  key={r.key}
-                  onClick={() => setReportView(r.key)}
-                  className={`px-3 py-1.5 rounded-xl text-sm font-semibold transition ${
-                    reportView === r.key
-                      ? "bg-emerald-600 text-white"
-                      : "bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-                  }`}
-                >
-                  {r.label}
-                </button>
-              ))}
+            <div
+              role="group"
+              aria-label="Jenis rekapan"
+              className="grid w-full grid-cols-2 gap-1 rounded-2xl border border-emerald-100 bg-white/80 p-1 shadow-sm"
+            >
+              {([
+                { key: "kelas", label: "Rekapan Per Kelas", short: "Per Kelas", Icon: LayoutGrid },
+                { key: "siswa", label: "Rekapan Per Murid", short: "Per Murid", Icon: Users },
+              ] as { key: ReportView; label: string; short: string; Icon: typeof Users }[]).map(({ key, label, short, Icon }) => {
+                const active = reportView === key;
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setReportView(key)}
+                    aria-pressed={active}
+                    className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 sm:text-sm ${
+                      active
+                        ? "bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-md shadow-emerald-600/25"
+                        : "text-emerald-700 hover:bg-emerald-50"
+                    }`}
+                  >
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span className="sm:hidden">{short}</span>
+                    <span className="hidden sm:inline">{label}</span>
+                  </button>
+                );
+              })}
             </div>
 
-            <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50/80 via-white to-white p-3 lg:p-5 shadow-[0_1px_2px_rgba(6,95,70,0.04),0_10px_25px_-18px_rgba(6,95,70,0.2)] sm:p-4">
-              <div className="mb-3 flex items-center justify-between gap-2 border-b border-emerald-100 pb-2">
+            <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50/80 via-white to-white p-3.5 shadow-[0_1px_2px_rgba(6,95,70,0.04),0_10px_25px_-18px_rgba(6,95,70,0.2)] sm:p-5">
+              <div className="mb-4 flex items-center justify-between gap-2 border-b border-emerald-100 pb-3">
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-600/80">
                     Filter Laporan
@@ -4766,76 +4792,62 @@ export default function TeacherDashboard() {
                     {reportView === "siswa" ? "Rekapan Per Murid" : "Rekapan Per Kelas"}
                   </h3>
                 </div>
-                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700">
-                  {reportPeriod === "month" ? "Bulanan" : "Semua waktu"}
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
+                  {reportPeriod === "month" ? "Bulanan" : reportPeriod === "range" ? "Rentang tanggal" : "Semua waktu"}
                 </span>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              <div className="space-y-4">
                 {reportView === "kelas" && (
-                  <div className="min-w-0">
-                    <label className="text-[11px] font-medium text-emerald-700/70 mb-1 block">
-                      Kelas laporan
-                    </label>
-                    <select
-                      value={reportClass}
-                      onChange={(e) => setReportClass(e.target.value)}
-                      className="min-h-[42px] w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
-                    >
+                  <div>
+                    <label className={FIELD_LABEL_CLASS}>Kelas laporan</label>
+                    <select value={reportClass} onChange={(e) => setReportClass(e.target.value)} className={FIELD_CLASS}>
                       <option value="all">Semua kelas</option>
                       {availableClasses.map((classCode) => (
                         <option key={classCode} value={classCode}>{classCode}</option>
                       ))}
                     </select>
-                    <p className="mt-1 text-[11px] text-emerald-700/50">
+                    <p className="mt-1.5 text-[11px] text-emerald-700/50">
                       CSV akan berisi tiap siswa di kelas ini beserta rincian buku yang mereka baca.
                     </p>
                   </div>
                 )}
 
                 {reportView === "siswa" && (
-                  <div className="min-w-0 sm:col-span-2 xl:col-span-2">
-                    <label className="text-[11px] font-medium text-emerald-700/70 mb-1 block">
-                      Laporan Murid
-                    </label>
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                      <input
-                        type="text"
-                        placeholder="Cari nama..."
-                        value={reportStudentSearch}
-                        onChange={(e) => setReportStudentSearch(e.target.value)}
-                        className="min-h-[42px] w-full rounded-xl border border-emerald-200 bg-emerald-50/60 px-3 py-2 text-sm text-emerald-900 shadow-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200 sm:w-44"
-                      />
-                      <select
-                        value={reportStudent}
-                        onChange={(e) => setReportStudent(e.target.value)}
-                        className="min-h-[42px] w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
-                      >
+                  <div>
+                    <label className={FIELD_LABEL_CLASS}>Laporan murid</label>
+                    <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+                      <div className="relative">
+                        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-600/60" />
+                        <input
+                          type="text"
+                          placeholder="Cari nama murid..."
+                          value={reportStudentSearch}
+                          onChange={(e) => setReportStudentSearch(e.target.value)}
+                          className={`${FIELD_CLASS} pl-10`}
+                        />
+                      </div>
+                      <select value={reportStudent} onChange={(e) => setReportStudent(e.target.value)} className={FIELD_CLASS}>
                         <option value="all">Semua murid</option>
                         {reportStudentsGroupedByClass.map((group) => (
                           <optgroup key={group.classCode} label={`Kelas ${group.classCode}`}>
                             {group.students.map((s) => (
-                              <option key={s.key} value={s.key}>
-                                {s.name}
-                              </option>
+                              <option key={s.key} value={s.key}>{s.name}</option>
                             ))}
                           </optgroup>
                         ))}
                       </select>
                     </div>
-                    <p className="mt-1 text-[11px] text-emerald-700/50">
-                      Daftar ini mencakup seluruh murid terdaftar (termasuk yang belum pernah kirim
-                      jurnal). Pilih satu murid untuk laporan personal, atau &quot;Semua murid&quot;
-                      untuk laporan gabungan seluruh murid aktif.
+                    <p className="mt-1.5 text-[11px] text-emerald-700/50">
+                      Daftar mencakup seluruh murid terdaftar (termasuk yang belum pernah kirim jurnal). Pilih satu murid
+                      untuk laporan personal, atau &quot;Semua murid&quot; untuk laporan gabungan.
                     </p>
                   </div>
                 )}
 
-                <div className="min-w-0 sm:col-span-2 xl:col-span-4">
-                  <label className="text-[11px] font-medium text-emerald-700/70 mb-1.5 block">
-                    Rentang Waktu
-                  </label>
-                  <div className="flex flex-wrap gap-1.5 sm:gap-2">
+                <div>
+                  <label className={FIELD_LABEL_CLASS}>Rentang waktu</label>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
                     {([
                       ["thisMonth", "Bulan Ini"],
                       ["lastMonth", "Bulan Lalu"],
@@ -4869,10 +4881,11 @@ export default function TeacherDashboard() {
                           key={key}
                           type="button"
                           onClick={() => applyReportPreset(key)}
-                          className={`rounded-full px-3 py-1.5 text-[11px] sm:text-xs font-semibold transition ${
+                          aria-pressed={isActive}
+                          className={`flex min-h-[42px] items-center justify-center rounded-xl border px-2 py-2 text-center text-[11px] font-semibold leading-tight transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 sm:text-xs ${
                             isActive
-                              ? "bg-emerald-600 text-white shadow-sm shadow-emerald-600/25"
-                              : "bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100"
+                              ? "border-emerald-600 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-md shadow-emerald-600/25"
+                              : "border-emerald-200 bg-white text-emerald-800 hover:border-emerald-300 hover:bg-emerald-50"
                           }`}
                         >
                           {label}
@@ -4882,45 +4895,39 @@ export default function TeacherDashboard() {
                   </div>
 
                   {reportPeriod === "month" && (
-                    <div className="mt-3 max-w-xs">
-                      <label className="text-[11px] font-medium text-emerald-700/70 mb-1 block">
-                        Pilih bulan
-                      </label>
+                    <div className="mt-3">
+                      <label className={FIELD_LABEL_CLASS}>Pilih bulan</label>
                       <input
                         type="month"
                         value={reportMonth}
                         max={currentMonthInput}
                         onChange={(event) => setReportMonth(event.target.value)}
-                        className="min-h-[42px] w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+                        className={FIELD_CLASS}
                       />
                     </div>
                   )}
 
                   {reportPeriod === "range" && (
-                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 sm:max-w-md">
-                      <div className="min-w-0">
-                        <label className="text-[11px] font-medium text-emerald-700/70 mb-1 block">
-                          Dari tanggal
-                        </label>
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div>
+                        <label className={FIELD_LABEL_CLASS}>Dari tanggal</label>
                         <input
                           type="date"
                           value={reportStartDate}
                           max={reportEndDate || undefined}
                           onChange={(event) => setReportStartDate(event.target.value)}
-                          className="min-h-[42px] w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+                          className={FIELD_CLASS}
                         />
                       </div>
-                      <div className="min-w-0">
-                        <label className="text-[11px] font-medium text-emerald-700/70 mb-1 block">
-                          Sampai tanggal
-                        </label>
+                      <div>
+                        <label className={FIELD_LABEL_CLASS}>Sampai tanggal</label>
                         <input
                           type="date"
                           value={reportEndDate}
                           min={reportStartDate || undefined}
                           max={toJakartaDateKey(new Date())}
                           onChange={(event) => setReportEndDate(event.target.value)}
-                          className="min-h-[42px] w-full rounded-xl border border-emerald-200 bg-white px-3 py-2 text-sm text-emerald-900 shadow-sm outline-none transition focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200"
+                          className={FIELD_CLASS}
                         />
                       </div>
                     </div>
@@ -4941,36 +4948,36 @@ export default function TeacherDashboard() {
                   } (${reportPeriodLabel}).`}
             </p>
 
-            <div className="flex flex-wrap gap-2.5 sm:gap-3">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
               <button
                 onClick={handleExportCSV}
                 disabled={isExportingReport}
-                className="download-btn flex items-center gap-2 px-3.5 sm:px-4 py-2.5 sm:py-2 bg-gradient-to-r from-emerald-600 to-emerald-500 text-white text-xs sm:text-sm font-semibold rounded-xl hover:from-emerald-700 hover:to-emerald-600 active:scale-[0.98] transition duration-300 shadow-lg hover:shadow-emerald-600/40 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="download-btn flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-emerald-600/20 transition duration-300 hover:from-emerald-700 hover:to-emerald-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isExportingReport ? (
-                  <RefreshCw className="download-btn-icon w-4 h-4 animate-spin" />
+                  <RefreshCw className="download-btn-icon h-4 w-4 animate-spin" />
                 ) : (
-                  <Download className="download-btn-icon w-4 h-4" />
+                  <Download className="download-btn-icon h-4 w-4" />
                 )}
                 {isExportingReport ? "Menyiapkan..." : "Unduh CSV (Detail)"}
               </button>
               <button
                 onClick={handleExportBooksAndCharacters}
                 disabled={isExportingReport}
-                className="download-btn flex items-center gap-2 px-3.5 sm:px-4 py-2.5 sm:py-2 bg-gradient-to-r from-teal-600 to-teal-500 text-white text-xs sm:text-sm font-semibold rounded-xl hover:from-teal-700 hover:to-teal-600 active:scale-[0.98] transition duration-300 shadow-lg hover:shadow-teal-600/40 disabled:opacity-60 disabled:cursor-not-allowed"
+                className="download-btn flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-teal-600 to-teal-500 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-teal-600/20 transition duration-300 hover:from-teal-700 hover:to-teal-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {isExportingReport ? (
-                  <RefreshCw className="download-btn-icon w-4 h-4 animate-spin" />
+                  <RefreshCw className="download-btn-icon h-4 w-4 animate-spin" />
                 ) : (
-                  <Download className="download-btn-icon w-4 h-4" />
+                  <Download className="download-btn-icon h-4 w-4" />
                 )}
-                {isExportingReport ? "Menyiapkan..." : "Unduh Buku & Karakter (CSV)"}
+                {isExportingReport ? "Menyiapkan..." : "Unduh Buku & Karakter"}
               </button>
               <button
                 onClick={handlePrint}
-                className="download-btn flex items-center gap-2 px-3.5 sm:px-4 py-2.5 sm:py-2 border border-emerald-200 text-emerald-800 text-xs sm:text-sm font-semibold rounded-xl hover:bg-emerald-50 active:scale-[0.98] transition duration-300 hover:border-emerald-400 hover:shadow-lg hover:shadow-emerald-600/20"
+                className="download-btn flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-white px-4 py-2.5 text-sm font-semibold text-emerald-800 shadow-sm transition duration-300 hover:border-emerald-400 hover:bg-emerald-50 active:scale-[0.98]"
               >
-                <Printer className="download-btn-icon w-4 h-4" />
+                <Printer className="download-btn-icon h-4 w-4" />
                 Cetak
               </button>
             </div>

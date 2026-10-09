@@ -1183,6 +1183,67 @@ function EmptyState({
   );
 }
 
+function SelectBox({
+  checked,
+  indeterminate = false,
+  disabled = false,
+  small = false,
+}: {
+  checked: boolean;
+  indeterminate?: boolean;
+  disabled?: boolean;
+  small?: boolean;
+}) {
+  const size = small ? "h-5 w-5" : "h-6 w-6";
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex ${size} shrink-0 items-center justify-center rounded-md border-2 transition-all ${
+        disabled
+          ? "border-slate-300 bg-slate-100 opacity-60"
+          : checked
+          ? "border-emerald-600 bg-emerald-600 shadow-sm shadow-emerald-600/30"
+          : indeterminate
+          ? "border-emerald-500 bg-emerald-100"
+          : "border-emerald-400 bg-white"
+      }`}
+    >
+      {checked && (
+        <svg className="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+        </svg>
+      )}
+      {!checked && indeterminate && <span className="h-0.5 w-3 rounded-full bg-emerald-600" />}
+    </span>
+  );
+}
+
+function GroupSelectButton({
+  keys,
+  selectedKeys,
+  onToggle,
+  label,
+}: {
+  keys: string[];
+  selectedKeys: string[];
+  onToggle: () => void;
+  label: string;
+}) {
+  const selectedCount = keys.filter((key) => selectedKeys.includes(key)).length;
+  const checked = keys.length > 0 && selectedCount === keys.length;
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      disabled={keys.length === 0}
+      className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-800 transition hover:border-emerald-300 hover:bg-emerald-50 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+    >
+      <SelectBox checked={checked} indeterminate={selectedCount > 0 && !checked} disabled={keys.length === 0} small />
+      {label}
+    </button>
+  );
+}
+
 const FIELD_CLASS =
   "min-h-[44px] w-full rounded-xl border border-emerald-200 bg-white px-3.5 py-2.5 text-sm text-emerald-900 shadow-sm outline-none transition placeholder:text-emerald-700/40 hover:border-emerald-300 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200";
 const FIELD_LABEL_CLASS =
@@ -3959,59 +4020,68 @@ export default function TeacherDashboard() {
             </div>
             {groupedStudentsNeedingAttention.length > 0 && (
               <div
-                className={`mb-4 flex flex-col gap-3 rounded-2xl border p-3 sm:flex-row sm:items-center sm:justify-between ${
-                  darkMode ? "border-slate-700 bg-slate-800/40" : "border-emerald-100 bg-emerald-50/60"
+                className={`mb-5 w-full overflow-hidden rounded-2xl border shadow-sm ${
+                  darkMode
+                    ? "border-slate-700 bg-slate-800/50"
+                    : "border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-emerald-50"
                 }`}
               >
-                <div>
+                <div className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:p-4">
                   <button
                     type="button"
                     onClick={() => toggleWarningGroup(visibleWarnableKeys)}
                     disabled={visibleWarnableKeys.length === 0}
-                    className={`flex items-center gap-2 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
-                      darkMode ? "text-emerald-200" : "text-emerald-800"
+                    className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left transition active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto sm:min-w-[18rem] ${
+                      darkMode
+                        ? "border-slate-600 bg-slate-700/40 hover:bg-slate-700/70"
+                        : "border-emerald-200 bg-white hover:border-emerald-300 hover:bg-emerald-50"
                     }`}
                   >
-                    {allWarnableSelected ? (
-                      <CheckSquare2 className="h-5 w-5 text-emerald-600" />
-                    ) : (
-                      <Square className="h-5 w-5 text-emerald-600 opacity-60" />
-                    )}
-                    <span>Pilih semua ({visibleWarnableKeys.length} murid)</span>
+                    <SelectBox
+                      checked={allWarnableSelected}
+                      indeterminate={selectedWarnableKeys.length > 0 && !allWarnableSelected}
+                      disabled={visibleWarnableKeys.length === 0}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-bold text-emerald-900">Pilih semua murid</span>
+                      <span className="block text-[11px] text-emerald-700/70">
+                        {selectedWarnableKeys.length} dari {visibleWarnableKeys.length} murid dipilih
+                      </span>
+                    </span>
                   </button>
-                  <p className="mt-1 pl-7 text-[11px] text-emerald-700/60">
-                    Murid yang sudah diberi peringatan hari ini atau belum punya akun tidak bisa dipilih.
-                  </p>
-                </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  {selectedWarnableKeys.length > 0 && (
+                  <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                    {selectedWarnableKeys.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedWarningKeys(new Set())}
+                        className={`min-h-[44px] w-full rounded-xl border px-4 text-sm font-semibold transition sm:w-auto ${
+                          darkMode
+                            ? "border-slate-600 text-emerald-300 hover:bg-slate-700"
+                            : "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
+                        }`}
+                      >
+                        Batalkan Pilihan
+                      </button>
+                    )}
                     <button
                       type="button"
-                      onClick={() => setSelectedWarningKeys(new Set())}
-                      className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
-                        darkMode
-                          ? "border-slate-600 text-emerald-300 hover:bg-slate-700"
-                          : "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
-                      }`}
+                      onClick={() => void handleBulkSendWarnings()}
+                      disabled={selectedWarnableKeys.length === 0 || bulkWarningLoading}
+                      className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-5 text-sm font-bold text-white shadow-md shadow-orange-500/25 transition hover:bg-orange-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none sm:w-auto"
                     >
-                      Batalkan Pilihan
+                      {bulkWarningLoading ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <AlertTriangle className="h-4 w-4" />
+                      )}
+                      {bulkWarningLoading ? "Mengirim..." : `Kirim Peringatan (${selectedWarnableKeys.length})`}
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => void handleBulkSendWarnings()}
-                    disabled={selectedWarnableKeys.length === 0 || bulkWarningLoading}
-                    className="flex items-center gap-1.5 rounded-lg bg-orange-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-orange-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {bulkWarningLoading ? (
-                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <AlertTriangle className="h-3.5 w-3.5" />
-                    )}
-                    {bulkWarningLoading ? "Mengirim..." : `Kirim Peringatan (${selectedWarnableKeys.length})`}
-                  </button>
+                  </div>
                 </div>
+                <p className="border-t border-emerald-100 bg-emerald-50/50 px-4 py-2 text-[11px] text-emerald-700/70">
+                  Murid yang sudah diberi peringatan hari ini atau belum punya akun tidak bisa dipilih.
+                </p>
               </div>
             )}
             {studentsNeedingAttention.length === 0 ? (
@@ -4031,14 +4101,12 @@ export default function TeacherDashboard() {
                     <div className="mb-2 flex items-center justify-between gap-2 border-b border-emerald-100 pb-2">
                       <h3 id={`mentoring-class-${classCode}`} className="text-sm font-bold text-emerald-900">Kelas {classCode}</h3>
                       <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => toggleWarningGroup(getWarnableKeys(students))}
-                          disabled={getWarnableKeys(students).length === 0}
-                          className="text-[11px] font-semibold text-emerald-700 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-40"
-                        >
-                          Pilih kelas ini
-                        </button>
+                        <GroupSelectButton
+                          label="Pilih kelas ini"
+                          keys={getWarnableKeys(students)}
+                          selectedKeys={selectedWarnableKeys}
+                          onToggle={() => toggleWarningGroup(getWarnableKeys(students))}
+                        />
                         <span className="text-[11px] text-emerald-700/60">{students.length} murid</span>
                       </div>
                     </div>
@@ -4049,21 +4117,28 @@ export default function TeacherDashboard() {
                       const lastWarningAt = studentUid ? lastWarningAtByStudent.get(studentUid) ?? null : null;
 
                       return (
-                        <div key={s.key} className="smooth-item border border-orange-200 bg-orange-50/80 p-3 sm:p-4 rounded-2xl">
+                        <div
+                          key={s.key}
+                          className={`smooth-item border bg-orange-50/80 p-3 sm:p-4 rounded-2xl transition ${
+                            selectedWarnableKeys.includes(s.key)
+                              ? "border-emerald-400 ring-2 ring-emerald-500/70"
+                              : "border-orange-200"
+                          }`}
+                        >
                           <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:justify-between sm:items-start sm:gap-4">
                             <div className="flex gap-3">
                               <button
                                 type="button"
                                 onClick={() => toggleWarningSelection(s.key)}
                                 disabled={!studentUid || alreadyWarnedToday}
+                                aria-pressed={selectedWarnableKeys.includes(s.key)}
                                 aria-label={`${selectedWarnableKeys.includes(s.key) ? "Batalkan pilihan" : "Pilih"} ${s.name}`}
-                                className="mt-0.5 h-fit shrink-0 rounded p-1 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-30"
+                                className="flex h-11 w-11 shrink-0 items-center justify-center self-start rounded-xl transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:hover:bg-transparent"
                               >
-                                {selectedWarnableKeys.includes(s.key) ? (
-                                  <CheckSquare2 className="h-5 w-5 text-emerald-600" />
-                                ) : (
-                                  <Square className="h-5 w-5 text-emerald-600 opacity-50" />
-                                )}
+                                <SelectBox
+                                  checked={selectedWarnableKeys.includes(s.key)}
+                                  disabled={!studentUid || alreadyWarnedToday}
+                                />
                               </button>
                               <Avatar gender={s.gender} name={s.name} className="h-9 w-9" />
                               <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">

@@ -336,6 +336,13 @@ function getCharacterList(j: Journal): string[] {
   return [];
 }
 
+function buildWarningMessage(student: FlaggedStudent): string {
+  if (student.totalJournals === 0) {
+    return "Peringatan: Anda belum pernah mengirim jurnal membaca. Segera buka menu Jurnal dan kirim jurnal bacaan terbaru agar aktivitas membaca Anda tetap terpantau.";
+  }
+  return `Peringatan: ${student.reasons.join(" ")} Mohon segera mengirim jurnal membaca dan memperbarui aktivitas membaca Anda.`;
+}
+
 function getLatestPageForJournal(journal: Journal): number {
   return Number(journal.endPage) || 0;
 }
@@ -1236,6 +1243,8 @@ export default function TeacherDashboard() {
   const [compactJournalView, setCompactJournalView] = useState(false);
   const [expandedJournalCardIds, setExpandedJournalCardIds] = useState<Set<string>>(new Set());
   const [sendingWarningStudentId, setSendingWarningStudentId] = useState<string | null>(null);
+  const [selectedWarningKeys, setSelectedWarningKeys] = useState<Set<string>>(new Set());
+  const [bulkWarningLoading, setBulkWarningLoading] = useState(false);
   // id jurnal yang sedang dihapus -> mencegah klik ganda dan memberi feedback visual
   const [deleteJournalLoading, setDeleteJournalLoading] = useState<string | null>(null);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
@@ -1690,9 +1699,7 @@ export default function TeacherDashboard() {
       return;
     }
 
-    const defaultMessage = student.totalJournals === 0
-      ? "Peringatan: Anda belum pernah mengirim jurnal membaca. Segera buka menu Jurnal dan kirim jurnal bacaan terbaru agar aktivitas membaca Anda tetap terpantau."
-      : `Peringatan: ${student.reasons.join(" ")} Mohon segera mengirim jurnal membaca dan memperbarui aktivitas membaca Anda.`;
+    const defaultMessage = buildWarningMessage(student);
 
     setManagementError("");
     setSendingWarningStudentId(studentUid);
@@ -2310,6 +2317,122 @@ export default function TeacherDashboard() {
         students: students.sort((a, b) => a.name.localeCompare(b.name, "id")),
       }));
   }, [mentoringClassFilter, deferredMentoringSearch, studentsNeedingAttention]);
+
+  // ---- Pilih & kirim peringatan massal (tab Pendampingan) ----
+  const getWarnableKeys = useCallback(
+    (students: FlaggedStudent[]) =>
+      students
+        .filter((s) => s.key.startsWith("uid:") && !warningSentTodayByStudent.get(s.key.slice(4)))
+        .map((s) => s.key),
+    [warningSentTodayByStudent]
+  );
+
+  // Murid yang sedang tampil (sesuai filter) dan masih boleh diberi peringatan hari ini.
+  const visibleWarnableKeys = useMemo(
+    () => getWarnableKeys(groupedStudentsNeedingAttention.flatMap(({ students }) => students)),
+    [getWarnableKeys, groupedStudentsNeedingAttention]
+  );
+
+  const selectedWarnableKeys = useMemo(
+    () => visibleWarnableKeys.filter((key) => selectedWarningKeys.has(key)),
+    [visibleWarnableKeys, selectedWarningKeys]
+  );
+
+  const allWarnableSelected =
+    visibleWarnableKeys.length > 0 && selectedWarnableKeys.length === visibleWarnableKeys.length;
+
+  const toggleWarningSelection = (key: string) => {
+    setSelectedWarningKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  // Dipakai untuk "Pilih semua" (semua kunci tampil) maupun "Pilih kelas ini".
+  const toggleWarningGroup = (keys: string[]) => {
+    if (keys.length === 0) return;
+    setSelectedWarningKeys((current) => {
+      const next = new Set(current);
+      const allSelected = keys.every((key) => next.has(key));
+      keys.forEach((key) => {
+        if (allSelected) next.delete(key);
+        else next.add(key);
+      });
+      return next;
+    });
+  };
+
+  const handleBulkSendWarnings = async () => {
+    const targets = groupedStudentsNeedingAttention
+      .flatMap(({ students }) => students)
+      .filter((s) => selectedWarnableKeys.includes(s.key));
+    if (targets.length === 0) return;
+    if (!window.confirm(`Kirim peringatan ke ${targets.length} murid terpilih?`)) return;
+
+    setManagementError("");
+    setBulkWarningLoading(true);
+    const sentBy = userProfile?.name || user?.email || "Guru";
+
+    try {
+      const results = await Promise.allSettled(
+        targets.map(async (student): Promise<StudentAlert> => {
+          const studentUid = student.key.slice(4);
+          const message = buildWarningMessage(student);
+          const ref = await addDoc(collection(db, "studentAlerts"), {
+            studentId: studentUid,
+            studentName: student.name,
+            classCode: student.classCode,
+            message,
+            sentBy,
+            createdAt: serverTimestamp(),
+            readAt: null,
+            updatedAt: serverTimestamp(),
+          });
+          return {
+            id: ref.id,
+            studentId: studentUid,
+            studentName: student.name,
+            classCode: student.classCode,
+            message,
+            sentBy,
+            createdAt: new Date(),
+            readAt: null,
+          };
+        })
+      );
+
+      const sentAlerts: StudentAlert[] = [];
+      const sentKeys: string[] = [];
+      results.forEach((result, index) => {
+        if (result.status === "fulfilled") {
+          sentAlerts.push(result.value);
+          sentKeys.push(targets[index].key);
+        }
+      });
+      const failedCount = targets.length - sentAlerts.length;
+
+      if (sentAlerts.length > 0) {
+        setStudentAlerts((current) => [...sentAlerts, ...current]);
+        setSelectedWarningKeys((current) => {
+          const next = new Set(current);
+          sentKeys.forEach((key) => next.delete(key));
+          return next;
+        });
+      }
+
+      if (failedCount === 0) {
+        setToast({ type: "success", message: `Peringatan berhasil dikirim ke ${sentAlerts.length} murid.` });
+      } else {
+        const message = `${sentAlerts.length} peringatan terkirim, ${failedCount} gagal. Periksa koneksi/izin lalu coba lagi untuk yang gagal.`;
+        setToast({ type: "error", message });
+        setManagementError(message);
+      }
+    } finally {
+      setBulkWarningLoading(false);
+    }
+  };
 
   const selectedStudentData = useMemo(
     () => monthlyStudentSummaries.find((s) => s.key === selectedStudent) || null,
@@ -3834,6 +3957,63 @@ export default function TeacherDashboard() {
                 darkMode={darkMode}
               />
             </div>
+            {groupedStudentsNeedingAttention.length > 0 && (
+              <div
+                className={`mb-4 flex flex-col gap-3 rounded-2xl border p-3 sm:flex-row sm:items-center sm:justify-between ${
+                  darkMode ? "border-slate-700 bg-slate-800/40" : "border-emerald-100 bg-emerald-50/60"
+                }`}
+              >
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => toggleWarningGroup(visibleWarnableKeys)}
+                    disabled={visibleWarnableKeys.length === 0}
+                    className={`flex items-center gap-2 text-left text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                      darkMode ? "text-emerald-200" : "text-emerald-800"
+                    }`}
+                  >
+                    {allWarnableSelected ? (
+                      <CheckSquare2 className="h-5 w-5 text-emerald-600" />
+                    ) : (
+                      <Square className="h-5 w-5 text-emerald-600 opacity-60" />
+                    )}
+                    <span>Pilih semua ({visibleWarnableKeys.length} murid)</span>
+                  </button>
+                  <p className="mt-1 pl-7 text-[11px] text-emerald-700/60">
+                    Murid yang sudah diberi peringatan hari ini atau belum punya akun tidak bisa dipilih.
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  {selectedWarnableKeys.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedWarningKeys(new Set())}
+                      className={`rounded-lg border px-3 py-2 text-xs font-semibold transition ${
+                        darkMode
+                          ? "border-slate-600 text-emerald-300 hover:bg-slate-700"
+                          : "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
+                      }`}
+                    >
+                      Batalkan Pilihan
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void handleBulkSendWarnings()}
+                    disabled={selectedWarnableKeys.length === 0 || bulkWarningLoading}
+                    className="flex items-center gap-1.5 rounded-lg bg-orange-500 px-4 py-2 text-xs font-semibold text-white transition hover:bg-orange-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {bulkWarningLoading ? (
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                    )}
+                    {bulkWarningLoading ? "Mengirim..." : `Kirim Peringatan (${selectedWarnableKeys.length})`}
+                  </button>
+                </div>
+              </div>
+            )}
             {studentsNeedingAttention.length === 0 ? (
               <p className="text-emerald-700 text-sm bg-emerald-50 p-3 rounded-xl flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
@@ -3850,7 +4030,17 @@ export default function TeacherDashboard() {
                   <section key={classCode} aria-labelledby={`mentoring-class-${classCode}`}>
                     <div className="mb-2 flex items-center justify-between gap-2 border-b border-emerald-100 pb-2">
                       <h3 id={`mentoring-class-${classCode}`} className="text-sm font-bold text-emerald-900">Kelas {classCode}</h3>
-                      <span className="text-[11px] text-emerald-700/60">{students.length} murid</span>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => toggleWarningGroup(getWarnableKeys(students))}
+                          disabled={getWarnableKeys(students).length === 0}
+                          className="text-[11px] font-semibold text-emerald-700 underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-40"
+                        >
+                          Pilih kelas ini
+                        </button>
+                        <span className="text-[11px] text-emerald-700/60">{students.length} murid</span>
+                      </div>
                     </div>
                     <div className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0 lg:items-start">
                     {students.map((s) => {
@@ -3862,6 +4052,19 @@ export default function TeacherDashboard() {
                         <div key={s.key} className="smooth-item border border-orange-200 bg-orange-50/80 p-3 sm:p-4 rounded-2xl">
                           <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:justify-between sm:items-start sm:gap-4">
                             <div className="flex gap-3">
+                              <button
+                                type="button"
+                                onClick={() => toggleWarningSelection(s.key)}
+                                disabled={!studentUid || alreadyWarnedToday}
+                                aria-label={`${selectedWarnableKeys.includes(s.key) ? "Batalkan pilihan" : "Pilih"} ${s.name}`}
+                                className="mt-0.5 h-fit shrink-0 rounded p-1 transition hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-30"
+                              >
+                                {selectedWarnableKeys.includes(s.key) ? (
+                                  <CheckSquare2 className="h-5 w-5 text-emerald-600" />
+                                ) : (
+                                  <Square className="h-5 w-5 text-emerald-600 opacity-50" />
+                                )}
+                              </button>
                               <Avatar gender={s.gender} name={s.name} className="h-9 w-9" />
                               <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
                                 <AlertTriangle className="w-4 h-4" />

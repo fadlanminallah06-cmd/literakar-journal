@@ -3,6 +3,21 @@
 import { startTransition, useDeferredValue, useState, useEffect, useMemo, useId, useCallback, useRef, type CSSProperties } from "react";
 import { useAuth } from "@/context/AuthContext";
 import Avatar from "@/lib/AvatarComponent";
+import LeaderboardPeriodPicker from "@/components/LeaderboardPeriodPicker";
+import LeaderboardRow from "@/components/LeaderboardRow";
+import RankBadge from "@/components/RankBadge";
+import TopRankHighlight, { type TopRankItem } from "@/components/TopRankHighlight";
+import {
+  buildStudentLeaderboard,
+  buildClassLeaderboard,
+  getLeaderboardMonths,
+  formatMonthLabel as formatLbMonth,
+  getJakartaWeekdayIndex,
+  getLatestMondaySnapshotCutoff,
+  type LeaderboardEntry,
+  type LeaderboardJournal,
+  type LeaderboardPeriod,
+} from "@/lib/leaderboard";
 import { db } from "@/lib/firebase";
 import {
   collection,
@@ -89,26 +104,6 @@ interface StudentAlert {
   sentBy?: string;
   createdAt?: Date | string | number | { toDate?: () => Date } | null;
   readAt?: Date | string | number | { toDate?: () => Date } | null;
-}
-
-/** Baris agregat leaderboard: statistik gabungan seorang siswa dari SEMUA jurnalnya,
- *  dihitung lintas siswa (bukan hanya milik siswa yang sedang login). */
-interface LeaderboardEntry {
-  studentId: string;
-  studentName: string;
-  classCode: string;
-  gender?: string;
-  journalCount: number;
-  totalPagesRead: number;
-  booksFinished: number;
-}
-
-interface ClassLeaderboardEntry {
-  classCode: string;
-  activeStudents: number;
-  journalCount: number;
-  totalPagesRead: number;
-  booksFinished: number;
 }
 
 type TabKey = "beranda" | "jurnal" | "pohon" | "badge" | "leaderboard" | "riwayat";
@@ -313,17 +308,6 @@ function normalizeStatus(status: string): NormalizedStatus {
   return "pending";
 }
 
-/** Satu sumber kebenaran untuk urutan leaderboard: jumlah jurnal terbanyak dulu,
- *  lalu halaman terbanyak dibaca, lalu jumlah buku selesai. Dipakai untuk
- *  leaderboard global maupun per kelas supaya hasilnya konsisten. */
-function sortLeaderboardEntries(entries: LeaderboardEntry[]): LeaderboardEntry[] {
-  return [...entries].sort((a, b) => {
-    if (b.journalCount !== a.journalCount) return b.journalCount - a.journalCount;
-    if (b.totalPagesRead !== a.totalPagesRead) return b.totalPagesRead - a.totalPagesRead;
-    return b.booksFinished - a.booksFinished;
-  });
-}
-
 function getRankLabel(rank: number): string {
   if (rank === 1) return "Juara I";
   if (rank === 2) return "Juara II";
@@ -348,26 +332,6 @@ function getRankBadgeStyle(rank: number, dark: boolean): string {
       : "bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-inner shadow-black/10";
   }
   return dark ? "bg-slate-600 text-emerald-100" : "bg-emerald-200 text-emerald-800";
-}
-
-function getJakartaWeekdayIndex(date: Date): number {
-  const parts = getJakartaDateParts(date);
-  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay();
-}
-
-function getLatestMondaySnapshotCutoff(now = new Date()): Date {
-  const parts = getJakartaDateParts(now);
-  const weekday = getJakartaWeekdayIndex(now);
-  const daysSinceMonday = (weekday + 6) % 7;
-  const currentMondayUtcMs = Date.UTC(parts.year, parts.month - 1, parts.day - daysSinceMonday, 8, 0, 0, 0);
-  const currentMondayAtEight = new Date(currentMondayUtcMs - 7 * 60 * 60 * 1000);
-
-  if (now.getTime() < currentMondayAtEight.getTime()) {
-    const previousMondayUtcMs = Date.UTC(parts.year, parts.month - 1, parts.day - daysSinceMonday - 7, 8, 0, 0, 0);
-    return new Date(previousMondayUtcMs - 7 * 60 * 60 * 1000);
-  }
-
-  return currentMondayAtEight;
 }
 
 /* ------------------------------------------------------------------ */
@@ -1743,14 +1707,11 @@ export default function StudentDashboard() {
   // Fitur: modal perayaan maskot Literakar saat target harian tercapai
   const [showGoalCelebration, setShowGoalCelebration] = useState(false);
 
-  // Fitur: Leaderboard pembaca terajin (lintas semua siswa), dengan sub-tab
-  // "Semua Kelas" (global) dan "Per Kelas". `leaderboard` menyimpan SELURUH
-  // entri (bukan hanya top 10) supaya leaderboard per kelas bisa dihitung
-  // dari data yang sama tanpa fetch ulang.
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [leaderboardJournals, setLeaderboardJournals] = useState<LeaderboardJournal[]>([]);
+  const [leaderboardPeriod, setLeaderboardPeriod] = useState<LeaderboardPeriod>("month");
+  const [leaderboardMonth, setLeaderboardMonth] = useState(() => toJakartaDateKey(new Date()).slice(0, 7));
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardError, setLeaderboardError] = useState("");
-  const [totalActiveStudents, setTotalActiveStudents] = useState(0);
   const leaderboardLoaded = useRef(false);
   const [leaderboardSubTab, setLeaderboardSubTab] = useState<LeaderboardSubTab>("semua");
   const [weeklyWindowKey, setWeeklyWindowKey] = useState<string>(() => new Date().toISOString());
@@ -1910,63 +1871,29 @@ export default function StudentDashboard() {
     setJournals(docs);
   }, [user]);
 
-  /**
-   * Ambil & agregasi statistik SEMUA siswa (bukan hanya yang login) untuk leaderboard,
-   * baik global maupun per kelas. Catatan: butuh Firestore rules yang mengizinkan
-   * `read` koleksi "journals" untuk seluruh user yang login (siswa & guru), bukan
-   * hanya pemilik dokumen.
-   */
   const fetchLeaderboard = useCallback(async () => {
     setLeaderboardLoading(true);
     setLeaderboardError("");
     try {
-      const snapshotCutoff = getLatestMondaySnapshotCutoff();
       const querySnapshot = await getDocs(collection(db, "journals"));
-      const statsMap = new Map<
-        string,
-        { studentName: string; classCode: string; journalCount: number; totalPagesRead: number; finishedTitles: Set<string> }
-      >();
-      const activeStudentIds = new Set<string>();
-
+      const rows: LeaderboardJournal[] = [];
       querySnapshot.forEach((docSnap) => {
-        const data = docSnap.data() as Journal;
-        if (!data.studentId || normalizeStatus(data.status) !== "approved") return;
-
-        const createdAt = toDateSafe(data.createdAt);
-        if (!createdAt || createdAt > snapshotCutoff) return;
-
-        activeStudentIds.add(String(data.studentId));
-
-        const existing = statsMap.get(data.studentId) || {
-          studentName: data.studentName || "Siswa",
-          classCode: data.classCode || "-",
-          journalCount: 0,
-          totalPagesRead: 0,
-          finishedTitles: new Set<string>(),
-        };
-        existing.journalCount += 1;
-        const pages = Math.max(0, Number(data.endPage) - Number(data.startPage));
-        if (pages > 0) existing.totalPagesRead += pages;
-        if (data.finished && data.bookTitle) {
-          existing.finishedTitles.add(data.bookTitle.trim().toLowerCase());
-        }
-        statsMap.set(data.studentId, existing);
+        const journal = docSnap.data() as Journal;
+        if (!journal.studentId || normalizeStatus(journal.status) !== "approved") return;
+        rows.push({
+          id: docSnap.id,
+          studentId: journal.studentId,
+          studentName: journal.studentName,
+          classCode: journal.classCode,
+          bookTitle: journal.bookTitle,
+          startPage: journal.startPage,
+          endPage: journal.endPage,
+          status: "approved",
+          finished: journal.finished,
+          createdAt: journal.createdAt,
+        });
       });
-
-      const entries: LeaderboardEntry[] = Array.from(statsMap.entries()).map(([studentId, stats]) => ({
-        studentId,
-        studentName: stats.studentName,
-        classCode: stats.classCode,
-        gender: "",
-        journalCount: stats.journalCount,
-        totalPagesRead: stats.totalPagesRead,
-        booksFinished: stats.finishedTitles.size,
-      }));
-
-      // Data leaderboard dihitung dari snapshot Senin 08.00 WIB terakhir dan
-      // hanya berubah ketika snapshot berikutnya dibuka pada Senin depan.
-      setLeaderboard(sortLeaderboardEntries(entries));
-      setTotalActiveStudents(activeStudentIds.size);
+      setLeaderboardJournals(rows);
     } catch {
       setLeaderboardError("Gagal memuat leaderboard. Silakan coba lagi.");
     } finally {
@@ -2653,47 +2580,26 @@ export default function StudentDashboard() {
     [journals]
   );
 
-  // ---- Leaderboard: turunan data untuk sub-tab "Semua Kelas" & "Per Kelas" ----
-
-  // Leaderboard global (top 100 lintas semua kelas). `leaderboard` sudah terurut
-  // dari fetchLeaderboard, jadi cukup ambil 100 teratas.
+  const leaderboardOptions = useMemo(
+    () => ({ period: leaderboardPeriod, month: leaderboardMonth, refreshKey: weeklyWindowKey }),
+    [leaderboardPeriod, leaderboardMonth, weeklyWindowKey]
+  );
+  const leaderboardMonths = useMemo(() => getLeaderboardMonths(leaderboardJournals), [leaderboardJournals]);
+  const leaderboard = useMemo(
+    () => buildStudentLeaderboard(leaderboardJournals, leaderboardOptions),
+    [leaderboardJournals, leaderboardOptions]
+  );
   const globalLeaderboard = useMemo(() => leaderboard.slice(0, 100), [leaderboard]);
-
-  // Siswa hanya boleh melihat kelasnya sendiri di mode "Per Kelas".
   const studentClassCode = userProfile?.classCode || "";
-
-  // Leaderboard untuk kelas siswa saat ini (semua siswa dalam kelas itu, bukan dipotong 10).
-  const classLeaderboard = useMemo(() => {
-    if (!studentClassCode) return [];
-    return sortLeaderboardEntries(leaderboard.filter((e) => e.classCode === studentClassCode));
-  }, [leaderboard, studentClassCode]);
-
-  const classLeaderboardRanking = useMemo<ClassLeaderboardEntry[]>(() => {
-    const statsByClass = new Map<string, ClassLeaderboardEntry>();
-
-    leaderboard.forEach((entry) => {
-      const existing = statsByClass.get(entry.classCode) || {
-        classCode: entry.classCode,
-        activeStudents: 0,
-        journalCount: 0,
-        totalPagesRead: 0,
-        booksFinished: 0,
-      };
-
-      existing.activeStudents += 1;
-      existing.journalCount += entry.journalCount;
-      existing.totalPagesRead += entry.totalPagesRead;
-      existing.booksFinished += entry.booksFinished;
-      statsByClass.set(entry.classCode, existing);
-    });
-
-    return Array.from(statsByClass.values()).sort((a, b) => {
-      if (b.journalCount !== a.journalCount) return b.journalCount - a.journalCount;
-      if (b.totalPagesRead !== a.totalPagesRead) return b.totalPagesRead - a.totalPagesRead;
-      if (b.booksFinished !== a.booksFinished) return b.booksFinished - a.booksFinished;
-      return a.classCode.localeCompare(b.classCode);
-    });
-  }, [leaderboard]);
+  const classLeaderboard = useMemo(
+    () => leaderboard.filter((entry) => entry.classCode === studentClassCode),
+    [leaderboard, studentClassCode]
+  );
+  const classLeaderboardRanking = useMemo(
+    () => buildClassLeaderboard(leaderboardJournals, leaderboardOptions),
+    [leaderboardJournals, leaderboardOptions]
+  );
+  const totalActiveStudents = leaderboard.length;
 
   const myLeaderboardPosition = useMemo(() => {
     const entries = leaderboardSubTab === "semua" ? leaderboard : classLeaderboard;
@@ -2706,15 +2612,60 @@ export default function StudentDashboard() {
     };
   }, [classLeaderboard, leaderboard, leaderboardSubTab, user]);
 
-  // Peringkat siswa yang sedang login DI KELASNYA SENDIRI — dipakai untuk kartu
-  // indikator "kamu peringkat ke-berapa di kelas" pada tab Beranda.
+  const monthlyLeaderboard = useMemo(
+    () =>
+      buildStudentLeaderboard(leaderboardJournals, {
+        period: "month",
+        month: currentRecapMonth,
+        refreshKey: weeklyWindowKey,
+      }),
+    [leaderboardJournals, currentRecapMonth, weeklyWindowKey]
+  );
+
+  const allTimeLeaderboard = useMemo(
+    () =>
+      buildStudentLeaderboard(leaderboardJournals, {
+        period: "all",
+        month: currentRecapMonth,
+        refreshKey: weeklyWindowKey,
+      }),
+    [leaderboardJournals, currentRecapMonth, weeklyWindowKey]
+  );
+
   const myClassRank = useMemo(() => {
     if (!user || !userProfile?.classCode) return null;
-    const classEntries = sortLeaderboardEntries(leaderboard.filter((e) => e.classCode === userProfile.classCode));
-    const idx = classEntries.findIndex((e) => e.studentId === user.uid);
+    const inClass = monthlyLeaderboard.filter((entry) => entry.classCode === userProfile.classCode);
+    const idx = inClass.findIndex((entry) => entry.studentId === user.uid);
     if (idx === -1) return null;
-    return { rank: idx + 1, total: classEntries.length };
-  }, [leaderboard, user, userProfile]);
+    return { rank: idx + 1, total: inClass.length };
+  }, [monthlyLeaderboard, user, userProfile]);
+
+  const myRankItems = useMemo<TopRankItem[]>(() => {
+    if (!user) return [];
+
+    const buildRankItem = (
+      scope: "month" | "all",
+      entries: LeaderboardEntry[],
+      periodLabel: string
+    ): TopRankItem => {
+      const index = entries.findIndex((entry) => entry.studentId === user.uid);
+      if (index === -1) return { scope, rank: null, total: entries.length, periodLabel };
+      const journalGap = index >= 3 ? Math.max(0, entries[2].journalCount - entries[index].journalCount) : 0;
+      return { scope, rank: index + 1, total: entries.length, periodLabel, journalGap };
+    };
+
+    const items = [
+      buildRankItem("month", monthlyLeaderboard, `Bulan Ini · ${formatLbMonth(currentRecapMonth)}`),
+      buildRankItem("all", allTimeLeaderboard, "Sepanjang Waktu"),
+    ];
+
+    return items.some((item) => item.rank !== null) ? items : [];
+  }, [user, monthlyLeaderboard, allTimeLeaderboard, currentRecapMonth]);
+
+  const snapshotLabel = useMemo(() => {
+    const cutoff = getLatestMondaySnapshotCutoff(new Date(weeklyWindowKey));
+    return `${formatTanggal(cutoff)}, 08.00 WIB`;
+  }, [weeklyWindowKey]);
 
   const displayName = userProfile?.name || "Siswa";
   const genderLabel = formatGender(userProfile?.gender);
@@ -3168,6 +3119,18 @@ export default function StudentDashboard() {
               </div>
             </div>
 
+            <TopRankHighlight
+              items={myRankItems}
+              snapshotLabel={snapshotLabel}
+              dark={darkMode}
+              onOpen={(scope) => {
+                setLeaderboardPeriod(scope);
+                setLeaderboardMonth(currentRecapMonth);
+                setLeaderboardSubTab("semua");
+                changeTab("leaderboard");
+              }}
+            />
+
             {/* Indikator: peringkat siswa di kelasnya sendiri */}
             {(myClassRank || (!dailyGoalReached && !hasJournalToday)) && (
               <div className="grid grid-cols-1 gap-3 sm:gap-4 lg:grid-cols-2">
@@ -3192,7 +3155,7 @@ export default function StudentDashboard() {
                         Peringkat kamu di kelas: <span className="text-amber-600 font-bold">#{myClassRank.rank}</span> dari {myClassRank.total} murid
                       </p>
                       <p className="text-xs text-emerald-700/60 mt-0.5">
-                        Berdasarkan jumlah jurnal terbanyak di Kelas {userProfile?.classCode}
+                        Berdasarkan jumlah jurnal terbanyak bulan ini di Kelas {userProfile?.classCode}.
                       </p>
                     </div>
                   </div>
@@ -3831,11 +3794,13 @@ export default function StudentDashboard() {
                       Leaderboard Penakluk Literasi
                     </h2>
                     <p className={`text-[11px] sm:text-xs mt-0.5 truncate ${theme.mutedText}`}>
-                      {leaderboardSubTab === "semua" 
-                        ? "Top 100 Murid Terajin Membaca" 
-                        : leaderboardSubTab === "kelas" 
-                        ? `Kelas ${studentClassCode || "-"}` 
+                      {leaderboardSubTab === "semua"
+                        ? "Top 100 Murid Terajin Membaca"
+                        : leaderboardSubTab === "kelas"
+                        ? `Kelas ${studentClassCode || "-"}`
                         : "Kelas terajin membaca"}
+                      {" · "}
+                      {leaderboardPeriod === "all" ? "Sepanjang waktu" : formatLbMonth(leaderboardMonth)}
                     </p>
                   </div>
                 </div>
@@ -3898,6 +3863,15 @@ export default function StudentDashboard() {
               </div>
             </div>
 
+            <LeaderboardPeriodPicker
+              period={leaderboardPeriod}
+              month={leaderboardMonth}
+              months={leaderboardMonths}
+              onPeriodChange={setLeaderboardPeriod}
+              onMonthChange={setLeaderboardMonth}
+              dark={darkMode}
+            />
+
             {/* My Position Card - Mobile Optimized */}
             {myLeaderboardPosition && (
               myLeaderboardPosition.isVisible ? (
@@ -3917,10 +3891,8 @@ export default function StudentDashboard() {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-2.5 sm:gap-4 min-w-0">
-                      <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center shrink-0 ${
-                        darkMode ? "bg-emerald-500/20 text-emerald-300" : "bg-emerald-100 text-emerald-700"
-                      }`}>
-                        <Trophy className="w-5 h-5 sm:w-6 sm:h-6" />
+                      <div className="flex w-14 shrink-0 justify-center sm:w-20">
+                        <RankBadge rank={myLeaderboardPosition.rank} dark={darkMode} />
                       </div>
                       <div className="min-w-0">
                         <p className={`text-[10px] sm:text-xs font-bold uppercase tracking-wider ${darkMode ? "text-emerald-400" : "text-emerald-600"}`}>
@@ -3957,6 +3929,18 @@ export default function StudentDashboard() {
                 </div>
               )
             )}
+            {!myLeaderboardPosition && !leaderboardLoading && (
+              <div className={`mb-4 sm:mb-6 rounded-xl sm:rounded-2xl border p-3 sm:p-4 ${
+                darkMode ? "border-slate-700 bg-slate-800/40" : "border-emerald-100 bg-emerald-50/50"
+              }`}>
+                <p className={`text-sm font-semibold ${theme.headingText}`}>Kamu belum masuk peringkat</p>
+                <p className={`text-xs mt-0.5 ${theme.mutedText}`}>
+                  {leaderboardPeriod === "month"
+                    ? "Belum ada jurnal tervalidasi pada bulan ini (sesuai update Senin terakhir)."
+                    : "Belum ada jurnal tervalidasi."}
+                </p>
+              </div>
+            )}
 
             {/* Error State */}
             {leaderboardError && (
@@ -3985,102 +3969,26 @@ export default function StudentDashboard() {
                   <p className={`text-xs sm:text-sm font-medium px-4 ${theme.mutedText}`}>Belum ada data kelas yang membaca buku</p>
                 </div>
               ) : (
-                <div className="space-y-2 sm:space-y-3">
+                <div className="space-y-2.5 sm:space-y-3">
                   {classLeaderboardRanking.map((entry, idx) => {
                     const rank = idx + 1;
                     const isMyClass = entry.classCode === studentClassCode;
-                    const isTop3 = rank <= 3;
-                    
                     return (
-                      <div
+                      <LeaderboardRow
                         key={entry.classCode}
-                        className={`relative overflow-hidden rounded-xl sm:rounded-2xl border p-3 sm:p-4 transition-all duration-200 hover:shadow-md ${
-                          isMyClass
-                            ? darkMode
-                              ? "bg-gradient-to-r from-emerald-900/50 to-teal-900/30 border-emerald-500/50 shadow-lg shadow-emerald-900/20"
-                              : "bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-300 shadow-md shadow-emerald-100"
-                            : darkMode
-                            ? "bg-slate-800/50 border-slate-700 hover:border-slate-600"
-                            : "bg-white/60 border-emerald-100 hover:border-emerald-200"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5 sm:gap-4">
-                          {/* Rank Badge - Smaller on mobile */}
-                          <div className={`relative shrink-0 ${isTop3 ? "w-11 h-11 sm:w-14 sm:h-14" : "w-9 h-9 sm:w-12 sm:h-12"}`}>
-                            {isTop3 && (
-                              <div className={`absolute inset-0 rounded-xl sm:rounded-2xl blur-md sm:blur-lg opacity-30 sm:opacity-40 ${
-                                rank === 1 ? "bg-yellow-400" : rank === 2 ? "bg-slate-400" : "bg-amber-500"
-                              }`} />
-                            )}
-                            <div className={`relative w-full h-full rounded-xl sm:rounded-2xl flex flex-col items-center justify-center font-bold ${
-                              rank === 1 
-                                ? "bg-gradient-to-br from-yellow-300 to-amber-500 text-white shadow-md sm:shadow-lg" 
-                                : rank === 2 
-                                ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white shadow-md sm:shadow-lg"
-                                : rank === 3
-                                ? "bg-gradient-to-br from-amber-400 to-orange-600 text-white shadow-md sm:shadow-lg"
-                                : darkMode ? "bg-slate-700 text-slate-300" : "bg-emerald-100 text-emerald-700"
-                            }`}>
-                              {isTop3 ? (
-                                <>
-                                  <Crown className="w-3.5 h-3.5 sm:w-5 sm:h-5 mb-0.5" />
-                                  <span className="text-[9px] sm:text-[10px] font-bold">{rank}</span>
-                                </>
-                              ) : (
-                                <span className="text-sm sm:text-base sm:text-lg">{rank}</span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Info - Flexible */}
-                          <div className="flex-1 min-w-0 py-0.5 sm:py-1">
-                            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                              <h3 className={`text-sm sm:text-base font-bold truncate ${theme.headingText}`}>
-                                Kelas {entry.classCode}
-                              </h3>
-                              {isMyClass && (
-                                <span className={`text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold shrink-0 ${
-                                  darkMode ? "bg-emerald-500/20 text-emerald-300" : "bg-emerald-100 text-emerald-700"
-                                }`}>
-                                  Kelasmu
-                                </span>
-                              )}
-                            </div>
-                            <p className={`text-[11px] sm:text-xs mt-0.5 sm:mt-1 ${theme.mutedText}`}>
-                              {entry.activeStudents} Murid Aktif
-                            </p>
-                          </div>
-
-                          {/* Stats - Stack on very small screens */}
-                          <div className="text-right shrink-0 py-0.5 sm:py-1">
-                            <p className={`text-base sm:text-lg font-bold ${theme.headingText}`}>
-                              {entry.journalCount}
-                              <span className={`text-[10px] sm:text-xs font-normal ml-0.5 sm:ml-1 ${theme.mutedText}`}>jurnal</span>
-                            </p>
-                            <div className={`flex items-center justify-end gap-1.5 sm:gap-3 mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] ${theme.mutedText}`}>
-                              <span className="whitespace-nowrap">{entry.totalPagesRead} hlm</span>
-                              <span className="hidden xs:inline">•</span>
-                              <span className="whitespace-nowrap">{entry.booksFinished} buku</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Progress bar for top 3 */}
-                        {isTop3 && (
-                          <div className={`mt-2 sm:mt-3 h-1 sm:h-1.5 rounded-full overflow-hidden ${
-                            darkMode ? "bg-slate-700" : "bg-emerald-100"
-                          }`}>
-                            <div 
-                              className={`h-full rounded-full ${
-                                rank === 1 ? "bg-gradient-to-r from-yellow-400 to-amber-500" :
-                                rank === 2 ? "bg-gradient-to-r from-slate-400 to-slate-500" :
-                                "bg-gradient-to-r from-amber-400 to-orange-500"
-                              }`}
-                              style={{ width: `${Math.min(100, (entry.journalCount / Math.max(classLeaderboardRanking[0]?.journalCount || 1, 1)) * 100)}%` }}
-                            />
-                          </div>
-                        )}
-                      </div>
+                        rank={rank}
+                        dark={darkMode}
+                        highlight={isMyClass}
+                        tag={isMyClass ? "Kelasmu" : undefined}
+                        title={`Kelas ${entry.classCode}`}
+                        subtitle={`${entry.activeStudents} Murid Aktif`}
+                        journals={entry.journalCount}
+                        pages={entry.totalPagesRead}
+                        books={entry.booksFinished}
+                        progress={rank <= 3
+                          ? (entry.journalCount / Math.max(classLeaderboardRanking[0]?.journalCount || 1, 1)) * 100
+                          : undefined}
+                      />
                     );
                   })}
                 </div>
@@ -4099,106 +4007,31 @@ export default function StudentDashboard() {
                   </p>
                 </div>
               ) : (
-                <div className="space-y-2 sm:space-y-3">
+                <div className="space-y-2.5 sm:space-y-3">
                   {(leaderboardSubTab === "semua" ? globalLeaderboard : classLeaderboard).map((entry, idx) => {
                     const rank = idx + 1;
                     const isMe = entry.studentId === user?.uid;
-                    const isTop3 = rank <= 3;
-                    
                     return (
-                      <div
+                      <LeaderboardRow
                         key={entry.studentId}
                         id={`leaderboard-student-${entry.studentId}`}
-                        className={`relative rounded-xl sm:rounded-2xl border p-2.5 sm:p-4 transition-all duration-200 hover:shadow-md ${
-                          isMe
-                            ? darkMode
-                              ? "bg-gradient-to-r from-emerald-900/50 to-teal-900/30 border-emerald-500/50 shadow-lg shadow-emerald-900/20"
-                              : "bg-gradient-to-r from-emerald-50 to-teal-50 border-emerald-300 shadow-md shadow-emerald-100"
-                            : isTop3
-                            ? darkMode
-                              ? "bg-slate-800/80 border-slate-700 hover:border-slate-600"
-                              : "bg-white border-emerald-100 hover:border-emerald-200"
-                            : darkMode
-                            ? "bg-slate-800/50 border-slate-700/50 hover:border-slate-600"
-                            : "bg-white/60 border-emerald-100/80 hover:border-emerald-200"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5 sm:gap-4">
-                          {/* Rank - Smaller on mobile */}
-                          <div className={`relative shrink-0 ${isTop3 ? "w-11 h-11 sm:w-14 sm:h-14" : "w-9 h-9 sm:w-11 sm:h-11"}`}>
-                            {isTop3 && (
-                              <div className={`absolute inset-0 rounded-xl sm:rounded-2xl blur-md sm:blur-lg opacity-30 sm:opacity-40 ${
-                                rank === 1 ? "bg-yellow-400" : rank === 2 ? "bg-slate-400" : "bg-amber-500"
-                              }`} />
-                            )}
-                            <div className={`relative w-full h-full rounded-xl sm:rounded-2xl flex flex-col items-center justify-center font-bold ${
-                              rank === 1 
-                                ? "bg-gradient-to-br from-yellow-300 to-amber-500 text-white shadow-md sm:shadow-lg" 
-                                : rank === 2 
-                                ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white shadow-md sm:shadow-lg"
-                                : rank === 3
-                                ? "bg-gradient-to-br from-amber-400 to-orange-600 text-white shadow-md sm:shadow-lg"
-                                : darkMode ? "bg-slate-700 text-slate-300" : "bg-emerald-100 text-emerald-700"
-                            }`}>
-                              {isTop3 ? (
-                                <>
-                                  <Crown className="w-3.5 h-3.5 sm:w-5 sm:h-5 mb-0.5" />
-                                  <span className="text-[9px] sm:text-[10px] font-bold">{rank}</span>
-                                </>
-                              ) : (
-                                <span className="text-sm sm:text-base">{rank}</span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Avatar & Info - Flexible */}
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 sm:gap-2.5">
-                              {/* Avatar */}
-                              <Avatar
-                                gender={entry.gender}
-                                name={entry.studentName}
-                                className={`w-8 h-8 sm:w-10 sm:h-10 ${isMe ? "ring-2 ring-emerald-400/80" : ""}`}
-                              />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5 sm:gap-2">
-                                  <h3 className={`text-xs sm:text-sm font-bold truncate ${theme.headingText}`}>
-                                    {entry.studentName}
-                                  </h3>
-                                  {isMe && (
-                                    <span className={`text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full font-bold shrink-0 ${
-                                      darkMode ? "bg-emerald-500/20 text-emerald-300" : "bg-emerald-100 text-emerald-700"
-                                    }`}>
-                                      Kamu
-                                    </span>
-                                  )}
-                                </div>
-                                <p className={`text-[10px] sm:text-xs mt-0.5 truncate ${theme.mutedText}`}>
-                                  Kelas {entry.classCode}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Stats - Compact on mobile */}
-                          <div className="text-right shrink-0">
-                            <p className={`text-sm sm:text-lg font-bold ${theme.headingText}`}>
-                              {entry.journalCount}
-                              <span className={`text-[10px] sm:text-xs font-normal ml-0.5 sm:ml-1 ${theme.mutedText}`}>jurnal</span>
-                            </p>
-                            <div className={`flex items-center justify-end gap-1 sm:gap-2 mt-0.5 text-[9px] sm:text-[11px] ${theme.mutedText}`}>
-                              <span className="whitespace-nowrap">{entry.totalPagesRead} hlm</span>
-                              <span className="hidden xs:inline">•</span>
-                              <span className="whitespace-nowrap">{entry.booksFinished} buku</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Highlight bar for current user */}
-                        {isMe && (
-                          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 sm:w-1 h-8 sm:h-12 rounded-r-full bg-emerald-500" />
-                        )}
-                      </div>
+                        rank={rank}
+                        dark={darkMode}
+                        highlight={isMe}
+                        tag={isMe ? "Kamu" : undefined}
+                        avatar={
+                          <Avatar
+                            gender={entry.gender}
+                            name={entry.studentName}
+                            className={`h-8 w-8 sm:h-10 sm:w-10 ${isMe ? "ring-2 ring-emerald-400/80" : ""}`}
+                          />
+                        }
+                        title={entry.studentName}
+                        subtitle={`Kelas ${entry.classCode}`}
+                        journals={entry.journalCount}
+                        pages={entry.totalPagesRead}
+                        books={entry.booksFinished}
+                      />
                     );
                   })}
                 </div>

@@ -4,6 +4,16 @@ import { Fragment, startTransition, useDeferredValue, useState, useEffect, useMe
 import Image from "next/image";
 import { useAuth } from "@/context/AuthContext";
 import Avatar from "@/lib/AvatarComponent";
+import LeaderboardPeriodPicker from "@/components/LeaderboardPeriodPicker";
+import LeaderboardRow from "@/components/LeaderboardRow";
+import {
+  buildStudentLeaderboard,
+  buildClassLeaderboard,
+  getLeaderboardMonths,
+  formatMonthLabel as formatLbMonth,
+  getJakartaWeekdayIndex,
+  type LeaderboardPeriod,
+} from "@/lib/leaderboard";
 import { db } from "@/lib/firebase";
 import {
   collection,
@@ -41,7 +51,6 @@ import {
   Star,
   Sun,
   Moon,
-  Crown,
   Undo2,
   LayoutGrid,
   Trophy,
@@ -146,25 +155,6 @@ interface RosterStudent {
   gender?: "laki-laki" | "perempuan" | "";
 }
 
-interface LeaderboardEntry {
-  studentId: string;
-  studentName: string;
-  classCode: string;
-  gender?: string;
-  journalCount: number;
-  totalPagesRead: number;
-  booksFinished: number;
-}
-
-interface ClassLeaderboardEntry {
-  classCode: string;
-  totalStudents: number;
-  activeStudents: number;
-  journalCount: number;
-  totalPagesRead: number;
-  booksFinished: number;
-}
-
 type TabKey = "ringkasan" | "jurnal" | "pendampingan" | "leaderboard" | "laporan" | "kelola";
 type ReportView = "kelas" | "siswa";
 type ReportPeriod = "all" | "month" | "range";
@@ -253,30 +243,7 @@ function toJakartaDateKey(date: Date): string {
   return `${parts.year}-${String(parts.month).padStart(2, "0")}-${String(parts.day).padStart(2, "0")}`;
 }
 
-function getJakartaWeekdayIndex(date: Date): number {
-  const parts = getJakartaDateParts(date);
-  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day)).getUTCDay();
-}
-
-function getLatestMondaySnapshotCutoff(now = new Date()): Date {
-  const parts = getJakartaDateParts(now);
-  const weekday = getJakartaWeekdayIndex(now);
-  const daysSinceMonday = (weekday + 6) % 7;
-  const currentMondayUtcMs = Date.UTC(parts.year, parts.month - 1, parts.day - daysSinceMonday, 8, 0, 0, 0);
-  const currentMondayAtEight = new Date(currentMondayUtcMs - 7 * 60 * 60 * 1000);
-
-  if (now.getTime() < currentMondayAtEight.getTime()) {
-    const previousMondayUtcMs = Date.UTC(parts.year, parts.month - 1, parts.day - daysSinceMonday - 7, 8, 0, 0, 0);
-    return new Date(previousMondayUtcMs - 7 * 60 * 60 * 1000);
-  }
-
-  return currentMondayAtEight;
-}
-
-const INACTIVITY_DAYS = 7;
 const REPORT_PREVIEW_ROW_LIMIT = 25;
-const LOW_ACTIVITY_RATIO = 0.5;
-const PENDING_BACKLOG_THRESHOLD = 3;
 
 function toDateSafe(value: Date | string | number | { toDate?: () => Date } | null | undefined): Date | null {
   if (value == null) return null;
@@ -337,10 +304,10 @@ function getCharacterList(j: Journal): string[] {
 }
 
 function buildWarningMessage(student: FlaggedStudent): string {
-  if (student.totalJournals === 0) {
-    return "Peringatan: Anda belum pernah mengirim jurnal membaca. Segera buka menu Jurnal dan kirim jurnal bacaan terbaru agar aktivitas membaca Anda tetap terpantau.";
+  if (student.totalJournals === 0 || !student.lastSubmission) {
+    return "Kamu belum mengirim jurnal membaca. Buka menu Isi Jurnal Membaca untuk mengirim jurnal pertamamu.";
   }
-  return `Peringatan: ${student.reasons.join(" ")} Mohon segera mengirim jurnal membaca dan memperbarui aktivitas membaca Anda.`;
+  return `Jurnal terakhirmu dikirim pada ${formatTanggal(student.lastSubmission)}. Buka menu Isi Jurnal Membaca untuk mengirim jurnal terbaru.`;
 }
 
 function getLatestPageForJournal(journal: Journal): number {
@@ -363,7 +330,7 @@ function getStatusInfo(status: string): {
   if (status === "approved") {
     return {
       key: "approved",
-      badge: "Sudah Divalidasi",
+      badge: "Tervalidasi",
       csv: "Tervalidasi",
       badgeClass: "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200",
       dotClass: "bg-emerald-500",
@@ -380,7 +347,7 @@ function getStatusInfo(status: string): {
   }
   return {
     key: "pending",
-    badge: "Belum Divalidasi",
+    badge: "Menunggu",
     csv: "Menunggu",
     badgeClass: "bg-yellow-100 text-yellow-700 ring-1 ring-yellow-200",
     dotClass: "bg-yellow-500",
@@ -783,13 +750,13 @@ function StatCard({
           {icon}
         </div>
       )}
-      <span className={`relative text-xl sm:text-2xl font-bold tracking-tight ${dark ? "text-emerald-100" : "text-emerald-900"}`}>
+      <span className={`relative text-xl sm:text-2xl font-bold tracking-tight tabular-nums ${dark ? "text-emerald-100" : "text-emerald-900"}`}>
         {value}
       </span>
-      <span className={`relative text-[11px] sm:text-xs font-medium leading-snug ${dark ? "text-emerald-300/70" : "text-emerald-700/70"}`}>
+      <span className={`relative text-xs font-medium leading-snug ${dark ? "text-emerald-300/70" : "text-emerald-700/70"}`}>
         {label}
       </span>
-      {sub && <span className={`relative text-[10px] ${dark ? "text-emerald-400/50" : "text-emerald-700/50"}`}>{sub}</span>}
+      {sub && <span className={`relative text-[11px] ${dark ? "text-emerald-400/50" : "text-emerald-700/75"}`}>{sub}</span>}
     </div>
   );
 }
@@ -1009,29 +976,29 @@ function ClassSummaryCard({ summary }: { summary: ClassSummary }) {
           </span>
           Kelas {summary.classCode}
         </span>
-        <span className="text-[11px] text-emerald-700/60">
+        <span className="text-[11px] text-emerald-700/75">
           {summary.activeStudents}/{summary.totalStudents} aktif
         </span>
       </div>
-      <div className="grid grid-cols-4 gap-2 text-center">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-center sm:grid-cols-4">
         <div>
-          <p className="text-sm font-bold text-emerald-900">{summary.totalJournals}</p>
-          <p className="text-[10px] text-emerald-700/60">Jurnal</p>
+          <p className="text-sm font-bold tabular-nums text-emerald-900">{summary.totalJournals}</p>
+          <p className="text-[11px] text-emerald-700/75">Jurnal</p>
         </div>
         <div>
-          <p className="text-sm font-bold text-emerald-700">{summary.approvedCount}</p>
-          <p className="text-[10px] text-emerald-700/60">Valid</p>
+          <p className="text-sm font-bold tabular-nums text-emerald-700">{summary.approvedCount}</p>
+          <p className="text-[11px] text-emerald-700/75">Valid</p>
         </div>
         <div>
-          <p className="text-sm font-bold text-orange-600">{summary.revisionCount}</p>
-          <p className="text-[10px] text-emerald-700/60">Revisi</p>
+          <p className="text-sm font-bold tabular-nums text-orange-600">{summary.revisionCount}</p>
+          <p className="text-[11px] text-emerald-700/75">Revisi</p>
         </div>
         <div>
-          <p className="text-sm font-bold text-yellow-600">{summary.pendingCount}</p>
-          <p className="text-[10px] text-emerald-700/60">Tunggu</p>
+          <p className="text-sm font-bold tabular-nums text-yellow-600">{summary.pendingCount}</p>
+          <p className="text-[11px] text-emerald-700/75">Tunggu</p>
         </div>
       </div>
-      <p className="text-[11px] text-emerald-700/60 mt-2.5 border-t border-emerald-100 pt-2">
+      <p className="text-[11px] text-emerald-700/75 mt-2.5 border-t border-emerald-100 pt-2">
         {summary.totalPagesRead} halaman dibaca{" "}
         {"booksFinished" in summary ? `· ${summary.booksFinished} buku selesai` : ""}
       </p>
@@ -1053,7 +1020,7 @@ function StudentSummaryCard({ s, onOpen }: { s: StudentSummary; onOpen?: () => v
           <Avatar gender={s.gender} name={s.name} className="h-9 w-9" />
           <div className="min-w-0">
             <p className="text-sm font-bold text-emerald-900 truncate">{s.name}</p>
-            <p className="text-[11px] text-emerald-700/60">
+            <p className="text-[11px] text-emerald-700/75">
               Kelas {s.classCode}
               {s.gender ? ` · ${formatGender(s.gender)}` : ""}
             </p>
@@ -1061,22 +1028,22 @@ function StudentSummaryCard({ s, onOpen }: { s: StudentSummary; onOpen?: () => v
         </div>
         {onOpen && <ChevronRight className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />}
       </div>
-      <div className="grid grid-cols-4 gap-2 text-center">
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-center sm:grid-cols-4">
         <div>
-          <p className="text-sm font-bold text-emerald-900">{s.totalJournals}</p>
-          <p className="text-[10px] text-emerald-700/60">Jurnal</p>
+          <p className="text-sm font-bold tabular-nums text-emerald-900">{s.totalJournals}</p>
+          <p className="text-[11px] text-emerald-700/75">Jurnal</p>
         </div>
         <div>
-          <p className="text-sm font-bold text-emerald-700">{s.approvedCount}</p>
-          <p className="text-[10px] text-emerald-700/60">Valid</p>
+          <p className="text-sm font-bold tabular-nums text-emerald-700">{s.approvedCount}</p>
+          <p className="text-[11px] text-emerald-700/75">Valid</p>
         </div>
         <div>
-          <p className="text-sm font-bold text-blue-700">{s.totalPagesRead}</p>
-          <p className="text-[10px] text-emerald-700/60">Hlm.</p>
+          <p className="text-sm font-bold tabular-nums text-blue-700">{s.totalPagesRead}</p>
+          <p className="text-[11px] text-emerald-700/75">Hlm.</p>
         </div>
         <div>
-          <p className="text-sm font-bold text-orange-600">{s.booksFinished}</p>
-          <p className="text-[10px] text-emerald-700/60">Buku</p>
+          <p className="text-sm font-bold tabular-nums text-orange-600">{s.booksFinished}</p>
+          <p className="text-[11px] text-emerald-700/75">Buku</p>
         </div>
       </div>
     </button>
@@ -1109,7 +1076,7 @@ function TeacherFilterBar({
       <div className="relative min-w-0 flex-1">
         <Search
           className={`pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 ${
-            darkMode ? "text-emerald-400/60" : "text-emerald-600/60"
+            darkMode ? "text-emerald-400/80" : "text-emerald-700/75"
           }`}
         />
         <input
@@ -1168,7 +1135,7 @@ function EmptyState({
       </div>
       <p className={`text-sm font-semibold ${dark ? "text-emerald-200" : "text-emerald-800"}`}>{title}</p>
       {description && (
-        <p className={`text-xs mt-1 max-w-sm mx-auto ${dark ? "text-emerald-300/60" : "text-emerald-700/60"}`}>{description}</p>
+        <p className={`text-xs mt-1 max-w-sm mx-auto ${dark ? "text-emerald-300/75" : "text-emerald-700/75"}`}>{description}</p>
       )}
       {actionLabel && onAction && (
         <button
@@ -1249,6 +1216,90 @@ const FIELD_CLASS =
 const FIELD_LABEL_CLASS =
   "mb-1.5 block text-[11px] font-semibold uppercase tracking-wider text-emerald-700/70";
 
+type InfoTone = "info" | "pending" | "warning" | "danger";
+
+const INFO_TONES: Record<InfoTone, {
+  box: [string, string];
+  icon: [string, string];
+  title: [string, string];
+  body: [string, string];
+  chip: [string, string];
+  chipActive: [string, string];
+}> = {
+  info: {
+    box: ["border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50", "border-emerald-500/30 bg-gradient-to-r from-emerald-900/30 to-teal-900/20"],
+    icon: ["bg-emerald-100 text-emerald-600", "bg-emerald-500/20 text-emerald-400"],
+    title: ["text-emerald-800", "text-emerald-200"],
+    body: ["text-emerald-800/80", "text-emerald-300/80"],
+    chip: ["", ""],
+    chipActive: ["", ""],
+  },
+  pending: {
+    box: ["border-yellow-200 bg-gradient-to-r from-yellow-50 to-amber-50", "border-yellow-500/30 bg-gradient-to-r from-yellow-900/20 to-amber-900/10"],
+    icon: ["bg-yellow-100 text-yellow-600", "bg-yellow-500/20 text-yellow-400"],
+    title: ["text-yellow-900", "text-yellow-200"],
+    body: ["text-yellow-800/80", "text-yellow-300/80"],
+    chip: ["border-yellow-200 bg-white/70 text-yellow-800 hover:bg-yellow-100", "border-yellow-500/30 bg-yellow-500/10 text-yellow-300 hover:bg-yellow-500/20"],
+    chipActive: ["border-yellow-400 bg-yellow-200 text-yellow-900", "border-yellow-400 bg-yellow-500/30 text-yellow-200"],
+  },
+  warning: {
+    box: ["border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50", "border-amber-500/30 bg-gradient-to-r from-amber-900/20 to-orange-900/10"],
+    icon: ["bg-amber-100 text-amber-600", "bg-amber-500/20 text-amber-400"],
+    title: ["text-amber-900", "text-amber-200"],
+    body: ["text-amber-800/80", "text-amber-300/80"],
+    chip: ["border-amber-200 bg-white/70 text-amber-800 hover:bg-amber-100", "border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"],
+    chipActive: ["border-amber-400 bg-amber-200 text-amber-900", "border-amber-400 bg-amber-500/30 text-amber-200"],
+  },
+  danger: {
+    box: ["border-red-200 bg-red-50", "border-red-500/30 bg-red-900/20"],
+    icon: ["bg-red-100 text-red-600", "bg-red-500/20 text-red-400"],
+    title: ["text-red-800", "text-red-200"],
+    body: ["text-red-700/90", "text-red-300/80"],
+    chip: ["", ""],
+    chipActive: ["", ""],
+  },
+};
+
+function InfoNote({
+  tone = "info",
+  icon,
+  title,
+  children,
+  actions,
+  dark = false,
+}: {
+  tone?: InfoTone;
+  icon: React.ReactNode;
+  title: string;
+  children?: React.ReactNode;
+  actions?: React.ReactNode;
+  dark?: boolean;
+}) {
+  const t = INFO_TONES[tone];
+  const i = dark ? 1 : 0;
+  return (
+    <div role="note" className={`rounded-2xl border p-3.5 sm:p-4 ${t.box[i]}`}>
+      <div className="flex items-start gap-3">
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${t.icon[i]}`}>{icon}</div>
+        <div className="min-w-0 flex-1">
+          <p className={`text-sm font-semibold leading-snug text-balance ${t.title[i]}`}>{title}</p>
+          {children && (
+            <div className={`mt-1 max-w-2xl text-[13px] leading-relaxed text-pretty ${t.body[i]}`}>{children}</div>
+          )}
+          {actions && <div className="mt-3 flex flex-wrap gap-2">{actions}</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function noteChipClass(tone: "pending" | "warning", active: boolean, dark: boolean) {
+  const t = INFO_TONES[tone];
+  return `min-h-[36px] rounded-lg border px-3 py-1.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-400 ${
+    (active ? t.chipActive : t.chip)[dark ? 1 : 0]
+  }`;
+}
+
 export default function TeacherDashboard() {
   const { user, userProfile, logout, loading } = useAuth();
   const router = useRouter();
@@ -1311,6 +1362,8 @@ export default function TeacherDashboard() {
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
   const [leaderboardError, setLeaderboardError] = useState("");
   const [leaderboardSubTab, setLeaderboardSubTab] = useState<LeaderboardSubTab>("semua");
+  const [leaderboardPeriod, setLeaderboardPeriod] = useState<LeaderboardPeriod>("month");
+  const [leaderboardMonth, setLeaderboardMonth] = useState(getCurrentMonthInput());
   const [selectedLeaderboardClass, setSelectedLeaderboardClass] = useState("");
   const [leaderboardRefreshKey, setLeaderboardRefreshKey] = useState<string>(() => new Date().toISOString());
   const [darkMode, setDarkMode] = useState(false);
@@ -1457,7 +1510,7 @@ export default function TeacherDashboard() {
           hourly: forecast.filter((item: WeatherHour) => new Date(item.time.replace(" ", "T") + "+07:00").getTime() >= now).slice(0, 12),
         });
       } catch (error) {
-        if (!controller.signal.aborted) console.error("Gagal memuat cuaca DKI Jakarta", error);
+        if (!controller.signal.aborted) console.error("Gagal memuat cuaca Rawamangun", error);
       } finally {
         if (!controller.signal.aborted) setWeatherLoading(false);
       }
@@ -1710,7 +1763,7 @@ export default function TeacherDashboard() {
   const handleCancelRevision = async (journalId: string) => {
     const journal = journals.find((item) => item.id === journalId);
     if (!journal || getStatusInfo(journal.status).key !== "revision") return;
-    if (!window.confirm("Batalkan revisi jurnal ini? Statusnya akan kembali menjadi Menunggu Validasi.")) return;
+    if (!window.confirm("Batalkan revisi jurnal ini? Statusnya akan kembali menjadi Menunggu.")) return;
 
     setManagementError("");
     setJournalActionLoading(journalId);
@@ -1746,7 +1799,7 @@ export default function TeacherDashboard() {
 
   const handleSendStudentWarning = async (student: FlaggedStudent) => {
     if (!student.key.startsWith("uid:")) {
-      setManagementError("Peringatan hanya bisa dikirim ke siswa yang memiliki akun aktif.");
+      setManagementError("Peringatan hanya bisa dikirim ke murid yang memiliki akun.");
       return;
     }
 
@@ -1754,9 +1807,9 @@ export default function TeacherDashboard() {
     if (warningSentTodayByStudent.get(studentUid)) {
       setToast({
         type: "success",
-        message: `Peringatan untuk ${student.name} sudah dikirim hari ini.`,
+        message: `${student.name} sudah menerima peringatan hari ini.`,
       });
-      setManagementMessage(`Peringatan untuk ${student.name} sudah dikirim hari ini.`);
+      setManagementMessage(`${student.name} sudah menerima peringatan hari ini.`);
       return;
     }
 
@@ -1793,14 +1846,14 @@ export default function TeacherDashboard() {
 
       setToast({
         type: "success",
-        message: `Peringatan berhasil dikirim ke ${student.name}. Siswa akan menerima notifikasi saat login atau membuka aplikasi.`,
+        message: `Peringatan terkirim ke ${student.name}. Pesan tampil saat murid membuka aplikasi.`,
       });
-      setManagementMessage(`Peringatan berhasil dikirim ke ${student.name}.`);
+      setManagementMessage(`Peringatan terkirim ke ${student.name}.`);
     } catch (error) {
       console.error("Gagal mengirim peringatan siswa:", error);
       const errorMessage = error instanceof Error
-        ? `Gagal mengirim peringatan ke siswa: ${error.message}`
-        : "Gagal mengirim peringatan ke siswa. Periksa koneksi/izin dan coba lagi.";
+        ? `Peringatan gagal dikirim: ${error.message}`
+        : "Peringatan gagal dikirim. Periksa koneksi dan izin akses, lalu coba lagi.";
 
       setToast({
         type: "error",
@@ -1856,7 +1909,7 @@ export default function TeacherDashboard() {
     if (newStatus === "revision" && !feedback) {
       setJournalInlineError({
         id: journalId,
-        message: "Tulis alasan revisi di kolom umpan balik jurnal ini sebelum menandainya Perlu Revisi.",
+        message: "Isi alasan revisi di kolom umpan balik sebelum memilih Perlu Revisi.",
       });
       document.getElementById(`journal-card-${journalId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
@@ -2215,7 +2268,15 @@ export default function TeacherDashboard() {
     };
   }, [fetchClassJournals, user, userProfile?.role]);
 
-  const leaderboard = useMemo(() => buildLeaderboard(journals, 100, leaderboardRefreshKey, allStudents), [allStudents, journals, leaderboardRefreshKey]);
+  const leaderboardOptions = useMemo(
+    () => ({ period: leaderboardPeriod, month: leaderboardMonth, refreshKey: leaderboardRefreshKey }),
+    [leaderboardPeriod, leaderboardMonth, leaderboardRefreshKey]
+  );
+  const leaderboardMonths = useMemo(() => getLeaderboardMonths(journals), [journals]);
+  const leaderboard = useMemo(
+    () => buildStudentLeaderboard(journals, leaderboardOptions, allStudents, 100),
+    [journals, leaderboardOptions, allStudents]
+  );
   const totalRegisteredStudents = allStudents.length;
   const leaderboardClasses = useMemo(
     () => Array.from(new Set(allStudents.map((student) => student.classCode).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
@@ -2225,12 +2286,16 @@ export default function TeacherDashboard() {
     ? selectedLeaderboardClass
     : leaderboardClasses[0] || "";
   const classLeaderboard = useMemo(
-    () => buildLeaderboard(journals.filter((journal) => journal.classCode === effectiveLeaderboardClass), Number.MAX_SAFE_INTEGER, leaderboardRefreshKey, allStudents),
-    [allStudents, journals, effectiveLeaderboardClass, leaderboardRefreshKey]
+    () => buildStudentLeaderboard(
+      journals.filter((journal) => journal.classCode === effectiveLeaderboardClass),
+      leaderboardOptions,
+      allStudents
+    ),
+    [journals, leaderboardOptions, allStudents, effectiveLeaderboardClass]
   );
   const classLeaderboardRanking = useMemo(
-    () => buildClassLeaderboard(journals, allStudents, leaderboardRefreshKey),
-    [allStudents, journals, leaderboardRefreshKey]
+    () => buildClassLeaderboard(journals, leaderboardOptions, allStudents),
+    [journals, leaderboardOptions, allStudents]
   );
   const groupedJournalsByClass = useMemo(() => {
     const grouped = new Map<string, Journal[]>();
@@ -2325,36 +2390,30 @@ export default function TeacherDashboard() {
   }, [studentAlerts]);
 
   const studentsNeedingAttention: FlaggedStudent[] = useMemo(() => {
-    if (studentSummaries.length === 0) return [];
-    const avg = classStats.rataRata;
-    const now = new Date();
-    return studentSummaries
-      .map((s) => {
-        const reasons: string[] = [];
-        if (s.totalJournals === 0) {
-          reasons.push("Belum pernah mengirim jurnal / membaca buku sama sekali");
-        } else {
-          if (avg > 0 && s.totalJournals < avg * LOW_ACTIVITY_RATIO) {
-            reasons.push(
-              `Jumlah jurnal (${s.totalJournals}) jauh di bawah rata-rata kelas (${avg.toFixed(1)})`
-            );
-          }
-          if (s.lastSubmission) {
-            const days = Math.floor((now.getTime() - s.lastSubmission.getTime()) / 86400000);
-            if (days > INACTIVITY_DAYS) {
-              reasons.push(`Belum mengirim jurnal baru selama ${days} hari terakhir`);
-            }
-          }
-          if (s.pendingCount + s.revisionCount >= PENDING_BACKLOG_THRESHOLD) {
-            reasons.push(
-              `Ada ${s.pendingCount + s.revisionCount} jurnal yang menumpuk belum divalidasi/masih revisi`
-            );
-          }
-        }
-        return { ...s, reasons };
-      })
-      .filter((s) => s.reasons.length > 0);
-  }, [studentSummaries, classStats]);
+    const currentMonth = getCurrentMonthInput();
+    const previousMonth = shiftMonthInput(currentMonth, -1);
+
+    return studentSummaries.flatMap((s): FlaggedStudent[] => {
+      if (s.totalJournals === 0) {
+        return [{ ...s, reasons: ["Belum pernah mengirim jurnal"] }];
+      }
+      if (!s.lastSubmission) return [];
+
+      const parts = getJakartaDateParts(s.lastSubmission);
+      const lastMonth = `${parts.year}-${String(parts.month).padStart(2, "0")}`;
+      if (lastMonth >= previousMonth) return [];
+
+      return [
+        {
+          ...s,
+          reasons: [
+            `Tidak ada jurnal pada ${formatMonthLabel(previousMonth)} dan ${formatMonthLabel(currentMonth)}`,
+            `Jurnal terakhir: ${formatTanggal(s.lastSubmission)}`,
+          ],
+        },
+      ];
+    });
+  }, [studentSummaries]);
 
   const groupedStudentsNeedingAttention = useMemo(() => {
     const search = deferredMentoringSearch.trim().toLowerCase();
@@ -2484,9 +2543,9 @@ export default function TeacherDashboard() {
       }
 
       if (failedCount === 0) {
-        setToast({ type: "success", message: `Peringatan berhasil dikirim ke ${sentAlerts.length} murid.` });
+        setToast({ type: "success", message: `Peringatan terkirim ke ${sentAlerts.length} murid.` });
       } else {
-        const message = `${sentAlerts.length} peringatan terkirim, ${failedCount} gagal. Periksa koneksi/izin lalu coba lagi untuk yang gagal.`;
+        const message = `${sentAlerts.length} peringatan terkirim, ${failedCount} gagal. Periksa koneksi, lalu kirim ulang untuk yang gagal.`;
         setToast({ type: "error", message });
         setManagementError(message);
       }
@@ -2772,6 +2831,7 @@ export default function TeacherDashboard() {
   }
 
   const teacherName = userProfile?.name || "Guru";
+  const pendingJournalTotal = pendingJournalsByClass.reduce((sum, [, count]) => sum + count, 0);
   const todayLabel = new Intl.DateTimeFormat("id-ID", {
     timeZone: "Asia/Jakarta",
     weekday: "long",
@@ -2966,7 +3026,7 @@ export default function TeacherDashboard() {
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <p className="text-[9px] uppercase tracking-[0.16em] text-emerald-50/80 sm:text-[10px] sm:tracking-[0.2em]">{todayLabel}</p>
+                    <p className="text-[11px] uppercase tracking-[0.14em] text-emerald-50/80 sm:text-xs">{todayLabel}</p>
                     <h1 className="mt-0.5 text-lg font-bold leading-tight tracking-tight text-white sm:mt-1 sm:text-2xl lg:text-3xl">
                       Selamat Datang, Guru {teacherName}!
                     </h1>
@@ -2995,8 +3055,11 @@ export default function TeacherDashboard() {
                 </div>
               </div>
 
-              <div className="relative text-xs leading-relaxed text-emerald-50/90 text-justify sm:mt-1 sm:text-base lg:max-w-xl">
-                Semoga hari ini membawa semangat baru, fokus, dan inspirasi untuk terus membimbing siswa-siswi menuju prestasi terbaik.
+              <div className="relative text-sm leading-relaxed text-emerald-50/90 sm:mt-1 sm:text-base lg:max-w-xl">
+                Semoga hari ini lancar.{" "}
+                {pendingJournalTotal > 0
+                  ? `${pendingJournalTotal} jurnal menunggu validasi.`
+                  : "Tidak ada jurnal yang menunggu validasi."}
               </div>
 
               <div className="relative flex w-full items-center justify-between gap-3 rounded-2xl border border-white/15 bg-black/10 px-3 py-2.5 backdrop-blur-sm sm:max-w-xl sm:px-3.5 lg:max-w-2xl lg:flex-1 lg:px-4 lg:py-2">
@@ -3010,10 +3073,10 @@ export default function TeacherDashboard() {
                     <div className="flex min-w-0 items-center gap-2.5">
                       <weatherInfo.Icon className={`h-7 w-7 shrink-0 ${weatherInfo.color}`} aria-hidden="true" />
                       <div className="min-w-0">
-                        <p className="truncate text-[10px] font-semibold uppercase tracking-[0.12em] text-emerald-50/70">
+                        <p className="truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-emerald-50/70">
                           Cuaca BMKG · Pulo Gadung
                         </p>
-                        <p className="mt-0.5 truncate text-xs font-semibold text-white sm:text-sm">
+                        <p className="mt-0.5 truncate text-sm font-semibold text-white">
                           {weatherInfo.label} · Rawamangun
                         </p>
                       </div>
@@ -3021,9 +3084,9 @@ export default function TeacherDashboard() {
                     <div className="flex shrink-0 items-center gap-2.5 text-right">
                       <div>
                         <p className="text-xl font-bold leading-none text-white sm:text-2xl">{Math.round(weather.temperature)}°</p>
-                        <p className="mt-1 text-[10px] text-emerald-50/70">Kelembapan {weather.humidity}%</p>
+                        <p className="mt-1 text-[11px] text-emerald-50/70">Kelembapan {weather.humidity}%</p>
                       </div>
-                      <div className="hidden items-center gap-1 text-[10px] text-emerald-50/75 xs:flex sm:text-xs">
+                      <div className="hidden items-center gap-1 text-[11px] text-emerald-50/75 xs:flex">
                         <Droplets className="h-3.5 w-3.5" aria-hidden="true" />
                         {weather.precipitation} mm
                       </div>
@@ -3038,17 +3101,17 @@ export default function TeacherDashboard() {
               </div>
               {weather?.hourly.length ? (
                 <div className="relative w-full sm:max-w-xl lg:max-w-none lg:flex-1" data-weather-scroll="true">
-                  <p className="mb-1.5 text-[10px] font-medium text-emerald-50/70 lg:mb-1">Prakiraan BMKG per 3 jam · dapat berubah</p>
+                  <p className="mb-1.5 text-[11px] font-medium text-emerald-50/70 lg:mb-1">Prakiraan BMKG per 3 jam · dapat berubah</p>
                   <div className="flex gap-1.5 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                     {weather.hourly.map((hour) => {
                       const hourInfo = getWeatherInfo(hour.weatherCode);
                       const HourIcon = hourInfo.Icon;
                       return (
                         <div key={hour.time} className="min-w-[4.25rem] shrink-0 rounded-xl border border-white/15 bg-black/10 px-2 py-2 text-center lg:min-w-[3.75rem] lg:px-1.5 lg:py-1.5">
-                          <p className="text-[10px] font-semibold text-emerald-50/80">{hour.time.slice(11, 16)}</p>
+                          <p className="text-[11px] font-semibold text-emerald-50/80">{hour.time.slice(11, 16)}</p>
                           <HourIcon className={`mx-auto my-1 h-4 w-4 ${hourInfo.color}`} aria-label={hour.description} />
-                          <p className="text-xs font-bold text-white">{Math.round(hour.temperature)}°</p>
-                          <p className="mt-0.5 flex items-center justify-center gap-0.5 text-[9px] text-emerald-50/70">
+                          <p className="text-sm font-bold text-white">{Math.round(hour.temperature)}°</p>
+                          <p className="mt-0.5 flex items-center justify-center gap-0.5 text-[11px] text-emerald-50/70">
                             <Droplets className="h-2.5 w-2.5" aria-hidden="true" /> {hour.humidity}%
                           </p>
                         </div>
@@ -3277,7 +3340,7 @@ export default function TeacherDashboard() {
         </div>
         <div className="min-w-[140px] md:min-w-0 snap-start">
           <StatCard
-            label="Sudah Divalidasi"
+            label="Tervalidasi"
             value={classStats.totalTervalidasi}
             icon={<CheckCircle2 className="w-4 h-4" />}
             color="emerald"
@@ -3293,7 +3356,7 @@ export default function TeacherDashboard() {
         </div>
         <div className="min-w-[140px] md:min-w-0 snap-start">
           <StatCard
-            label="Menunggu Validasi"
+            label="Menunggu"
             value={classStats.totalMenunggu}
             icon={<Clock className="w-4 h-4" />}
             color="yellow"
@@ -3332,7 +3395,7 @@ export default function TeacherDashboard() {
           {classStats.topBooks.length === 0 ? (
             <div className="text-center py-8 bg-emerald-50/50 rounded-2xl border border-dashed border-emerald-200">
               <BookOpen className="w-8 h-8 text-emerald-300 mx-auto mb-2" />
-              <p className="text-sm text-emerald-700/50">Belum ada data buku</p>
+              <p className="text-sm text-emerald-700/75">Belum ada data buku</p>
             </div>
           ) : (
             <ul className="space-y-3">
@@ -3374,7 +3437,7 @@ export default function TeacherDashboard() {
           {classStats.topCharacters.length === 0 ? (
             <div className="text-center py-8 bg-amber-50/50 rounded-2xl border border-dashed border-amber-200">
               <Sparkles className="w-8 h-8 text-amber-300 mx-auto mb-2" />
-              <p className="text-sm text-emerald-700/50">Belum ada data nilai karakter</p>
+              <p className="text-sm text-emerald-700/75">Belum ada data nilai karakter</p>
             </div>
           ) : (
             <ul className="space-y-3">
@@ -3414,13 +3477,13 @@ export default function TeacherDashboard() {
               <LayoutGrid className="w-5 h-5 text-emerald-600" />
               Rangkuman Kelas Per Bulan
             </h2>
-            <p className="text-xs text-emerald-700/60 mt-1">
+            <p className="text-xs text-emerald-700/75 mt-1">
               Murid aktif adalah murid yang mengirim jurnal pada bulan terpilih
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
             <div className="relative">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-600 font-semibold mb-1 block">Bulan</label>
+              <label className="text-[11px] uppercase tracking-wider text-emerald-600 font-semibold mb-1 block">Bulan</label>
               <input
                 type="month"
                 value={classSummaryMonth}
@@ -3429,7 +3492,7 @@ export default function TeacherDashboard() {
               />
             </div>
             <div className="relative">
-              <label className="text-[10px] uppercase tracking-wider text-emerald-600 font-semibold mb-1 block">Kelas</label>
+              <label className="text-[11px] uppercase tracking-wider text-emerald-600 font-semibold mb-1 block">Kelas</label>
               <select
                 value={classSummaryClass}
                 onChange={(e) => setClassSummaryClass(e.target.value)}
@@ -3449,12 +3512,12 @@ export default function TeacherDashboard() {
         {classSummaries.length === 0 ? (
           <div className="text-center py-12 bg-emerald-50/30 rounded-2xl border border-dashed border-emerald-200">
             <Users className="w-12 h-12 text-emerald-300 mx-auto mb-3" />
-            <p className="text-emerald-700/60 font-medium">Belum ada data murid untuk kelas atau bulan ini</p>
+            <p className="text-emerald-700/75 font-medium">Tidak ada data untuk kelas dan bulan yang dipilih</p>
           </div>
         ) : (
           <>
             {/* Mobile: Enhanced Cards */}
-            <div className="grid grid-cols-1 xs:grid-cols-2 gap-3 md:hidden">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:hidden">
               {classSummaries.map((summary, idx) => (
                 <div 
                   key={summary.classCode} 
@@ -3470,27 +3533,27 @@ export default function TeacherDashboard() {
                         </span>
                         {summary.classCode}
                       </span>
-                      <span className="text-[10px] font-medium text-emerald-600 bg-emerald-100 px-2 py-1 rounded-full">
+                      <span className="text-[11px] font-medium text-emerald-600 bg-emerald-100 px-2 py-1 rounded-full">
                         {summary.activeStudents}/{summary.totalStudents} aktif
                       </span>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-2 mb-3">
                       <div className="bg-white/80 rounded-lg p-2 text-center border border-emerald-50">
-                        <p className="text-lg font-bold text-emerald-900">{summary.totalJournals}</p>
-                        <p className="text-[10px] text-emerald-600 font-medium uppercase tracking-wide">Jurnal</p>
+                        <p className="text-lg font-bold tabular-nums text-emerald-900">{summary.totalJournals}</p>
+                        <p className="text-[11px] text-emerald-600 font-medium uppercase tracking-wide">Jurnal</p>
                       </div>
                       <div className="bg-white/80 rounded-lg p-2 text-center border border-emerald-50">
-                        <p className="text-lg font-bold text-emerald-700">{summary.approvedCount}</p>
-                        <p className="text-[10px] text-emerald-600 font-medium uppercase tracking-wide">Valid</p>
+                        <p className="text-lg font-bold tabular-nums text-emerald-700">{summary.approvedCount}</p>
+                        <p className="text-[11px] text-emerald-600 font-medium uppercase tracking-wide">Valid</p>
                       </div>
                       <div className="bg-white/80 rounded-lg p-2 text-center border border-emerald-50">
-                        <p className="text-lg font-bold text-orange-600">{summary.revisionCount}</p>
-                        <p className="text-[10px] text-emerald-600 font-medium uppercase tracking-wide">Revisi</p>
+                        <p className="text-lg font-bold tabular-nums text-orange-600">{summary.revisionCount}</p>
+                        <p className="text-[11px] text-emerald-600 font-medium uppercase tracking-wide">Revisi</p>
                       </div>
                       <div className="bg-white/80 rounded-lg p-2 text-center border border-emerald-50">
-                        <p className="text-lg font-bold text-yellow-600">{summary.pendingCount}</p>
-                        <p className="text-[10px] text-emerald-600 font-medium uppercase tracking-wide">Tunggu</p>
+                        <p className="text-lg font-bold tabular-nums text-yellow-600">{summary.pendingCount}</p>
+                        <p className="text-[11px] text-emerald-600 font-medium uppercase tracking-wide">Tunggu</p>
                       </div>
                     </div>
                     
@@ -3532,18 +3595,18 @@ export default function TeacherDashboard() {
                       style={{ animationDelay: `${idx * 30}ms` }}
                     >
                       <td className="py-3 px-4 font-bold text-emerald-900">{summary.classCode}</td>
-                      <td className="py-3 px-4 text-emerald-800/80">{summary.totalStudents}</td>
+                      <td className="py-3 px-4 tabular-nums text-emerald-800/80">{summary.totalStudents}</td>
                       <td className="py-3 px-4">
-                        <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
+                        <span className="inline-flex items-center gap-1 font-medium tabular-nums text-emerald-700">
                           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                           {summary.activeStudents}
                         </span>
                       </td>
-                      <td className="py-3 px-4 text-emerald-800/80 font-medium">{summary.totalJournals}</td>
-                      <td className="py-3 px-4 text-emerald-700 font-medium">{summary.approvedCount}</td>
-                      <td className="py-3 px-4 text-orange-600 font-medium">{summary.revisionCount}</td>
-                      <td className="py-3 px-4 text-yellow-600 font-medium">{summary.pendingCount}</td>
-                      <td className="py-3 px-4 text-emerald-800/80">{summary.totalPagesRead}</td>
+                      <td className="py-3 px-4 tabular-nums text-emerald-800/80 font-medium">{summary.totalJournals}</td>
+                      <td className="py-3 px-4 tabular-nums text-emerald-700 font-medium">{summary.approvedCount}</td>
+                      <td className="py-3 px-4 tabular-nums text-orange-600 font-medium">{summary.revisionCount}</td>
+                      <td className="py-3 px-4 tabular-nums text-yellow-600 font-medium">{summary.pendingCount}</td>
+                      <td className="py-3 px-4 tabular-nums text-emerald-800/80">{summary.totalPagesRead}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -3563,7 +3626,7 @@ export default function TeacherDashboard() {
               <Users className="w-5 h-5 text-emerald-600" />
               Aktivitas per Murid
             </h2>
-            <p className="text-xs text-emerald-700/60 mt-1">
+            <p className="text-xs text-emerald-700/75 mt-1">
               Rekap {formatMonthLabel(studentSummaryMonth)}. Klik nama murid untuk melihat detail jurnal bulan terpilih.
             </p>
           </div>
@@ -3615,7 +3678,7 @@ export default function TeacherDashboard() {
         {filteredStudents.length === 0 ? (
           <div className="text-center py-12 bg-emerald-50/30 rounded-2xl border border-dashed border-emerald-200">
             <Search className="w-12 h-12 text-emerald-300 mx-auto mb-3" />
-            <p className="text-emerald-700/60 font-medium">Tidak ada murid yang cocok dengan filter/pencarian</p>
+            <p className="text-emerald-700/75 font-medium">Tidak ada murid yang cocok dengan filter/pencarian</p>
           </div>
         ) : (
           <div className="space-y-2 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0">
@@ -3639,7 +3702,7 @@ export default function TeacherDashboard() {
                     <span className="font-bold text-emerald-900 group-hover:text-emerald-700 transition-colors block truncate">
                       {s.name}
                     </span>
-                    <span className="text-xs text-emerald-700/60 flex items-center gap-1 mt-0.5">
+                    <span className="text-xs text-emerald-700/75 flex items-center gap-1 mt-0.5">
                       <span className="truncate">Kelas {s.classCode}</span>
                       {s.gender && (
                         <>
@@ -3653,17 +3716,17 @@ export default function TeacherDashboard() {
                 <div className="flex items-center gap-3 text-xs shrink-0 pl-13 sm:pl-0">
                   <div className="flex flex-col items-end">
                     <span className="font-bold text-emerald-900">{s.totalJournals}</span>
-                    <span className="text-[10px] text-emerald-600 uppercase tracking-wide">Jurnal</span>
+                    <span className="text-[11px] text-emerald-600 uppercase tracking-wide">Jurnal</span>
                   </div>
                   <div className="w-px h-8 bg-emerald-200" />
                   <div className="flex flex-col items-end">
                     <span className="font-bold text-emerald-700">{s.totalPagesRead}</span>
-                    <span className="text-[10px] text-emerald-600 uppercase tracking-wide">Halaman</span>
+                    <span className="text-[11px] text-emerald-600 uppercase tracking-wide">Halaman</span>
                   </div>
                   <div className="w-px h-8 bg-emerald-200" />
                   <div className="flex flex-col items-end">
                     <span className="font-bold text-orange-600">{s.booksFinished}</span>
-                    <span className="text-[10px] text-emerald-600 uppercase tracking-wide">Buku</span>
+                    <span className="text-[11px] text-emerald-600 uppercase tracking-wide">Buku</span>
                   </div>
                   <ChevronRight className="w-4 h-4 text-emerald-400 group-hover:text-emerald-600 group-hover:translate-x-1 transition-all ml-1" />
                 </div>
@@ -3693,12 +3756,14 @@ export default function TeacherDashboard() {
                     <h2 className={`text-base sm:text-xl font-bold tracking-tight truncate ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
                       Leaderboard Penakluk Literasi
                     </h2>
-                    <p className={`text-[11px] sm:text-xs mt-0.5 truncate ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
+                    <p className={`text-[11px] sm:text-xs mt-0.5 truncate ${darkMode ? "text-emerald-300/70" : "text-emerald-700/75"}`}>
                       {leaderboardSubTab === "semua"
                         ? "Top 100 Murid Terajin Membaca"
                         : leaderboardSubTab === "kelas"
                         ? `Kelas ${effectiveLeaderboardClass || "-"}`
                         : "Kelas terajin membaca"}
+                      {" · "}
+                      {leaderboardPeriod === "all" ? "Sepanjang waktu" : formatLbMonth(leaderboardMonth)}
                     </p>
                   </div>
                 </div>
@@ -3712,14 +3777,14 @@ export default function TeacherDashboard() {
                     <div className="flex items-center gap-1.5 sm:gap-2">
                       <Users className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${darkMode ? "text-amber-400" : "text-amber-600"}`} />
                       <span className={`text-xs sm:text-sm font-semibold ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
-                        {totalRegisteredStudents} <span className={`${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"} font-normal`}>Murid Aktif</span>
+                        {totalRegisteredStudents} <span className={`${darkMode ? "text-emerald-300/70" : "text-emerald-700/75"} font-normal`}>Murid Terdaftar</span>
                       </span>
                     </div>
                     <div className={`hidden sm:block w-px h-4 ${darkMode ? "bg-slate-600" : "bg-emerald-200"}`} />
                     <div className="flex items-center gap-1.5 sm:gap-2">
                       <Clock className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${darkMode ? "text-emerald-400" : "text-emerald-600"}`} />
-                      <span className={`text-[10px] sm:text-xs ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
-                        Update Senin 08:00
+                      <span className={`text-[11px] sm:text-xs ${darkMode ? "text-emerald-300/70" : "text-emerald-700/75"}`}>
+                        Diperbarui Senin 08.00 WIB
                       </span>
                     </div>
                   </div>
@@ -3749,8 +3814,8 @@ export default function TeacherDashboard() {
                     }`}
                   >
                     <span className="block text-xs sm:text-sm font-bold truncate">{label}</span>
-                    <span className={`hidden sm:block text-[10px] sm:text-[11px] mt-0.5 truncate ${
-                      leaderboardSubTab === key ? "text-emerald-100/80" : darkMode ? "text-emerald-300/60" : "text-emerald-700/60"
+                    <span className={`hidden sm:block text-[11px] sm:text-[11px] mt-0.5 truncate ${
+                      leaderboardSubTab === key ? "text-emerald-100/80" : darkMode ? "text-emerald-300/75" : "text-emerald-700/75"
                     }`}>
                       {desc}
                     </span>
@@ -3758,6 +3823,15 @@ export default function TeacherDashboard() {
                 ))}
               </div>
             </div>
+
+            <LeaderboardPeriodPicker
+              period={leaderboardPeriod}
+              month={leaderboardMonth}
+              months={leaderboardMonths}
+              onPeriodChange={setLeaderboardPeriod}
+              onMonthChange={setLeaderboardMonth}
+              dark={darkMode}
+            />
 
             {leaderboardSubTab === "kelas" && leaderboardClasses.length > 0 && (
               <div className="mb-4 sm:mb-6 flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -3805,91 +3879,28 @@ export default function TeacherDashboard() {
                   darkMode ? "border-slate-700" : "border-emerald-200"
                 }`}>
                   <Library className={`w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 sm:mb-3 ${darkMode ? "text-slate-600" : "text-emerald-300"}`} />
-                  <p className={`text-xs sm:text-sm font-medium px-4 ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
+                  <p className={`text-xs sm:text-sm font-medium px-4 ${darkMode ? "text-emerald-300/70" : "text-emerald-700/75"}`}>
                     Belum ada data kelas yang membaca buku
                   </p>
                 </div>
               ) : (
-                <div className="space-y-2 sm:space-y-3">
+                <div className="space-y-2.5 sm:space-y-3">
                   {classLeaderboardRanking.map((entry, idx) => {
                     const rank = idx + 1;
-                    const isTop3 = rank <= 3;
-
                     return (
-                      <div
+                      <LeaderboardRow
                         key={entry.classCode}
-                        className={`relative overflow-hidden rounded-xl sm:rounded-2xl border p-3 sm:p-4 transition-all duration-200 hover:shadow-md ${
-                          darkMode
-                            ? "bg-slate-800/50 border-slate-700 hover:border-slate-600"
-                            : "bg-white/60 border-emerald-100 hover:border-emerald-200"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5 sm:gap-4">
-                          <div className={`relative shrink-0 ${isTop3 ? "w-11 h-11 sm:w-14 sm:h-14" : "w-9 h-9 sm:w-12 sm:h-12"}`}>
-                            {isTop3 && (
-                              <div className={`absolute inset-0 rounded-xl sm:rounded-2xl blur-md sm:blur-lg opacity-30 sm:opacity-40 ${
-                                rank === 1 ? "bg-yellow-400" : rank === 2 ? "bg-slate-400" : "bg-amber-500"
-                              }`} />
-                            )}
-                            <div className={`relative w-full h-full rounded-xl sm:rounded-2xl flex flex-col items-center justify-center font-bold ${
-                              rank === 1
-                                ? "bg-gradient-to-br from-yellow-300 to-amber-500 text-white shadow-md sm:shadow-lg"
-                                : rank === 2
-                                ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white shadow-md sm:shadow-lg"
-                                : rank === 3
-                                ? "bg-gradient-to-br from-amber-400 to-orange-600 text-white shadow-md sm:shadow-lg"
-                                : darkMode
-                                ? "bg-slate-700 text-slate-300"
-                                : "bg-emerald-100 text-emerald-700"
-                            }`}>
-                              {isTop3 ? (
-                                <>
-                                  <Crown className="w-3.5 h-3.5 sm:w-5 sm:h-5 mb-0.5" />
-                                  <span className="text-[9px] sm:text-[10px] font-bold">{rank}</span>
-                                </>
-                              ) : (
-                                <span className="text-sm sm:text-base">{rank}</span>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="flex-1 min-w-0 py-0.5 sm:py-1">
-                            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                              <h3 className={`text-sm sm:text-base font-bold truncate ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
-                                Kelas {entry.classCode}
-                              </h3>
-                            </div>
-                            <p className={`text-[11px] sm:text-xs mt-0.5 sm:mt-1 ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
-                              {entry.activeStudents} Murid Aktif · {entry.totalStudents} total
-                            </p>
-                          </div>
-
-                          <div className="text-right shrink-0 py-0.5 sm:py-1">
-                            <p className={`text-base sm:text-lg font-bold ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
-                              {entry.journalCount}
-                              <span className={`text-[10px] sm:text-xs font-normal ml-0.5 sm:ml-1 ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
-                                jurnal
-                              </span>
-                            </p>
-                            <div className={`flex items-center justify-end gap-1.5 sm:gap-3 mt-0.5 sm:mt-1 text-[10px] sm:text-[11px] ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
-                              <span className="whitespace-nowrap">{entry.totalPagesRead} hlm</span>
-                              <span className="hidden xs:inline">•</span>
-                              <span className="whitespace-nowrap">{entry.booksFinished} buku</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {isTop3 && (
-                          <div className={`mt-2 sm:mt-3 h-1 sm:h-1.5 rounded-full overflow-hidden ${darkMode ? "bg-slate-700" : "bg-emerald-100"}`}>
-                            <div
-                              className={`h-full rounded-full ${
-                                rank === 1 ? "bg-gradient-to-r from-yellow-400 to-amber-500" : rank === 2 ? "bg-gradient-to-r from-slate-400 to-slate-500" : "bg-gradient-to-r from-amber-400 to-orange-500"
-                              }`}
-                              style={{ width: `${Math.min(100, (entry.journalCount / Math.max(classLeaderboardRanking[0]?.journalCount || 1, 1)) * 100)}%` }}
-                            />
-                          </div>
-                        )}
-                      </div>
+                        rank={rank}
+                        dark={darkMode}
+                        title={`Kelas ${entry.classCode}`}
+                        subtitle={`${entry.activeStudents} aktif dari ${entry.totalStudents} murid`}
+                        journals={entry.journalCount}
+                        pages={entry.totalPagesRead}
+                        books={entry.booksFinished}
+                        progress={rank <= 3
+                          ? (entry.journalCount / Math.max(classLeaderboardRanking[0]?.journalCount || 1, 1)) * 100
+                          : undefined}
+                      />
                     );
                   })}
                 </div>
@@ -3900,95 +3911,33 @@ export default function TeacherDashboard() {
                   darkMode ? "border-slate-700" : "border-emerald-200"
                 }`}>
                   <BookOpen className={`w-10 h-10 sm:w-12 sm:h-12 mx-auto mb-2 sm:mb-3 ${darkMode ? "text-slate-600" : "text-emerald-300"}`} />
-                  <p className={`text-xs sm:text-sm font-medium px-4 ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
+                  <p className={`text-xs sm:text-sm font-medium px-4 ${darkMode ? "text-emerald-300/70" : "text-emerald-700/75"}`}>
                     {leaderboardSubTab === "semua"
                       ? "Belum ada data jurnal dari murid manapun"
                       : "Belum ada data jurnal untuk kelas ini"}
                   </p>
                 </div>
               ) : (
-                <div className="space-y-2 sm:space-y-3">
-                  {(leaderboardSubTab === "semua" ? leaderboard : classLeaderboard).map((entry, idx) => {
-                    const rank = idx + 1;
-                    const isTop3 = rank <= 3;
-
-                    return (
-                      <div
-                        key={entry.studentId}
-                        className={`relative rounded-xl sm:rounded-2xl border p-2.5 sm:p-4 transition-all duration-200 hover:shadow-md ${
-                          isTop3
-                            ? darkMode
-                              ? "bg-slate-800/80 border-slate-700 hover:border-slate-600"
-                              : "bg-white border-emerald-100 hover:border-emerald-200"
-                            : darkMode
-                            ? "bg-slate-800/50 border-slate-700/50 hover:border-slate-600"
-                            : "bg-white/60 border-emerald-100/80 hover:border-emerald-200"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5 sm:gap-4">
-                          <div className={`relative shrink-0 ${isTop3 ? "w-11 h-11 sm:w-14 sm:h-14" : "w-9 h-9 sm:w-11 sm:h-11"}`}>
-                            {isTop3 && (
-                              <div className={`absolute inset-0 rounded-xl sm:rounded-2xl blur-md sm:blur-lg opacity-30 sm:opacity-40 ${
-                                rank === 1 ? "bg-yellow-400" : rank === 2 ? "bg-slate-400" : "bg-amber-500"
-                              }`} />
-                            )}
-                            <div className={`relative w-full h-full rounded-xl sm:rounded-2xl flex flex-col items-center justify-center font-bold ${
-                              rank === 1
-                                ? "bg-gradient-to-br from-yellow-300 to-amber-500 text-white shadow-md sm:shadow-lg"
-                                : rank === 2
-                                ? "bg-gradient-to-br from-slate-300 to-slate-500 text-white shadow-md sm:shadow-lg"
-                                : rank === 3
-                                ? "bg-gradient-to-br from-amber-400 to-orange-600 text-white shadow-md sm:shadow-lg"
-                                : darkMode
-                                ? "bg-slate-700 text-slate-300"
-                                : "bg-emerald-100 text-emerald-700"
-                            }`}>
-                              {isTop3 ? (
-                                <>
-                                  <Crown className="w-3.5 h-3.5 sm:w-5 sm:h-5 mb-0.5" />
-                                  <span className="text-[9px] sm:text-[10px] font-bold">{rank}</span>
-                                </>
-                              ) : (
-                                <span className="text-sm sm:text-base">{rank}</span>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 sm:gap-2.5">
-                              <Avatar
-                                gender={entry.gender}
-                                name={entry.studentName}
-                                className="w-8 h-8 sm:w-10 sm:h-10"
-                              />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5 sm:gap-2">
-                                  <h3 className={`text-xs sm:text-sm font-bold truncate ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
-                                    {entry.studentName}
-                                  </h3>
-                                </div>
-                                <p className={`text-[10px] sm:text-xs mt-0.5 truncate ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
-                                  Kelas {entry.classCode}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="text-right shrink-0">
-                            <p className={`text-sm sm:text-lg font-bold ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
-                              {entry.journalCount}
-                              <span className={`text-[10px] sm:text-xs font-normal ml-0.5 sm:ml-1 ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>jurnal</span>
-                            </p>
-                            <div className={`flex items-center justify-end gap-1 sm:gap-2 mt-0.5 text-[9px] sm:text-[11px] ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
-                              <span className="whitespace-nowrap">{entry.totalPagesRead} hlm</span>
-                              <span className="hidden xs:inline">•</span>
-                              <span className="whitespace-nowrap">{entry.booksFinished} buku</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div className="space-y-2.5 sm:space-y-3">
+                  {(leaderboardSubTab === "semua" ? leaderboard : classLeaderboard).map((entry, idx) => (
+                    <LeaderboardRow
+                      key={entry.studentId}
+                      rank={idx + 1}
+                      dark={darkMode}
+                      avatar={
+                        <Avatar
+                          gender={entry.gender}
+                          name={entry.studentName}
+                          className="h-8 w-8 sm:h-10 sm:w-10"
+                        />
+                      }
+                      title={entry.studentName}
+                      subtitle={`Kelas ${entry.classCode}`}
+                      journals={entry.journalCount}
+                      pages={entry.totalPagesRead}
+                      books={entry.booksFinished}
+                    />
+                  ))}
                 </div>
               )
             )}
@@ -4002,10 +3951,9 @@ export default function TeacherDashboard() {
               <HeartHandshake className="w-5 h-5 text-orange-500" />
               Murid yang Perlu Pendampingan
             </h2>
-            <p className="text-xs leading-relaxed text-emerald-700/50 mb-4 text-justify lg:max-w-3xl">
-              Termasuk murid yang tidak aktif membaca, belum pernah mengirim jurnal sama sekali,
-              jumlah jurnal jauh di bawah rata-rata, atau tumpukan jurnal belum divalidasi/masih
-              perlu revisi.
+            <p className="mb-4 max-w-2xl text-sm leading-relaxed text-emerald-800/80 text-pretty">
+              Murid masuk daftar ini jika belum pernah mengirim jurnal, atau tidak mengirim jurnal pada bulan lalu
+              dan bulan ini. Murid keluar dari daftar setelah mengirim jurnal baru.
             </p>
             <div className="mb-4 lg:max-w-2xl">
               <TeacherFilterBar
@@ -4079,20 +4027,19 @@ export default function TeacherDashboard() {
                     </button>
                   </div>
                 </div>
-                <p className="border-t border-emerald-100 bg-emerald-50/50 px-4 py-2 text-[11px] text-emerald-700/70">
-                  Murid yang sudah diberi peringatan hari ini atau belum punya akun tidak bisa dipilih.
+                <p className="border-t border-emerald-100 bg-emerald-50/50 px-4 py-2.5 text-xs leading-relaxed text-emerald-700/80">
+                  Murid yang sudah menerima peringatan hari ini tidak bisa dipilih lagi.
                 </p>
               </div>
             )}
             {studentsNeedingAttention.length === 0 ? (
               <p className="text-emerald-700 text-sm bg-emerald-50 p-3 rounded-xl flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
-                Semua murid menunjukkan aktivitas membaca yang stabil. Tidak ada yang perlu
-                perhatian khusus saat ini.
+                Tidak ada murid yang perlu pendampingan. Semua murid sudah mengirim jurnal pada bulan lalu atau bulan ini.
               </p>
             ) : groupedStudentsNeedingAttention.length === 0 ? (
               <p className="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">
-                Tidak ada murid yang cocok dengan pencarian atau filter kelas ini.
+                Tidak ada murid yang cocok dengan pencarian atau kelas yang dipilih.
               </p>
             ) : (
               <div className="space-y-5">
@@ -4107,7 +4054,7 @@ export default function TeacherDashboard() {
                           selectedKeys={selectedWarnableKeys}
                           onToggle={() => toggleWarningGroup(getWarnableKeys(students))}
                         />
-                        <span className="text-[11px] text-emerald-700/60">{students.length} murid</span>
+                        <span className="text-[11px] text-emerald-700/75">{students.length} murid</span>
                       </div>
                     </div>
                     <div className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0 lg:items-start">
@@ -4152,13 +4099,13 @@ export default function TeacherDashboard() {
                                     {s.gender ? ` · ${formatGender(s.gender)}` : ""}
                                   </span>
                                 </p>
-                                <ul className="list-disc list-inside text-xs text-slate-600 mt-1 space-y-0.5">
+                                <ul className="list-disc list-inside text-[13px] leading-relaxed text-slate-700 mt-1.5 space-y-1">
                                   {s.reasons.map((r, i) => (
                                     <li key={`${s.key}-${r}-${i}`}>{r}</li>
                                   ))}
                                 </ul>
                                 {lastWarningAt && (
-                                  <p className="mt-2 text-[11px] font-medium text-orange-700/70">
+                                  <p className="mt-2 text-xs font-medium text-orange-700/80">
                                     Peringatan terakhir: {formatTanggalWaktu(lastWarningAt)}
                                   </p>
                                 )}
@@ -4169,7 +4116,7 @@ export default function TeacherDashboard() {
                                 onClick={() => setSelectedStudent(s.key)}
                                 className="w-full sm:w-auto px-3 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-lg hover:bg-emerald-700 active:scale-[0.98] transition"
                               >
-                                Lihat Detail
+                                Lihat Riwayat
                               </button>
                               <button
                                 type="button"
@@ -4184,7 +4131,7 @@ export default function TeacherDashboard() {
                                 {sendingWarningStudentId === studentUid
                                   ? "Mengirim..."
                                   : alreadyWarnedToday
-                                  ? "Peringatan Hari Ini Sudah Dikirim"
+                                  ? "Sudah diperingatkan hari ini"
                                   : "Kirim Peringatan"}
                               </button>
                             </div>
@@ -4197,10 +4144,8 @@ export default function TeacherDashboard() {
                 ))}
               </div>
             )}
-            <p className="text-xs text-emerald-700/50 mt-4">
-              Catatan: daftar &quot;belum pernah mengirim jurnal&quot; diambil dari akun bertipe
-              &quot;student&quot; di koleksi <code>users</code>. Siswa dengan nama yang sama kini
-              dibedakan berdasarkan UID akun, bukan nama saja.
+            <p className="mt-4 max-w-2xl text-xs leading-relaxed text-emerald-700/75">
+              Daftar mencakup semua murid terdaftar dan dihitung dari data yang dimuat saat halaman dibuka.
             </p>
           </div>
         )}
@@ -4239,13 +4184,13 @@ export default function TeacherDashboard() {
                 <div className="flex items-center gap-3">
                   <div className={`px-4 py-2 rounded-xl text-center ${darkMode ? "bg-slate-800 border border-slate-700" : "bg-emerald-50 border border-emerald-100"}`}>
                     <p className={`text-lg font-bold ${darkMode ? "text-emerald-300" : "text-emerald-700"}`}>{journals.length}</p>
-                    <p className={`text-[10px] uppercase tracking-wide font-semibold ${darkMode ? "text-emerald-400/70" : "text-emerald-600/70"}`}>Total Jurnal</p>
+                    <p className={`text-[11px] uppercase tracking-wide font-semibold ${darkMode ? "text-emerald-400/85" : "text-emerald-600/70"}`}>Total Jurnal</p>
                   </div>
                   <div className={`px-4 py-2 rounded-xl text-center ${darkMode ? "bg-slate-800 border border-slate-700" : "bg-orange-50 border border-orange-100"}`}>
                     <p className={`text-lg font-bold ${darkMode ? "text-orange-300" : "text-orange-600"}`}>
                       {journals.filter(j => getStatusInfo(j.status).key === "pending").length}
                     </p>
-                    <p className={`text-[10px] uppercase tracking-wide font-semibold ${darkMode ? "text-orange-400/70" : "text-orange-600/70"}`}>Menunggu</p>
+                    <p className={`text-[11px] uppercase tracking-wide font-semibold ${darkMode ? "text-orange-400/70" : "text-orange-600/70"}`}>Menunggu</p>
                   </div>
                 </div>
                 <button
@@ -4264,23 +4209,14 @@ export default function TeacherDashboard() {
                 </button>
               </div>
 
-              {/* Info Banner */}
-              <div className={`rounded-2xl border p-4 ${darkMode ? "border-emerald-500/30 bg-gradient-to-r from-emerald-900/30 to-teal-900/20" : "border-emerald-200 bg-gradient-to-r from-emerald-50 to-teal-50"}`}>
-                <div className="flex items-start gap-3">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${darkMode ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-100 text-emerald-600"}`}>
-                    <AlertTriangle className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1">
-                    <p className={`text-sm font-semibold ${darkMode ? "text-emerald-200" : "text-emerald-800"}`}>
-                      Tips Validasi Cepat
-                    </p>
-                    <p className={`text-xs mt-1 leading-relaxed ${darkMode ? "text-emerald-300/70" : "text-emerald-700/70"}`}>
-                      Untuk menandai jurnal &quot;Perlu Revisi&quot;, isi dulu kolom umpan balik dengan alasannya (misalnya typo atau ringkasan kurang lengkap),
-                      baru klik tombol Perlu Revisi. Gunakan checkbox untuk validasi massal.
-                    </p>
-                  </div>
-                </div>
-              </div>
+              <InfoNote
+                dark={darkMode}
+                tone="info"
+                icon={<CheckSquare2 className="h-4 w-4" />}
+                title="Tips validasi cepat"
+              >
+                Status Perlu Revisi wajib disertai alasan di kolom umpan balik. Centang beberapa jurnal untuk validasi massal.
+              </InfoNote>
 
               {/* Filter & Bulk Actions */}
               <div className="space-y-4">
@@ -4295,74 +4231,46 @@ export default function TeacherDashboard() {
                   darkMode={darkMode}
                 />
 
-                {/* Pending Journal Warning */}
                 {pendingJournalsByClass.length > 0 && (
-                  <div className={`rounded-2xl border p-4 ${darkMode ? "border-yellow-500/30 bg-gradient-to-r from-yellow-900/20 to-amber-900/10" : "border-yellow-200 bg-gradient-to-r from-yellow-50 to-amber-50"}`}>
-                    <div className="flex items-start gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${darkMode ? "bg-yellow-500/20 text-yellow-400" : "bg-yellow-100 text-yellow-600"}`}>
-                        <Clock className="w-4 h-4" />
-                      </div>
-                      <div className="flex-1">
-                        <p className={`text-sm font-semibold ${darkMode ? "text-yellow-200" : "text-yellow-800"}`}>
-                          Jurnal Sudah Diupload, Belum Divalidasi
-                        </p>
-                        <p className={`text-xs mt-1 mb-3 ${darkMode ? "text-yellow-300/70" : "text-yellow-700/70"}`}>
-                          Murid sudah mengirim jurnal berikut, namun guru belum melakukan validasi:
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {pendingJournalsByClass.map(([classCode, count]) => (
-                            <button
-                              key={classCode}
-                              type="button"
-                              onClick={() => jumpToJournalClass(classCode)}
-                              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all hover:scale-105 ${
-                                journalClassFilter === classCode
-                                  ? darkMode ? "border-yellow-400 bg-yellow-500/30 text-yellow-200" : "border-yellow-400 bg-yellow-200 text-yellow-900"
-                                  : darkMode ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-300 hover:bg-yellow-500/20" : "border-yellow-200 bg-white/70 text-yellow-800 hover:bg-yellow-100"
-                              }`}
-                            >
-                              Kelas {classCode}: {count} jurnal
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <InfoNote
+                    dark={darkMode}
+                    tone="pending"
+                    icon={<Clock className="h-4 w-4" />}
+                    title="Menunggu validasi"
+                    actions={pendingJournalsByClass.map(([classCode, count]) => (
+                      <button
+                        key={classCode}
+                        type="button"
+                        onClick={() => jumpToJournalClass(classCode)}
+                        className={noteChipClass("pending", journalClassFilter === classCode, darkMode)}
+                      >
+                        Kelas {classCode} · {count} jurnal
+                      </button>
+                    ))}
+                  >
+                    Jurnal yang belum divalidasi, per kelas:
+                  </InfoNote>
                 )}
 
-                {/* Missing Feedback Warning */}
                 {missingValidationFeedbackByClass.length > 0 && (
-                  <div className={`rounded-2xl border p-4 ${darkMode ? "border-amber-500/30 bg-gradient-to-r from-amber-900/20 to-orange-900/10" : "border-amber-200 bg-gradient-to-r from-amber-50 to-orange-50"}`}>
-                    <div className="flex items-start gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${darkMode ? "bg-amber-500/20 text-amber-400" : "bg-amber-100 text-amber-600"}`}>
-                        <AlertTriangle className="w-4 h-4" />
-                      </div>
-                      <div className="flex-1">
-                        <p className={`text-sm font-semibold ${darkMode ? "text-amber-200" : "text-amber-800"}`}>
-                          Feedback Validasi Belum Lengkap
-                        </p>
-                        <p className={`text-xs mt-1 mb-3 ${darkMode ? "text-amber-300/70" : "text-amber-700/70"}`}>
-                          Periksa jurnal tervalidasi berikut per kelas:
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {missingValidationFeedbackByClass.map(([classCode, count]) => (
-                            <button
-                              key={classCode}
-                              type="button"
-                              onClick={() => jumpToJournalClass(classCode)}
-                              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all hover:scale-105 ${
-                                journalClassFilter === classCode
-                                  ? darkMode ? "border-amber-400 bg-amber-500/30 text-amber-200" : "border-amber-400 bg-amber-200 text-amber-900"
-                                  : darkMode ? "border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20" : "border-amber-200 bg-white/70 text-amber-800 hover:bg-amber-100"
-                              }`}
-                            >
-                              Kelas {classCode}: {count} jurnal
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
+                  <InfoNote
+                    dark={darkMode}
+                    tone="warning"
+                    icon={<AlertTriangle className="h-4 w-4" />}
+                    title="Tervalidasi tanpa feedback"
+                    actions={missingValidationFeedbackByClass.map(([classCode, count]) => (
+                      <button
+                        key={classCode}
+                        type="button"
+                        onClick={() => jumpToJournalClass(classCode)}
+                        className={noteChipClass("warning", journalClassFilter === classCode, darkMode)}
+                      >
+                        Kelas {classCode} · {count} jurnal
+                      </button>
+                    ))}
+                  >
+                    Jurnal tervalidasi yang belum diberi feedback, per kelas:
+                  </InfoNote>
                 )}
 
                 {/* Bulk Selection Actions */}
@@ -4436,14 +4344,14 @@ export default function TeacherDashboard() {
               {journals.length === 0 ? (
                 <div className={`text-center py-12 rounded-2xl border-2 border-dashed ${darkMode ? "border-slate-700 bg-slate-800/30" : "border-emerald-200 bg-emerald-50/30"}`}>
                   <NotebookText className={`w-12 h-12 mx-auto mb-3 ${darkMode ? "text-slate-600" : "text-emerald-300"}`} />
-                  <p className={`text-sm font-medium ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
+                  <p className={`text-sm font-medium ${darkMode ? "text-emerald-300/70" : "text-emerald-700/75"}`}>
                     Belum ada jurnal dari murid manapun
                   </p>
                 </div>
               ) : filteredGroupedJournalsByClass.length === 0 ? (
                 <div className={`text-center py-12 rounded-2xl border-2 border-dashed ${darkMode ? "border-slate-700 bg-slate-800/30" : "border-emerald-200 bg-emerald-50/30"}`}>
                   <Search className={`w-12 h-12 mx-auto mb-3 ${darkMode ? "text-slate-600" : "text-emerald-300"}`} />
-                  <p className={`text-sm font-medium ${darkMode ? "text-emerald-300/70" : "text-emerald-700/60"}`}>
+                  <p className={`text-sm font-medium ${darkMode ? "text-emerald-300/70" : "text-emerald-700/75"}`}>
                     {journalStudentSearch.trim()
                       ? `Tidak ada jurnal dari siswa dengan nama "${journalStudentSearch.trim()}" pada filter yang dipilih.`
                       : "Tidak ada jurnal pada kelas yang dipilih"}
@@ -4475,7 +4383,7 @@ export default function TeacherDashboard() {
                                 <h3 className={`text-sm font-bold ${darkMode ? "text-emerald-100" : "text-emerald-900"}`}>
                                   Kelas {classCode}
                                 </h3>
-                                <p className={`text-xs ${darkMode ? "text-emerald-400/70" : "text-emerald-600/70"}`}>
+                                <p className={`text-xs ${darkMode ? "text-emerald-400/85" : "text-emerald-600/70"}`}>
                                   {classJournals.length} jurnal
                                 </p>
                               </div>
@@ -4570,10 +4478,10 @@ export default function TeacherDashboard() {
                                       {j.studentName}
                                     </button>
                                     <div className="flex items-center gap-2 mt-1">
-                                      <span className={`text-xs ${darkMode ? "text-emerald-400/70" : "text-emerald-600/70"}`}>
+                                      <span className={`text-xs ${darkMode ? "text-emerald-400/85" : "text-emerald-600/70"}`}>
                                         Kelas {j.classCode}
                                       </span>
-                                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${statusInfo.badgeClass}`}>
+                                      <span className={`text-[11px] px-2 py-0.5 rounded-full font-semibold ${statusInfo.badgeClass}`}>
                                         {statusInfo.badge}
                                       </span>
                                     </div>
@@ -4593,14 +4501,14 @@ export default function TeacherDashboard() {
                                 {isCardOpen && (
                                 <div className={`rounded-xl p-3 mb-3 ${darkMode ? "bg-slate-700/30" : "bg-emerald-50/50"}`}>
                                   <p className={`text-sm font-semibold ${darkMode ? "text-emerald-200" : "text-emerald-800"}`}>
-                                    {j.bookTitle} <span className={`font-normal ${darkMode ? "text-emerald-400/70" : "text-emerald-600/70"}`}>({j.author})</span>
+                                    {j.bookTitle} <span className={`font-normal ${darkMode ? "text-emerald-400/85" : "text-emerald-600/70"}`}>({j.author})</span>
                                   </p>
                                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs">
-                                    <span className={darkMode ? "text-emerald-400/70" : "text-emerald-600/70"}>
+                                    <span className={darkMode ? "text-emerald-400/85" : "text-emerald-600/70"}>
                                       Hal. {j.startPage}-{getLatestPageForJournal(j)}
                                     </span>
                                     {j.genre && (
-                                      <span className={darkMode ? "text-emerald-400/70" : "text-emerald-600/70"}>
+                                      <span className={darkMode ? "text-emerald-400/85" : "text-emerald-600/70"}>
                                         · {j.genre}
                                       </span>
                                     )}
@@ -4626,16 +4534,16 @@ export default function TeacherDashboard() {
                                 {/* Metadata */}
                                 {isCardOpen && (
                                 <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] mb-3">
-                                  <span className={darkMode ? "text-emerald-400/60" : "text-emerald-600/60"}>
+                                  <span className={darkMode ? "text-emerald-400/80" : "text-emerald-700/75"}>
                                     Upload: {formatTanggal(toDateSafe(j.createdAt))}
                                   </span>
                                   {(statusInfo.key === "approved" || statusInfo.key === "revision") && (
-                                    <span className={darkMode ? "text-emerald-400/60" : "text-emerald-600/60"}>
+                                    <span className={darkMode ? "text-emerald-400/80" : "text-emerald-700/75"}>
                                       Update: {formatTanggal(toDateSafe(j.updatedAt || j.createdAt))}
                                     </span>
                                   )}
                                   {j.approvedBy && (
-                                    <span className={darkMode ? "text-emerald-400/60" : "text-emerald-600/60"}>
+                                    <span className={darkMode ? "text-emerald-400/80" : "text-emerald-700/75"}>
                                       Oleh: <span className="font-medium">{j.approvedBy}</span>
                                     </span>
                                   )}
@@ -4658,7 +4566,7 @@ export default function TeacherDashboard() {
                                 {statusInfo.key === "approved" && !hasValidationFeedback && (
                                   <div className={`rounded-lg border p-2.5 mb-3 text-xs flex items-start gap-2 ${darkMode ? "border-amber-500/30 bg-amber-900/20 text-amber-200" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
                                     <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                                    <span>Feedback validasi belum ditambahkan.</span>
+                                    <span>Belum ada feedback.</span>
                                   </div>
                                 )}
 
@@ -4677,8 +4585,8 @@ export default function TeacherDashboard() {
                                     type="text"
                                     placeholder={
                                       statusInfo.key === "approved"
-                                        ? "Tambahkan feedback validasi..."
-                                        : "Umpan balik / alasan revisi..."
+                                        ? "Tambahkan feedback validasi"
+                                        : "Feedback atau alasan revisi (wajib untuk Perlu Revisi)"
                                     }
                                     className={`w-full p-2.5 text-sm border rounded-xl outline-none focus:ring-2 transition ${
                                       journalInlineError?.id === j.id
@@ -4702,7 +4610,7 @@ export default function TeacherDashboard() {
                                       className="flex-1 min-w-[80px] px-3 py-2 bg-emerald-600 text-white text-xs font-semibold rounded-xl hover:bg-emerald-700 active:scale-[0.98] transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1"
                                     >
                                       {isBusy ? <RefreshCw className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
-                                      {isBusy ? "Memproses..." : statusInfo.key === "approved" ? "Sudah Valid" : "Validasi"}
+                                      {isBusy ? "Memproses..." : statusInfo.key === "approved" ? "Tervalidasi" : "Validasi"}
                                     </button>
 
                                     {statusInfo.key === "approved" && (
@@ -4791,9 +4699,8 @@ export default function TeacherDashboard() {
                 <Settings2 className="w-5 h-5 text-emerald-600" />
                 Kelola Data Murid
               </h2>
-              <p className="text-xs text-emerald-700/60 mt-1 lg:max-w-2xl">
-                Ubah profil murid atau hapus data profil beserta seluruh jurnalnya.
-                Penghapusan akun login Firebase memerlukan backend Admin SDK.
+              <p className="text-xs text-emerald-700/75 mt-1 lg:max-w-2xl">
+                Ubah profil murid atau hapus data murid beserta seluruh jurnalnya. Menghapus data tidak menghapus akun login murid.
               </p>
               {managementError && (
                 <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2 mt-4">
@@ -4858,7 +4765,7 @@ export default function TeacherDashboard() {
                   dark={darkMode}
                 />
               ) : groupedStudentsByClass.length === 0 ? (
-                <p className="text-sm text-emerald-700/60">Tidak ada murid yang cocok dengan pencarian &quot;{managementStudentSearch}&quot;.</p>
+                <p className="text-sm text-emerald-700/75">Tidak ada murid yang cocok dengan pencarian &quot;{managementStudentSearch}&quot;.</p>
               ) : (
                 <div className="space-y-6 lg:grid lg:grid-cols-2 lg:gap-6 lg:space-y-0 lg:items-start">
                   {groupedStudentsByClass.map(({ classCode, students }) => {
@@ -4936,7 +4843,7 @@ export default function TeacherDashboard() {
                                     <Avatar gender={student.gender} name={student.name} className="h-9 w-9" />
                                     <div className="min-w-0 flex-1">
                                       <p className="font-semibold text-emerald-900 truncate">{student.name}</p>
-                                      <p className="text-xs text-emerald-700/60 flex items-center gap-1 flex-wrap mt-0.5">
+                                      <p className="text-xs text-emerald-700/75 flex items-center gap-1 flex-wrap mt-0.5">
                                         <Mail className="w-3 h-3 shrink-0" />
                                         <span className="truncate">{student.email || "Email tidak tersedia"}</span>
                                         {student.gender ? <span>· {formatGender(student.gender)}</span> : ""}
@@ -5028,10 +4935,10 @@ export default function TeacherDashboard() {
               <FileBarChart2 className="w-5 h-5 text-emerald-600" />
               Laporan
             </h2>
-            <p className="text-sm text-emerald-700/70 lg:max-w-3xl">
-              Pilih jenis rekapan lalu unduh sebagai CSV / Excel, atau cetak ringkasan. File CSV
-              yang diunduh berisi rincian per buku: nama siswa, kelas, jumlah buku, judul buku,
-              penulis, genre, halaman, dan nilai karakter.
+            <p className="text-sm text-emerald-700/70 max-w-2xl">
+              Pilih jenis rekapan dan periode, lalu unduh CSV atau cetak. CSV berisi satu baris per jurnal: nama murid,
+              kelas, judul, penulis, genre, halaman, nilai karakter, dan status validasi. Murid tanpa jurnal tetap
+              dicantumkan satu baris.
             </p>
 
             <div
@@ -5067,14 +4974,14 @@ export default function TeacherDashboard() {
             <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50/80 via-white to-white p-3.5 shadow-[0_1px_2px_rgba(6,95,70,0.04),0_10px_25px_-18px_rgba(6,95,70,0.2)] sm:p-5">
               <div className="mb-4 flex items-center justify-between gap-2 border-b border-emerald-100 pb-3">
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-600/80">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-600/80">
                     Filter Laporan
                   </p>
                   <h3 className="text-sm font-semibold text-emerald-900">
                     {reportView === "siswa" ? "Rekapan Per Murid" : "Rekapan Per Kelas"}
                   </h3>
                 </div>
-                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
                   {reportPeriod === "month" ? "Bulanan" : reportPeriod === "range" ? "Rentang tanggal" : "Semua waktu"}
                 </span>
               </div>
@@ -5089,8 +4996,8 @@ export default function TeacherDashboard() {
                         <option key={classCode} value={classCode}>{classCode}</option>
                       ))}
                     </select>
-                    <p className="mt-1.5 text-[11px] text-emerald-700/50">
-                      CSV akan berisi tiap siswa di kelas ini beserta rincian buku yang mereka baca.
+                    <p className="mt-1.5 text-xs text-emerald-700/75">
+                      CSV memuat setiap murid di kelas ini beserta jurnalnya.
                     </p>
                   </div>
                 )}
@@ -5100,7 +5007,7 @@ export default function TeacherDashboard() {
                     <label className={FIELD_LABEL_CLASS}>Laporan murid</label>
                     <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
                       <div className="relative">
-                        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-600/60" />
+                        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-emerald-700/75" />
                         <input
                           type="text"
                           placeholder="Cari nama murid..."
@@ -5120,9 +5027,8 @@ export default function TeacherDashboard() {
                         ))}
                       </select>
                     </div>
-                    <p className="mt-1.5 text-[11px] text-emerald-700/50">
-                      Daftar mencakup seluruh murid terdaftar (termasuk yang belum pernah kirim jurnal). Pilih satu murid
-                      untuk laporan personal, atau &quot;Semua murid&quot; untuk laporan gabungan.
+                    <p className="mt-1.5 text-xs text-emerald-700/75">
+                      Daftar mencakup semua murid terdaftar. Pilih satu murid untuk laporan personal, atau &quot;Semua murid&quot; untuk laporan gabungan.
                     </p>
                   </div>
                 )}
@@ -5218,7 +5124,7 @@ export default function TeacherDashboard() {
               </div>
             </div>
 
-            <p className="text-xs text-emerald-700/60">
+            <p className="text-xs text-emerald-700/75">
               {reportView === "siswa"
                 ? reportStudent === "all"
                   ? `Menampilkan ${reportStudentSummariesForExport.length} murid (${reportPeriodLabel}).`
@@ -5270,7 +5176,7 @@ export default function TeacherDashboard() {
                 <h3 className="text-sm font-semibold text-emerald-900">
                   Buku & Nilai Karakter ({reportPeriodLabel})
                 </h3>
-                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
                   Ringkasan
                 </span>
               </div>
@@ -5280,7 +5186,7 @@ export default function TeacherDashboard() {
                     Top 10 Buku Paling Banyak Dibaca (Murid)
                   </h4>
                   {reportTopBooks.length === 0 ? (
-                    <p className="text-sm text-emerald-700/50">Belum ada data buku pada periode ini.</p>
+                    <p className="text-sm text-emerald-700/75">Belum ada data buku pada periode ini.</p>
                   ) : (
                     <ul className="space-y-1.5">
                       {reportTopBooks.map(([title, count], idx) => (
@@ -5291,7 +5197,7 @@ export default function TeacherDashboard() {
                             </span>
                             <span className="font-medium text-emerald-900 truncate">{title}</span>
                           </span>
-                          <span className="text-xs text-emerald-700/60 shrink-0">{count} siswa</span>
+                          <span className="text-xs text-emerald-700/75 shrink-0">{count} siswa</span>
                         </li>
                       ))}
                     </ul>
@@ -5302,7 +5208,7 @@ export default function TeacherDashboard() {
                     Top 10 Nilai Karakter Paling Sering Disebut (Murid)
                   </h4>
                   {reportTopCharacters.length === 0 ? (
-                    <p className="text-sm text-emerald-700/50">Belum ada data nilai karakter pada periode ini.</p>
+                    <p className="text-sm text-emerald-700/75">Belum ada data nilai karakter pada periode ini.</p>
                   ) : (
                     <ul className="space-y-1.5">
                       {reportTopCharacters.map(([val, count], idx) => (
@@ -5313,7 +5219,7 @@ export default function TeacherDashboard() {
                             </span>
                             <span className="font-medium text-emerald-900 truncate">{val}</span>
                           </span>
-                          <span className="text-xs text-emerald-700/60 shrink-0">{count} siswa</span>
+                          <span className="text-xs text-emerald-700/75 shrink-0">{count} siswa</span>
                         </li>
                       ))}
                     </ul>
@@ -5325,7 +5231,7 @@ export default function TeacherDashboard() {
             <div className="rounded-2xl border border-emerald-100 bg-white p-4 lg:p-6 shadow-[0_1px_2px_rgba(6,95,70,0.04),0_10px_24px_-18px_rgba(6,95,70,0.28)] sm:p-5">
               <div className="mb-4 flex items-center justify-between gap-2 border-b border-emerald-100 pb-2.5">
                 <h3 className="text-sm font-semibold text-emerald-900">Pratinjau</h3>
-                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
                   {reportView === "siswa" ? "Per Murid" : "Per Kelas"}
                 </span>
               </div>
@@ -5334,11 +5240,11 @@ export default function TeacherDashboard() {
               {reportView === "kelas" && (
                 <div>
                   {reportClassSummaries.length === 0 ? (
-                    <p className="text-sm text-emerald-700/60">Belum ada data untuk periode ini.</p>
+                    <p className="text-sm text-emerald-700/75">Belum ada data untuk periode ini.</p>
                   ) : (
                     <>
                       {/* Mobile: kartu */}
-                      <div className="grid grid-cols-1 xs:grid-cols-2 gap-2.5 md:hidden">
+                      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:hidden">
                         {reportClassSummaries.map((summary) => (
                           <ClassSummaryCard key={summary.classCode} summary={summary} />
                         ))}
@@ -5347,7 +5253,7 @@ export default function TeacherDashboard() {
                       <div className="hidden md:block overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
-                            <tr className="text-left text-emerald-700/60 border-b border-emerald-100">
+                            <tr className="text-left text-emerald-700/75 border-b border-emerald-100">
                               <th className="py-2 lg:py-3 pr-2">Kelas</th>
                               <th className="py-2 lg:py-3 pr-2">Total Murid</th>
                               <th className="py-2 lg:py-3 pr-2">Murid Aktif</th>
@@ -5363,14 +5269,14 @@ export default function TeacherDashboard() {
                             {reportClassSummaries.map((summary) => (
                               <tr key={summary.classCode} className="border-b border-emerald-50 last:border-0 hover:bg-emerald-50/40 transition-colors">
                                 <td className="py-2 lg:py-3 pr-2 font-semibold text-emerald-900">{summary.classCode}</td>
-                                <td className="py-2 lg:py-3 pr-2 text-emerald-800/80">{summary.totalStudents}</td>
-                                <td className="py-2 lg:py-3 pr-2 text-emerald-800/80">{summary.activeStudents}</td>
-                                <td className="py-2 lg:py-3 pr-2 text-emerald-800/80">{summary.totalJournals}</td>
-                                <td className="py-2 lg:py-3 pr-2 text-emerald-800/80">{summary.approvedCount}</td>
-                                <td className="py-2 lg:py-3 pr-2 text-emerald-800/80">{summary.revisionCount}</td>
-                                <td className="py-2 lg:py-3 pr-2 text-emerald-800/80">{summary.pendingCount}</td>
-                                <td className="py-2 lg:py-3 pr-2 text-emerald-800/80">{summary.totalPagesRead}</td>
-                                <td className="py-2 lg:py-3 text-emerald-800/80">{summary.booksFinished}</td>
+                                <td className="py-2 lg:py-3 pr-2 tabular-nums text-emerald-800/80">{summary.totalStudents}</td>
+                                <td className="py-2 lg:py-3 pr-2 tabular-nums text-emerald-800/80">{summary.activeStudents}</td>
+                                <td className="py-2 lg:py-3 pr-2 tabular-nums text-emerald-800/80">{summary.totalJournals}</td>
+                                <td className="py-2 lg:py-3 pr-2 tabular-nums text-emerald-800/80">{summary.approvedCount}</td>
+                                <td className="py-2 lg:py-3 pr-2 tabular-nums text-emerald-800/80">{summary.revisionCount}</td>
+                                <td className="py-2 lg:py-3 pr-2 tabular-nums text-emerald-800/80">{summary.pendingCount}</td>
+                                <td className="py-2 lg:py-3 pr-2 tabular-nums text-emerald-800/80">{summary.totalPagesRead}</td>
+                                <td className="py-2 lg:py-3 tabular-nums text-emerald-800/80">{summary.booksFinished}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -5378,9 +5284,8 @@ export default function TeacherDashboard() {
                       </div>
                     </>
                   )}
-                  <p className="text-[11px] text-emerald-700/50 mt-2">
-                    Pratinjau di atas ringkasan per kelas. File CSV yang diunduh akan lebih rinci —
-                    per murid dan per buku.
+                  <p className="text-xs text-emerald-700/75 mt-2">
+                    Pratinjau ini ringkasan per kelas. CSV memuat rincian per murid dan per jurnal.
                   </p>
                 </div>
               )}
@@ -5390,11 +5295,11 @@ export default function TeacherDashboard() {
                 (reportStudent === "all" ? (
                   <div>
                     {reportStudentSummariesForExport.length === 0 ? (
-                      <p className="text-sm text-emerald-700/60">Belum ada data untuk periode ini.</p>
+                      <p className="text-sm text-emerald-700/75">Belum ada data untuk periode ini.</p>
                     ) : (
                       <>
                         {/* Mobile: kartu */}
-                        <div className="grid grid-cols-1 xs:grid-cols-2 gap-2.5 md:hidden">
+                        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 md:hidden">
                           {reportStudentSummariesForExport.map((s) => (
                             <StudentSummaryCard key={s.key} s={s} />
                           ))}
@@ -5403,7 +5308,7 @@ export default function TeacherDashboard() {
                         <div className="hidden md:block overflow-x-auto">
                           <table className="w-full text-sm">
                             <thead>
-                              <tr className="text-left text-emerald-700/60 border-b border-emerald-100">
+                              <tr className="text-left text-emerald-700/75 border-b border-emerald-100">
                                 <th className="py-2">Nama Murid</th>
                                 <th className="py-2">Kelas</th>
                                 <th className="py-2">Gender</th>
@@ -5421,12 +5326,12 @@ export default function TeacherDashboard() {
                                   <td className="py-2 font-medium text-emerald-900">{s.name}</td>
                                   <td className="py-2 text-emerald-800/80">{s.classCode}</td>
                                   <td className="py-2 text-emerald-800/80">{formatGender(s.gender)}</td>
-                                  <td className="py-2 text-emerald-800/80">{s.totalJournals}</td>
-                                  <td className="py-2 text-emerald-800/80">{s.approvedCount}</td>
-                                  <td className="py-2 text-emerald-800/80">{s.revisionCount}</td>
-                                  <td className="py-2 text-emerald-800/80">{s.pendingCount}</td>
-                                  <td className="py-2 text-emerald-800/80">{s.totalPagesRead}</td>
-                                  <td className="py-2 text-emerald-800/80">{s.booksFinished}</td>
+                                  <td className="py-2 tabular-nums text-emerald-800/80">{s.totalJournals}</td>
+                                  <td className="py-2 tabular-nums text-emerald-800/80">{s.approvedCount}</td>
+                                  <td className="py-2 tabular-nums text-emerald-800/80">{s.revisionCount}</td>
+                                  <td className="py-2 tabular-nums text-emerald-800/80">{s.pendingCount}</td>
+                                  <td className="py-2 tabular-nums text-emerald-800/80">{s.totalPagesRead}</td>
+                                  <td className="py-2 tabular-nums text-emerald-800/80">{s.booksFinished}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -5434,15 +5339,14 @@ export default function TeacherDashboard() {
                         </div>
                       </>
                     )}
-                    <p className="text-[11px] text-emerald-700/50 mt-2">
-                      Pratinjau di atas ringkasan per murid. File CSV yang diunduh akan lebih rinci —
-                      per buku, lengkap dengan judul, penulis, genre, halaman, dan nilai karakter.
+                    <p className="text-xs text-emerald-700/75 mt-2">
+                      Pratinjau ini ringkasan per murid. CSV memuat rincian per jurnal: judul, penulis, genre, halaman, dan nilai karakter.
                     </p>
                   </div>
                 ) : (
                   <div className="space-y-4">
                     {!reportSelectedStudentSummary || reportSelectedStudentSummary.totalJournals === 0 ? (
-                      <p className="text-sm text-emerald-700/60">
+                      <p className="text-sm text-emerald-700/75">
                         Belum ada jurnal dari {reportSelectedStudentSummary?.name ?? "murid ini"} pada periode ini.
                       </p>
                     ) : (
@@ -5452,15 +5356,15 @@ export default function TeacherDashboard() {
                             <p className="text-base font-bold text-emerald-900">
                               {reportSelectedStudentSummary.name}
                             </p>
-                            <p className="text-xs text-emerald-700/60">
+                            <p className="text-xs text-emerald-700/75">
                               Kelas {reportSelectedStudentSummary.classCode}
                               {reportSelectedStudentSummary.gender
                                 ? ` · ${formatGender(reportSelectedStudentSummary.gender)}`
                                 : ""}
                             </p>
                           </div>
-                          <p className="text-xs text-emerald-700/50">
-                            Kirim jurnal terakhir: {formatTanggal(reportSelectedStudentSummary.lastSubmission)}
+                          <p className="text-xs text-emerald-700/75">
+                            Jurnal terakhir: {formatTanggal(reportSelectedStudentSummary.lastSubmission)}
                           </p>
                         </div>
 
@@ -5510,7 +5414,7 @@ export default function TeacherDashboard() {
                                     <div className="flex justify-between items-center mb-1">
                                       <p className="text-sm font-semibold text-emerald-900">
                                         {j.bookTitle}{" "}
-                                        <span className="font-normal text-emerald-700/60">({j.author})</span>
+                                        <span className="font-normal text-emerald-700/75">({j.author})</span>
                                       </p>
                                       <span
                                         className={`text-xs px-2 py-0.5 rounded-lg font-semibold ${statusInfo.badgeClass}`}
@@ -5518,28 +5422,28 @@ export default function TeacherDashboard() {
                                         {statusInfo.csv}
                                       </span>
                                     </div>
-                                    <p className="text-xs text-emerald-700/60">
+                                    <p className="text-xs text-emerald-700/75">
                                       Hal. {j.startPage}-{getLatestPageForJournal(j)}
                                       {j.finished ? " · Selesai dibaca" : ""} ·{" "}
                                       {formatTanggal(toDateSafe(j.createdAt))}
                                     </p>
-                                    <p className="text-xs text-emerald-700/60 mt-0.5">
+                                    <p className="text-xs text-emerald-700/75 mt-0.5">
                                       <strong>Nilai Karakter:</strong> {getCharacterList(j).join(", ") || "-"}
                                     </p>
-                                    <p className="text-xs text-emerald-700/60 mt-0.5">
+                                    <p className="text-xs text-emerald-700/75 mt-0.5">
                                       <strong>Upload:</strong> {formatTanggal(toDateSafe(j.createdAt))}
                                     </p>
                                     {j.approvedBy ? (
-                                      <p className="text-xs text-emerald-700/60 mt-0.5">
+                                      <p className="text-xs text-emerald-700/75 mt-0.5">
                                         <strong>Validator:</strong> <span className="font-medium">{j.approvedBy}</span>
                                       </p>
                                     ) : (
-                                      <p className="text-xs text-emerald-700/60 mt-0.5">
+                                      <p className="text-xs text-emerald-700/75 mt-0.5">
                                         <strong>Validator:</strong> Belum divalidasi
                                       </p>
                                     )}
                                     {(j.updatedAt || j.createdAt) && (
-                                      <p className="text-xs text-emerald-700/60 mt-0.5">
+                                      <p className="text-xs text-emerald-700/75 mt-0.5">
                                         <strong>Terakhir diperbarui:</strong>{" "}
                                         {formatTanggal(toDateSafe(j.updatedAt || j.createdAt))}
                                       </p>
@@ -5566,11 +5470,11 @@ export default function TeacherDashboard() {
             <div className="rounded-2xl border border-emerald-100 bg-white p-4 lg:p-6 shadow-[0_1px_2px_rgba(6,95,70,0.04),0_10px_24px_-18px_rgba(6,95,70,0.28)] sm:p-5">
               <div className="mb-3 flex items-center justify-between gap-2 border-b border-emerald-100 pb-2.5">
                 <h3 className="text-sm font-semibold text-emerald-900">Pratinjau Detail Rekapan</h3>
-                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-700">
                   Detail
                 </span>
               </div>
-              <p className="text-[11px] text-emerald-700/50 mb-2 md:hidden">
+              <p className="text-[11px] text-emerald-700/75 mb-2 md:hidden">
                 Geser ke kanan untuk melihat semua kolom.
               </p>
               <div className="overflow-x-auto rounded-xl ring-1 ring-emerald-100">
@@ -5595,7 +5499,7 @@ export default function TeacherDashboard() {
               </div>
               {printableRows.length > REPORT_PREVIEW_ROW_LIMIT && (
                 <div className="mt-3 flex flex-col items-center gap-2 sm:flex-row sm:justify-between">
-                  <p className="text-[11px] text-emerald-700/60">
+                  <p className="text-[11px] text-emerald-700/75">
                     Menampilkan {showFullPreview ? printableRows.length : Math.min(REPORT_PREVIEW_ROW_LIMIT, printableRows.length)} dari {printableRows.length} baris.
                     {!showFullPreview && " Unduh CSV untuk data lengkap, atau tampilkan semua di sini."}
                   </p>
@@ -5613,7 +5517,7 @@ export default function TeacherDashboard() {
         )}
 
         {/* Credit di bagian bawah dashboard */}
-        <p className={`text-center text-xs font-medium tracking-wide mt-8 mb-2 ${darkMode ? "text-emerald-400/40" : "text-emerald-700/50"}`}>
+        <p className={`text-center text-xs font-medium tracking-wide mt-8 mb-2 ${darkMode ? "text-emerald-400/80" : "text-emerald-700/70"}`}>
           © PPG Bahasa Indonesia UNJ 2026
         </p>
       </div>
@@ -5629,7 +5533,7 @@ export default function TeacherDashboard() {
             : reportClass === "all" ? "Semua kelas" : `Kelas: ${reportClass}`}
         </p>
         <p className="text-sm mb-4">Periode: {reportPeriodLabel} · Dicetak pada {formatTanggal(new Date())}</p>
-        <table className="w-full text-[9px] border-collapse">
+        <table className="w-full text-[11px] border-collapse">
           <thead>
             <tr className="text-left border-b border-black">
               {DETAILED_HEADERS.map((header) => (
@@ -5685,10 +5589,10 @@ export default function TeacherDashboard() {
                     ? ` · ${formatGender(selectedStudentData.gender)}`
                     : ""}
                 </p>
-                <p className="text-xs text-emerald-700/50 mt-0.5">
+                <p className="text-xs text-emerald-700/75 mt-0.5">
                   Rekap {formatMonthLabel(studentSummaryMonth)}
                 </p>
-                <p className="text-xs text-emerald-700/50 mt-0.5">
+                <p className="text-xs text-emerald-700/75 mt-0.5">
                   Jurnal terakhir pada periode ini: {formatTanggal(selectedStudentData.lastSubmission)}
                 </p>
               </div>
@@ -5738,7 +5642,7 @@ export default function TeacherDashboard() {
             <h3 className="text-sm font-semibold text-emerald-800 mb-2">Riwayat Jurnal</h3>
             <div className="space-y-3 lg:grid lg:grid-cols-2 lg:gap-3 lg:space-y-0 lg:items-start">
               {selectedStudentData.journals.length === 0 ? (
-                <p className="text-sm text-emerald-700/60">Belum ada jurnal.</p>
+                <p className="text-sm text-emerald-700/75">Belum ada jurnal.</p>
               ) : (
                 selectedStudentData.journals.map((j) => {
                   const statusInfo = getStatusInfo(j.status);
@@ -5750,7 +5654,7 @@ export default function TeacherDashboard() {
                       <div className="flex justify-between items-center mb-1">
                         <p className="text-sm font-semibold text-emerald-900">
                           {j.bookTitle}{" "}
-                          <span className="font-normal text-emerald-700/60">({j.author})</span>
+                          <span className="font-normal text-emerald-700/75">({j.author})</span>
                         </p>
                         <span
                           className={`text-xs px-2 py-0.5 rounded-lg font-semibold ${statusInfo.badgeClass}`}
@@ -5758,23 +5662,23 @@ export default function TeacherDashboard() {
                           {statusInfo.csv}
                         </span>
                       </div>
-                      <p className="text-xs text-emerald-700/60 mb-1">
+                      <p className="text-xs text-emerald-700/75 mb-1">
                         Hal. {j.startPage}-{getLatestPageForJournal(j)}
                         {j.finished ? " · Selesai dibaca" : ""} · Nilai Karakter:{" "}
                         {getCharacterList(j).join(", ") || "-"}
                       </p>
                       {statusInfo.key === "approved" && j.approvedBy && (
-                        <p className="text-xs text-emerald-700/60 mb-1">
+                        <p className="text-xs text-emerald-700/75 mb-1">
                           Divalidasi oleh: <span className="font-medium">{j.approvedBy}</span>
                         </p>
                       )}
                       <p className="text-xs text-emerald-800/70 italic">&quot;{j.summary}&quot;</p>
                       {j.approvedBy ? (
-                        <p className="text-xs text-emerald-700/60 mt-1">
+                        <p className="text-xs text-emerald-700/75 mt-1">
                           <strong>Validator:</strong> <span className="font-medium">{j.approvedBy}</span>
                         </p>
                       ) : (
-                        <p className="text-xs text-emerald-700/60 mt-1">
+                        <p className="text-xs text-emerald-700/75 mt-1">
                           <strong>Validator:</strong> Belum divalidasi
                         </p>
                       )}
@@ -5795,138 +5699,4 @@ export default function TeacherDashboard() {
       )}
     </div>
   );
-}
-
-function buildLeaderboard(
-  journalsInput: Journal[],
-  limit = 10,
-  refreshKey?: string,
-  allStudents: RosterStudent[] = []
-): LeaderboardEntry[] {
-  const windowRef = refreshKey ? new Date(refreshKey) : new Date();
-  const snapshotCutoff = getLatestMondaySnapshotCutoff(windowRef);
-  const genderByStudentId = new Map<string, string>();
-  allStudents.forEach((student) => {
-    if (student.uid) genderByStudentId.set(student.uid, student.gender || "");
-  });
-  const statsByStudent = new Map<
-    string,
-    { studentName: string; classCode: string; journalCount: number; totalPagesRead: number; finishedTitles: Set<string> }
-  >();
-
-  journalsInput.forEach((journal) => {
-    if (!journal.studentId || journal.status !== "approved") return;
-
-    const createdAt = toDateSafe(journal.createdAt);
-    if (!createdAt || createdAt > snapshotCutoff) return;
-
-    const stats = statsByStudent.get(journal.studentId) || {
-      studentName: journal.studentName || "Murid",
-      classCode: journal.classCode || "-",
-      journalCount: 0,
-      totalPagesRead: 0,
-      finishedTitles: new Set<string>(),
-    };
-    stats.journalCount += 1;
-    const pages = Math.max(0, getLatestPageForJournal(journal) - Number(journal.startPage));
-    if (pages > 0) stats.totalPagesRead += pages;
-    if (journal.finished && journal.bookTitle) {
-      stats.finishedTitles.add(journal.bookTitle.trim().toLowerCase());
-    }
-    statsByStudent.set(journal.studentId, stats);
-  });
-
-  return Array.from(statsByStudent.entries())
-    .map(([studentId, stats]) => ({
-      studentId,
-      studentName: stats.studentName,
-      classCode: stats.classCode,
-      gender: genderByStudentId.get(studentId) || "",
-      journalCount: stats.journalCount,
-      totalPagesRead: stats.totalPagesRead,
-      booksFinished: stats.finishedTitles.size,
-    }))
-    .sort((a, b) => b.journalCount - a.journalCount || b.totalPagesRead - a.totalPagesRead || b.booksFinished - a.booksFinished)
-    .slice(0, limit);
-}
-
-function buildClassLeaderboard(journalsInput: Journal[], allStudents: RosterStudent[], refreshKey?: string): ClassLeaderboardEntry[] {
-  const windowRef = refreshKey ? new Date(refreshKey) : new Date();
-  const snapshotCutoff = getLatestMondaySnapshotCutoff(windowRef);
-  const statsByClass = new Map<
-    string,
-    {
-      classCode: string;
-      totalStudents: number;
-      activeStudents: Set<string>;
-      journalCount: number;
-      totalPagesRead: number;
-      finishedTitles: Set<string>;
-    }
-  >();
-
-  allStudents.forEach((student) => {
-    const classCode = student.classCode || "-";
-    if (!statsByClass.has(classCode)) {
-      statsByClass.set(classCode, {
-        classCode,
-        totalStudents: 0,
-        activeStudents: new Set<string>(),
-        journalCount: 0,
-        totalPagesRead: 0,
-        finishedTitles: new Set<string>(),
-      });
-    }
-
-    statsByClass.get(classCode)!.totalStudents += 1;
-  });
-
-  journalsInput.forEach((journal) => {
-    if (journal.status !== "approved") return;
-
-    const createdAt = toDateSafe(journal.createdAt);
-    if (!createdAt || createdAt > snapshotCutoff) return;
-
-    const classCode = journal.classCode || "-";
-    if (!statsByClass.has(classCode)) {
-      statsByClass.set(classCode, {
-        classCode,
-        totalStudents: 0,
-        activeStudents: new Set<string>(),
-        journalCount: 0,
-        totalPagesRead: 0,
-        finishedTitles: new Set<string>(),
-      });
-    }
-
-    const stats = statsByClass.get(classCode)!;
-    stats.journalCount += 1;
-
-    const pages = Math.max(0, getLatestPageForJournal(journal) - Number(journal.startPage));
-    if (pages > 0) stats.totalPagesRead += pages;
-
-    const studentIdentity = journal.studentId || journal.studentName || `legacy-${journal.id}`;
-    stats.activeStudents.add(studentIdentity);
-
-    if (journal.finished && journal.bookTitle) {
-      stats.finishedTitles.add(journal.bookTitle.trim().toLowerCase());
-    }
-  });
-
-  return Array.from(statsByClass.values())
-    .map((stats) => ({
-      classCode: stats.classCode,
-      totalStudents: stats.totalStudents,
-      activeStudents: stats.activeStudents.size,
-      journalCount: stats.journalCount,
-      totalPagesRead: stats.totalPagesRead,
-      booksFinished: stats.finishedTitles.size,
-    }))
-    .sort(
-      (a, b) =>
-        b.journalCount - a.journalCount ||
-        b.totalPagesRead - a.totalPagesRead ||
-        b.booksFinished - a.booksFinished ||
-        a.classCode.localeCompare(b.classCode)
-    );
 }

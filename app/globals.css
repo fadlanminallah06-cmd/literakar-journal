@@ -137,6 +137,75 @@ option {
   background: #ffffff;
 }
 
+@keyframes rank-glow {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: scale(1.18);
+  }
+}
+
+@keyframes rank-shine {
+  0% {
+    transform: translateX(-130%) skewX(-20deg);
+  }
+  60%,
+  100% {
+    transform: translateX(230%) skewX(-20deg);
+  }
+}
+
+@keyframes rank-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes rank-twinkle {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.4) rotate(0);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1) rotate(25deg);
+  }
+}
+
+.rank-glow {
+  animation: rank-glow 2.6s ease-in-out infinite;
+}
+
+.rank-shine {
+  animation: rank-shine 3.2s ease-in-out infinite;
+}
+
+.rank-bob {
+  animation: rank-bob 2.4s ease-in-out infinite;
+}
+
+.rank-twinkle {
+  animation: rank-twinkle 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rank-glow,
+  .rank-shine,
+  .rank-bob,
+  .rank-twinkle {
+    animation: none !important;
+  }
+}
+
 /* Scroll and touch behavior */
 * {
   -webkit-tap-highlight-color: transparent;
